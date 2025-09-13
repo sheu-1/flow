@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../services/AuthService';
+import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../theme/ThemeProvider';
 
 const AuthScreen: React.FC = () => {
@@ -14,6 +14,33 @@ const AuthScreen: React.FC = () => {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [signupSuccess, setSignupSuccess] = useState(false);
+
+  useEffect(() => {
+    let timer: number | undefined;
+    if (signupSuccess) {
+      // Auto-redirect to login after a short delay
+      timer = setTimeout(() => {
+        setSignupSuccess(false);
+        setMode('login');
+      }, 2000);
+    }
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [signupSuccess]);
+
+  const validateEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  const validatePassword = (password: string): string | null => {
+    if (password.length < 6) {
+      return 'Password must be at least 6 characters long';
+    }
+    return null;
+  };
 
   const onSubmit = async () => {
     setError(null);
@@ -21,13 +48,14 @@ const AuthScreen: React.FC = () => {
     setPasswordError(null);
     
     // Client-side validation
-    if (!email.includes('@') || !email.includes('.')) {
+    if (!validateEmail(email)) {
       setEmailError('Please enter a valid email address');
       return;
     }
     
-    if (password.length < 6) {
-      setPasswordError('Password must be at least 6 characters');
+    const passwordValidation = validatePassword(password);
+    if (passwordValidation) {
+      setPasswordError(passwordValidation);
       return;
     }
     
@@ -36,27 +64,49 @@ const AuthScreen: React.FC = () => {
         await signIn(email.trim(), password);
       } else {
         await signUp(email.trim(), password);
+        // Show success screen and clear fields
+        setSignupSuccess(true);
+        setEmail('');
+        setPassword('');
+        setShowPassword(false);
       }
     } catch (e: any) {
       const message = e?.message || 'Something went wrong. Please try again.';
       
       // Show field-specific errors for common auth issues
-      if (message.includes('Invalid login credentials') || message.includes('Email not confirmed')) {
-        setEmailError('Invalid email or password');
-      } else if (message.includes('Password should be at least') || message.includes('Password is too weak')) {
-        setPasswordError('Password must be at least 6 characters');
-      } else if (message.includes('Invalid email') || message.includes('not a valid email')) {
+      if (message.includes('Incorrect email or password') || 
+          message.includes('Invalid login credentials') ||
+          message.includes('Email not confirmed')) {
+        setError('Incorrect email or password');
+      } 
+      // Handle email-related errors
+      else if (message.includes('A user with this email already exists') || 
+               message.includes('already registered') || 
+               message.includes('already in use') ||
+               message.includes('User already registered')) {
+        setEmailError('A user with this email already exists');
+      }
+      // Handle password-related errors
+      else if (message.includes('Password must be at least') || 
+               message.includes('Password should be at least') || 
+               message.includes('Password is too weak') ||
+               message.includes('Password')) {
+        setPasswordError('Password must be at least 6 characters long');
+      }
+      // Handle email format errors
+      else if (message.includes('Invalid email') || 
+               message.includes('not a valid email') ||
+               message.includes('email') || 
+               message.includes('Email')) {
         setEmailError('Please enter a valid email address');
-      } else if (message.includes('signups are disabled') || message.includes('Email signups are disabled')) {
+      }
+      // Handle disabled signups
+      else if (message.includes('signups are disabled') || 
+               message.includes('Email signups are disabled')) {
         setError('Account creation is currently disabled. Please contact support.');
-      } else if (message.includes('User already registered')) {
-        setEmailError('An account with this email already exists');
-      } else if (message.includes('Password')) {
-        setPasswordError('Password requirements not met');
-      } else if (message.includes('email') || message.includes('Email')) {
-        setEmailError('Email format is invalid');
-      } else {
-        // Show user-friendly generic error instead of raw technical message
+      }
+      // Fallback for any other errors
+      else {
         setError('Unable to complete request. Please check your details and try again.');
       }
     }
@@ -75,6 +125,28 @@ const AuthScreen: React.FC = () => {
   };
 
   const isValid = email.includes('@') && password.length >= 6;
+
+  if (signupSuccess) {
+    return (
+      <KeyboardAvoidingView
+        style={[styles.container, { backgroundColor: colors.background }]}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={[styles.successWrap, { padding: 24 }]}> 
+          <Ionicons name="checkmark-circle" size={64} color={colors.primary} style={{ marginBottom: 16 }} />
+          <Text style={[styles.successTitle, { color: colors.text }]}>Account created!</Text>
+          <Text style={[styles.successSubtitle, { color: colors.textSecondary }]}>You can now proceed to login.</Text>
+
+          <TouchableOpacity
+            onPress={() => { setSignupSuccess(false); setMode('login'); }}
+            style={[styles.button, { backgroundColor: colors.primary, marginTop: 24 }]}
+          >
+            <Text style={styles.buttonText}>Go to Login</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -135,8 +207,29 @@ const AuthScreen: React.FC = () => {
             ) : null}
           </View>
 
+          {/* Error message display */}
           {error ? (
-            <Text style={[styles.error, { color: colors.danger }]}>{error}</Text>
+            <View style={[
+              styles.errorContainer, 
+              { 
+                backgroundColor: colors.danger + '20',
+                borderLeftWidth: 4,
+                borderLeftColor: colors.danger,
+                marginBottom: 16,
+                padding: 12,
+                borderRadius: 4
+              }
+            ]}>
+              <Ionicons 
+                name="alert-circle" 
+                size={18} 
+                color={colors.danger} 
+                style={{ marginRight: 8 }}
+              />
+              <Text style={[styles.errorText, { color: colors.danger, flex: 1 }]}>
+                {error}
+              </Text>
+            </View>
           ) : null}
 
           <TouchableOpacity
@@ -240,9 +333,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  error: {
-    marginTop: 4,
-    marginBottom: 10,
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  errorText: {
+    fontSize: 14,
+    marginLeft: 4,
   },
   fieldError: {
     fontSize: 12,
@@ -304,6 +406,19 @@ const styles = StyleSheet.create({
   googleButtonText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  successWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  successSubtitle: {
+    fontSize: 14,
   },
 });
 

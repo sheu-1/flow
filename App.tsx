@@ -1,12 +1,15 @@
 import 'react-native-gesture-handler';
 import 'react-native-reanimated';
+import 'react-native-get-random-values';
+import 'react-native-url-polyfill/auto';
 import React, { useEffect } from 'react';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { StatusBar, ActivityIndicator, View } from 'react-native';
+import { StatusBar, View } from 'react-native';
 import { colors as DarkColors } from './src/theme/colors';
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
+import * as SplashScreen from 'expo-splash-screen';
 
 import DashboardScreen from './src/screens/DashboardScreen';
 import TransactionsScreen from './src/screens/TransactionsScreen';
@@ -17,6 +20,11 @@ import { initDB } from './src/services/Database';
 import { syncTransactions } from './src/services/SyncService';
 import { ThemeProvider, useTheme } from './src/theme/ThemeProvider';
 import AuthScreen from './src/screens/AuthScreen';
+
+// Keep the native splash screen visible while we fetch resources
+SplashScreen.preventAutoHideAsync().catch(() => {
+  // ignore if it's already prevented
+});
 
 const Tab = createBottomTabNavigator();
 
@@ -71,13 +79,16 @@ function AppContainer() {
     };
   }, [user?.id]);
 
+  // Hide the native splash as soon as our auth loading completes
+  useEffect(() => {
+    if (!loading) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [loading]);
+
   if (loading) {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
-        <StatusBar barStyle={colors.background === '#FFFFFF' ? 'dark-content' : 'light-content'} backgroundColor={colors.background} />
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
+    // Keep the native splash visible by rendering nothing here
+    return null;
   }
 
   if (!user) {

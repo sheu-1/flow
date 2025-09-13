@@ -1,95 +1,93 @@
-import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  SafeAreaView, 
+import React, { useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  SafeAreaView,
   TouchableOpacity,
-  FlatList 
+  FlatList,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { TransactionCard } from '../components/TransactionCard';
 import { AddTransactionModal } from '../components/AddTransactionModal';
 import { spacing, fontSize } from '../theme/colors';
 import { useThemeColors } from '../theme/ThemeProvider';
-// import { mockTransactions } from '../data/mockData';
 import { Transaction } from '../types';
-import { saveToSQLite } from '../services/SyncService';
-import { getAllTransactions } from '../services/Database';
-import { EventBus, EVENTS } from '../services/EventBus';
+import { useAuth } from '../hooks/useAuth';
+import { getTransactions } from '../services/TransactionService';
+import { supabase } from '../services/SupabaseClient';
 
 export default function TransactionsScreen() {
   const colors = useThemeColors();
+  const { user } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  // Load transactions from SQLite on mount
+  const refresh = useCallback(async () => {
+    if (!user?.id) return;
+    setLoading(true);
+    try {
+      const rows = await getTransactions(user.id, { limit: 200 });
+      const mapped: Transaction[] = rows.map((r) => ({
+        ...r,
+        date: new Date(r.date),
+        description: (r as any).description || (r as any).sender || r.category || '',
+        category: r.category || 'Other',
+        sender: r.sender || undefined,
+      }));
+      setTransactions(mapped);
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Failed to load transactions');
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
+
   React.useEffect(() => {
-    (async () => {
-      try {
-        const rows = await getAllTransactions();
-        const mapped: Transaction[] = rows.map((r) => ({
-          id: r.id,
-          amount: r.amount,
-          description: (r as any).description ?? '',
-          category: r.category ?? 'Other',
-          type: (r.type === 'income' || r.type === 'expense') ? r.type : (r.amount >= 0 ? 'income' : 'expense'),
-          date: new Date(r.date),
-        }));
-        // Sort newest first
-        mapped.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        setTransactions(mapped);
-      } catch (e) {
-        // If DB not ready, keep empty; UI still works for add flow
-      }
-    })();
-  }, []);
+    refresh();
+  }, [refresh]);
 
-  const handleAddTransaction = (newTransaction: {
+  const handleAddTransaction = async (newTransaction: {
     amount: number;
     description: string;
     category: string;
     type: 'income' | 'expense';
   }) => {
-    const transaction: Transaction = {
-      id: Date.now().toString(),
-      amount: newTransaction.type === 'expense' ? -newTransaction.amount : newTransaction.amount,
-      description: newTransaction.description,
-      category: newTransaction.category,
-      type: newTransaction.type,
-      date: new Date(),
-    };
-
-    setTransactions(prev => [transaction, ...prev]);
-
-    // Save offline-first in SQLite (fire-and-forget)
-    saveToSQLite({
-      amount: transaction.amount,
-      description: transaction.description,
-      category: transaction.category,
-      type: transaction.type,
-      date: transaction.date,
-    }).then(() => {
-      // Notify listeners (e.g., Dashboard) to refresh from DB
-      EventBus.emit(EVENTS.TRANSACTIONS_UPDATED);
-    }).catch(() => {
-      // swallow errors to avoid blocking UI, SQLite will retry later
-    });
+    if (!user?.id) {
+      Alert.alert('Not signed in', 'Please sign in to add transactions');
+      return;
+    }
+    try {
+      const payload = {
+        user_id: user.id,
+        type: newTransaction.type, // Use 'income' or 'expense' directly
+        amount: newTransaction.amount,
+        category: newTransaction.category,
+        sender: newTransaction.description,
+        date: new Date().toISOString(),
+      } as const;
+      const { error } = await supabase.from('transactions').insert(payload);
+      if (error) throw error;
+      await refresh();
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Failed to add transaction');
+    }
   };
 
-  const sortedTransactions = [...transactions].sort((a, b) => 
-    new Date(b.date).getTime() - new Date(a.date).getTime()
+  const sortedTransactions = [...transactions].sort(
+    (a, b) => new Date(b.date as any).getTime() - new Date(a.date as any).getTime()
   );
 
-  const renderTransaction = ({ item }: { item: Transaction }) => (
-    <TransactionCard transaction={item} />
-  );
+  const renderTransaction = ({ item }: { item: Transaction }) => <TransactionCard transaction={item} />;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: colors.text }]}>Transactions</Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[styles.addButton, { backgroundColor: colors.primary }]}
           onPress={() => setModalVisible(true)}
         >
@@ -97,7 +95,11 @@ export default function TransactionsScreen() {
         </TouchableOpacity>
       </View>
 
-      {sortedTransactions.length > 0 ? (
+      {loading ? (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      ) : sortedTransactions.length > 0 ? (
         <FlatList
           data={sortedTransactions}
           renderItem={renderTransaction}
@@ -125,9 +127,7 @@ export default function TransactionsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -136,10 +136,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     paddingBottom: spacing.md,
   },
-  title: {
-    fontSize: fontSize.xl,
-    fontWeight: 'bold',
-  },
+  title: { fontSize: fontSize.xl, fontWeight: 'bold' },
   addButton: {
     width: 40,
     height: 40,
@@ -147,24 +144,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  listContainer: {
-    paddingBottom: spacing.lg,
-  },
+  listContainer: { paddingBottom: spacing.lg },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
   },
-  emptyTitle: {
-    fontSize: fontSize.lg,
-    fontWeight: '600',
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  emptySubtitle: {
-    fontSize: fontSize.md,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
+  emptyTitle: { fontSize: fontSize.lg, fontWeight: '600', marginTop: spacing.md, marginBottom: spacing.sm },
+  emptySubtitle: { fontSize: fontSize.md, textAlign: 'center', lineHeight: 22 },
 });

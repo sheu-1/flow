@@ -7,47 +7,46 @@ import { TransactionCard } from '../components/TransactionCard';
 import { spacing, fontSize } from '../theme/colors';
 // import { mockTransactions } from '../data/mockData';
 import { Transaction } from '../types';
-import { getAllTransactions } from '../services/Database';
 import { Ionicons } from '@expo/vector-icons';
-import { EventBus, EVENTS } from '../services/EventBus';
+import { getTransactions } from '../services/TransactionService';
 import { useFocusEffect } from '@react-navigation/native';
 import { useThemeColors } from '../theme/ThemeProvider';
+import { ProfileMenu } from '../components/ProfileMenu';
+import { useAuth } from '../hooks/useAuth';
 
 export default function DashboardScreen() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly');
   const colors = useThemeColors();
+  const { user } = useAuth();
 
-  const loadFromDB = useCallback(async () => {
+  const refresh = useCallback(async () => {
+    if (!user?.id) return;
     try {
-      const rows = await getAllTransactions();
+      const rows = await getTransactions(user.id, { limit: 500 });
       const mapped: Transaction[] = rows.map((r) => ({
-        id: r.id,
-        amount: r.amount,
-        description: (r as any).description ?? '',
-        category: r.category ?? 'Other',
-        type: (r.type === 'income' || r.type === 'expense') ? r.type : (r.amount >= 0 ? 'income' : 'expense'),
+        ...r,
         date: new Date(r.date),
+        description: (r as any).description || (r as any).sender || r.category || '',
+        category: r.category || 'Other',
+        type: (r.type === 'income' || r.type === 'expense') ? r.type : (r.amount >= 0 ? 'income' : 'expense'),
       }));
       mapped.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       setTransactions(mapped);
     } catch (e) {
       // ignore
     }
-  }, []);
+  }, [user]);
 
   // Initial load
   React.useEffect(() => {
-    loadFromDB();
-    const unsubscribe = EventBus.on(EVENTS.TRANSACTIONS_UPDATED, loadFromDB);
-    return unsubscribe;
-  }, [loadFromDB]);
+    refresh();
+  }, [refresh]);
 
-  // Also refresh on screen focus
   useFocusEffect(
     useCallback(() => {
-      loadFromDB();
-    }, [loadFromDB])
+      refresh();
+    }, [refresh])
   );
 
   const calculatePeriodStats = () => {
@@ -97,28 +96,25 @@ export default function DashboardScreen() {
   const { moneyIn, moneyOut, netBalance, periodLabel } = calculatePeriodStats();
   const recentTransactions = transactions.slice(0, 5);
 
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning! 🌅';
-    if (hour < 17) return 'Good afternoon! ☀️';
-    return 'Good evening! 🌙';
-  };
+  const displayName = user?.user_metadata?.full_name || user?.email || 'User';
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Text style={[styles.greeting, { color: colors.text }]}>{getGreeting()}</Text>
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel="Profile"
-            onPress={() => { /* TODO: Navigate to profile/settings */ }}
-            style={styles.profileButton}
-          >
-            <Ionicons name="person-circle-outline" size={34} color={colors.primary} />
-          </TouchableOpacity>
+      <View style={[styles.header, { paddingTop: spacing.xl }]}>
+        <View style={styles.iconsRow}>
+          <View style={styles.headerIcons}>
+            <TouchableOpacity style={styles.iconButton} onPress={() => {}}>
+              <Ionicons name="notifications-outline" size={24} color={colors.text} />
+            </TouchableOpacity>
+            <ProfileMenu />
+          </View>
         </View>
-        
+        <View style={styles.greetingContainer}>
+          <Text style={[styles.greeting, { color: colors.text }]}>Hello, {displayName}</Text>
+          <Text style={[styles.dateText, { color: colors.textSecondary }]}>{new Date().toLocaleDateString()}</Text>
+        </View>
+      </View>
+      <ScrollView showsVerticalScrollIndicator={false}>
         <PeriodSelector
           selectedPeriod={selectedPeriod}
           onPeriodChange={setSelectedPeriod}
@@ -176,17 +172,37 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
+    flexDirection: 'column',
+    justifyContent: 'flex-start',
+    alignItems: 'stretch',
+    padding: 16,
+    paddingBottom: 8,
+  },
+  iconsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  headerIcons: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginHorizontal: spacing.md,
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm,
+    gap: 16,
+  },
+  iconButton: {
+    padding: 4,
+  },
+  greetingContainer: {
+    paddingTop: spacing.lg,
   },
   greeting: {
     fontSize: fontSize.xl,
     fontWeight: 'bold',
-    // margin handled by header container
+  },
+  dateText: {
+    fontSize: 14,
+    marginTop: 4,
   },
   profileButton: {
     padding: spacing.xs,
