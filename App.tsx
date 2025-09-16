@@ -15,6 +15,7 @@ import DashboardScreen from './src/screens/DashboardScreen';
 import TransactionsScreen from './src/screens/TransactionsScreen';
 import ReportsScreen from './src/screens/ReportsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import AIAccountantScreen from './src/screens/AIAccountantScreen';
 import { AuthProvider, useAuth } from './src/services/AuthService';
 import { initDB } from './src/services/Database';
 import { syncTransactions } from './src/services/SyncService';
@@ -115,6 +116,8 @@ function AppContainer() {
               iconName = 'list-outline';
             } else if (route.name === 'Reports') {
               iconName = 'bar-chart-outline';
+            } else if (route.name === 'AI') {
+              iconName = 'chatbubbles-outline';
             } else if (route.name === 'Settings') {
               iconName = 'settings-outline';
             } else {
@@ -152,6 +155,14 @@ function AppContainer() {
           name="Reports" 
           component={ReportsScreen}
           options={{ headerShown: false }}
+        />
+        <Tab.Screen 
+          name="AI" 
+          component={AIAccountantScreen}
+          options={{ 
+            headerShown: false,
+            tabBarLabel: 'AI',
+          }}
         />
         <Tab.Screen 
           name="Settings" 

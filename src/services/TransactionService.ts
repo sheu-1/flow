@@ -49,6 +49,11 @@ function startOfWeek(d: Date) {
   return new Date(date.getFullYear(), date.getMonth(), diff, 0, 0, 0, 0);
 }
 
+function startOfDay(d: Date) {
+  const date = new Date(d);
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+}
+
 function startOfMonth(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), 1);
 }
@@ -59,6 +64,7 @@ function startOfYear(d: Date) {
 
 function addPeriod(date: Date, period: AggregatePeriod, count = 1) {
   const d = new Date(date);
+  if (period === 'daily') d.setDate(d.getDate() + 1 * count);
   if (period === 'weekly') d.setDate(d.getDate() + 7 * count);
   if (period === 'monthly') d.setMonth(d.getMonth() + count);
   if (period === 'yearly') d.setFullYear(d.getFullYear() + count);
@@ -66,6 +72,11 @@ function addPeriod(date: Date, period: AggregatePeriod, count = 1) {
 }
 
 function formatLabel(date: Date, period: AggregatePeriod) {
+  if (period === 'daily') {
+    const month = date.toLocaleString('default', { month: 'short' });
+    const day = date.getDate();
+    return `${month} ${day}`;
+  }
   if (period === 'weekly') {
     const month = date.toLocaleString('default', { month: 'short' });
     const day = date.getDate();
@@ -84,7 +95,8 @@ export async function getAggregatesByPeriod(
 ): Promise<AggregatePoint[]> {
   const now = new Date();
   let start: Date;
-  if (period === 'weekly') start = addPeriod(startOfWeek(now), 'weekly', -rangeCount + 1);
+  if (period === 'daily') start = addPeriod(startOfDay(now), 'daily', -rangeCount + 1);
+  else if (period === 'weekly') start = addPeriod(startOfWeek(now), 'weekly', -rangeCount + 1);
   else if (period === 'monthly') start = addPeriod(startOfMonth(now), 'monthly', -rangeCount + 1);
   else start = addPeriod(startOfYear(now), 'yearly', -rangeCount + 1);
 

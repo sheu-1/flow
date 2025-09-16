@@ -1,5 +1,5 @@
 import NetInfo from '@react-native-community/netinfo';
-import { supabase } from './AuthService';
+import { supabase } from './SupabaseClient';
 import {
   insertTransaction,
   getUnsyncedTransactions,

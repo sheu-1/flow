@@ -7,7 +7,6 @@ import { useAuth } from '../hooks/useAuth';
 import { AggregatePeriod } from '../types';
 import { getAggregatesByPeriod, getCategoryBreakdown } from '../services/TransactionService';
 import { Dimensions } from 'react-native';
-import AIAccountantPanel from '../components/AIAccountantPanel';
 
 export default function ReportsScreen() {
   const colors = useThemeColors();
@@ -182,10 +181,6 @@ export default function ReportsScreen() {
               style={{ marginVertical: 8, borderRadius: 16 }}
             />) : null}
 
-            {/* AI Accountant Panel */}
-            {user?.id ? (
-              <AIAccountantPanel userId={user.id} period={period} />
-            ) : null}
 
             {/* Category breakdown simple list */}
             <View style={styles.section}>
@@ -231,7 +226,7 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xl,
     fontWeight: 'bold',
     margin: spacing.md,
-    marginTop: spacing.lg,
+    marginTop: spacing.xl,
   },
   periodSelector: {
     flexDirection: 'row',

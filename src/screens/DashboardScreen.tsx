@@ -52,32 +52,42 @@ export default function DashboardScreen() {
   const calculatePeriodStats = () => {
     const now = new Date();
     let startDate: Date;
+    let endDate: Date;
     let periodLabel: string;
 
     switch (selectedPeriod) {
       case 'daily':
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        endDate = new Date(startDate); endDate.setDate(endDate.getDate() + 1);
         periodLabel = 'Today';
         break;
       case 'weekly':
-        const weekStart = new Date(now);
-        weekStart.setDate(now.getDate() - now.getDay());
+        // Week starts on Sunday. If you prefer Monday, change offset to: ((now.getDay() + 6) % 7)
+        const offset = now.getDay();
+        const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        weekStart.setDate(weekStart.getDate() - offset);
         startDate = weekStart;
+        endDate = new Date(startDate); endDate.setDate(endDate.getDate() + 7);
         periodLabel = 'This Week';
         break;
       case 'monthly':
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0);
         periodLabel = 'This Month';
         break;
       case 'yearly':
-        startDate = new Date(now.getFullYear(), 0, 1);
+        startDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+        endDate = new Date(now.getFullYear() + 1, 0, 1, 0, 0, 0, 0);
         periodLabel = 'This Year';
         break;
     }
 
+    // Fallback for typescript narrowing (endDate is always set in switch above)
+    endDate = endDate || now;
+
     const filteredTransactions = transactions.filter(t => {
       const transactionDate = new Date(t.date);
-      return transactionDate >= startDate;
+      return transactionDate >= startDate && transactionDate < endDate;
     });
 
     const moneyIn = filteredTransactions
@@ -96,25 +106,25 @@ export default function DashboardScreen() {
   const { moneyIn, moneyOut, netBalance, periodLabel } = calculatePeriodStats();
   const recentTransactions = transactions.slice(0, 5);
 
-  const displayName = user?.user_metadata?.full_name || user?.email || 'User';
+  const displayName = user?.user_metadata?.full_name || 'User';
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { paddingTop: spacing.xl }]}>
-        <View style={styles.iconsRow}>
-          <View style={styles.headerIcons}>
-            <TouchableOpacity style={styles.iconButton} onPress={() => {}}>
-              <Ionicons name="notifications-outline" size={24} color={colors.text} />
-            </TouchableOpacity>
-            <ProfileMenu />
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <View style={[styles.header, { paddingTop: spacing.xl }]}> 
+          <View style={styles.iconsRow}>
+            <View style={styles.headerIcons}>
+              <TouchableOpacity style={styles.iconButton} onPress={() => {}}>
+                <Ionicons name="notifications-outline" size={24} color={colors.text} />
+              </TouchableOpacity>
+              <ProfileMenu />
+            </View>
+          </View>
+          <View style={styles.greetingContainer}>
+            <Text style={[styles.greeting, { color: colors.text }]}>Hello, {displayName}</Text>
+            <Text style={[styles.dateText, { color: colors.textSecondary }]}>{new Date().toLocaleDateString()}</Text>
           </View>
         </View>
-        <View style={styles.greetingContainer}>
-          <Text style={[styles.greeting, { color: colors.text }]}>Hello, {displayName}</Text>
-          <Text style={[styles.dateText, { color: colors.textSecondary }]}>{new Date().toLocaleDateString()}</Text>
-        </View>
-      </View>
-      <ScrollView showsVerticalScrollIndicator={false}>
         <PeriodSelector
           selectedPeriod={selectedPeriod}
           onPeriodChange={setSelectedPeriod}
@@ -194,7 +204,11 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   greetingContainer: {
-    paddingTop: spacing.lg,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    paddingTop: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
   greeting: {
     fontSize: fontSize.xl,
@@ -202,7 +216,7 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: 14,
-    marginTop: 4,
+    marginTop: 0,
   },
   profileButton: {
     padding: spacing.xs,
