@@ -11,18 +11,18 @@
   "dependencies": {
     "@expo/metro-runtime": "~5.0.4",
     "@expo/vector-icons": "^14.1.0",
-    "@react-native-async-storage/async-storage": "^2.1.2",
+    "@react-native-async-storage/async-storage": "2.1.2",
     "@react-native-community/netinfo": "^11.4.1",
-    "@react-navigation/bottom-tabs": "^6.6.1",
-    "@react-navigation/native": "^6.1.18",
+    "@react-navigation/bottom-tabs": "^7.4.7",
+    "@react-navigation/native": "^7.1.17",
     "@react-navigation/stack": "^7.4.8",
     "@supabase/supabase-js": "^2.57.4",
     "@types/lodash": "^4.17.20",
     "expo": "~53.0.0",
-    "expo-auth-session": "^7.0.8",
-    "expo-crypto": "^15.0.7",
-    "expo-secure-store": "~13.0.2",
-    "expo-splash-screen": "^31.0.10",
+    "expo-auth-session": "~6.2.1",
+    "expo-crypto": "~14.1.5",
+    "expo-secure-store": "~14.2.4",
+    "expo-splash-screen": "~0.30.10",
     "expo-sqlite": "~15.2.14",
     "expo-status-bar": "~2.2.3",
     "intl": "^1.2.5",
@@ -36,7 +36,7 @@
     "react-native-get-random-values": "^1.11.0",
     "react-native-get-sms-android": "^2.1.0",
     "react-native-reanimated": "~3.17.4",
-    "react-native-safe-area-context": "5.4.0",
+    "react-native-safe-area-context": "^5.4.0",
     "react-native-screens": "~4.11.1",
     "react-native-svg": "15.11.2",
     "react-native-url-polyfill": "^2.0.0",
@@ -44,8 +44,8 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.0",
-    "@types/react": "~18.3.0",
-    "typescript": "^5.3.0"
+    "@types/react": "~19.0.10",
+    "typescript": "~5.8.3"
   },
   "private": true
 }

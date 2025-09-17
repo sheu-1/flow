@@ -21,13 +21,24 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#121212"
-      }
+      },
+      "permissions": [
+        "READ_SMS",
+        "RECEIVE_SMS"
+      ],
+      "package": "com.alexsheunda.cashflowtracker"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-sqlite"
-    ]
+      "expo-sqlite",
+      "expo-secure-store"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "a47063e7-114d-4c07-969f-49369d9739db"
+      }
+    }
   }
 }

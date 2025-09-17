@@ -5,9 +5,10 @@ A React Native (Expo + TypeScript) finance tracking app with a modern dark theme
 ## Features
 
 - **Dashboard**: View balance, income, and expenses overview
-- **Transactions**: Browse transaction history with dummy data
+- **Transactions**: Browse transaction history with real or mock data
 - **Reports**: Placeholder for future charts and analytics
 - **Settings**: Toggle notifications and other preferences
+- **Android SMS import**: Parse transaction alerts from device SMS and upload structured rows to Supabase (Android-only)
 
 ## Tech Stack
 
@@ -51,10 +52,23 @@ A React Native (Expo + TypeScript) finance tracking app with a modern dark theme
 App.tsx
 ```
 
-## Current Status
+## Android SMS Ingestion (Expo)
 
-This is an MVP with dummy data only. Future enhancements will include:
-- Database integration
-- SMS parsing for transactions
-- AI-powered insights
-- Real charts and analytics
+This project includes Android-only SMS ingestion using native modules to read and listen for SMS and upload parsed transactions to Supabase for the signed-in user.
+
+Quick setup:
+1. Install native packages:
+   ```bash
+   npm install react-native-get-sms-android react-native-android-sms-listener
+   ```
+2. Ensure Android permissions are present in `app.json` under `expo.android.permissions`:
+   - `READ_SMS`
+   - `RECEIVE_SMS`
+3. Build a Dev Client and run:
+   ```bash
+   npx eas build -p android --profile development
+   npx expo start --dev-client
+   ```
+4. In the app, go to `Settings` and enable "SMS Import (Android only)".
+
+Detailed instructions: see [`docs/SMS_SETUP.md`](docs/SMS_SETUP.md).

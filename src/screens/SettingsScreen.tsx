@@ -1,8 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Switch, ScrollView, TouchableOpacity, TextInput } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Switch, ScrollView, TouchableOpacity, TextInput, Platform, Alert } from 'react-native';
 import { useTheme } from '../theme/ThemeProvider';
 import { useAuth } from '../hooks/useAuth';
 import { getApiKey, saveApiKey, deleteApiKey } from '../services/SecureStore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { clearUserTransactions } from '../services/SupabaseService';
+import { requestSmsPermission, readRecentSms, startSmsListener, stopSmsListener, processSmsAndSave } from '../services/SmsService';
 
 const SettingsScreen: React.FC = () => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
@@ -12,6 +15,9 @@ const SettingsScreen: React.FC = () => {
   const [apiKey, setApiKey] = useState('');
   const [hasKey, setHasKey] = useState<boolean | null>(null);
   const orgKeyPresent = !!process.env.EXPO_PUBLIC_OPENROUTER_API_KEY;
+  const [smsEnabled, setSmsEnabled] = useState(false);
+  const [smsBusy, setSmsBusy] = useState(false);
+  const smsSubRef = useRef<{ remove: () => void } | undefined>();
 
   useEffect(() => {
     (async () => {
@@ -22,6 +28,17 @@ const SettingsScreen: React.FC = () => {
       } else {
         setHasKey(false);
         setApiKey('');
+      }
+      // Load SMS toggle
+      const smsPref = await AsyncStorage.getItem('settings:sms_ingest_enabled');
+      const enabled = smsPref === '1';
+      setSmsEnabled(enabled);
+      if (enabled && Platform.OS === 'android') {
+        // try to start listener if permission is granted
+        const granted = await requestSmsPermission();
+        if (granted) {
+          smsSubRef.current = await startSmsListener();
+        }
       }
     })();
   }, []);
@@ -45,6 +62,80 @@ const SettingsScreen: React.FC = () => {
     await deleteApiKey();
     setHasKey(false);
     setApiKey('');
+  }
+
+  async function handleToggleSms(value: boolean) {
+    if (Platform.OS !== 'android') {
+      Alert.alert('Not available on iOS', 'SMS import is Android-only due to platform restrictions.');
+      return;
+    }
+    if (value) {
+      // Ask for consent and permission
+      const proceed = await new Promise<boolean>((resolve) => {
+        Alert.alert(
+          'Enable SMS Import',
+          'Allow Cashflow Tracker to read SMS messages to auto-import transaction alerts? Raw SMS text will not be sent off the device; only structured transaction data is stored.',
+          [
+            { text: "Don't allow", style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Allow', style: 'default', onPress: () => resolve(true) },
+          ]
+        );
+      });
+      if (!proceed) return;
+      setSmsBusy(true);
+      try {
+        const granted = await requestSmsPermission();
+        if (!granted) {
+          Alert.alert('Permission denied', 'SMS permissions are required to import transactions.');
+          return;
+        }
+        await AsyncStorage.setItem('settings:sms_ingest_enabled', '1');
+        setSmsEnabled(true);
+        // Initial ingestion of last 50 messages
+        const list = await readRecentSms(50);
+        for (const raw of list) {
+          await processSmsAndSave(raw);
+        }
+        // Start real-time listener
+        smsSubRef.current = await startSmsListener();
+      } catch (e) {
+        console.warn('[Settings][SMS] enable failed', e);
+      } finally {
+        setSmsBusy(false);
+      }
+    } else {
+      setSmsBusy(true);
+      try {
+        await AsyncStorage.setItem('settings:sms_ingest_enabled', '0');
+        setSmsEnabled(false);
+        stopSmsListener();
+        smsSubRef.current?.remove?.();
+        smsSubRef.current = undefined;
+      } finally {
+        setSmsBusy(false);
+      }
+    }
+  }
+
+  async function handleClearTransactions() {
+    if (!user?.id) return;
+    const confirm = await new Promise<boolean>((resolve) => {
+      Alert.alert(
+        'Clear imported transactions',
+        'This will delete all your transactions stored in the cloud for this account. This action cannot be undone.',
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Delete', style: 'destructive', onPress: () => resolve(true) },
+        ]
+      );
+    });
+    if (!confirm) return;
+    const { success, error } = await clearUserTransactions(user.id);
+    if (!success) {
+      Alert.alert('Error', String(error?.message || error || 'Failed to clear transactions'));
+    } else {
+      Alert.alert('Cleared', 'Your transactions have been cleared.');
+    }
   }
 
   return (
@@ -73,6 +164,36 @@ const SettingsScreen: React.FC = () => {
       
       <View style={[styles.placeholderCard, { backgroundColor: colors.surface }]}>
         <Text style={[styles.placeholderText, { color: colors.textSecondary }]}>⚙️ Export data option</Text>
+      </View>
+
+      {/* Android-only: SMS Import */}
+      <View style={[styles.section, { borderColor: colors.border }]}> 
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>SMS Import (Android only)</Text>
+        {Platform.OS !== 'android' ? (
+          <View style={[styles.banner, { backgroundColor: colors.surface, borderColor: colors.border }]}> 
+            <Text style={{ color: colors.text }}>SMS import is available only on Android devices.</Text>
+          </View>
+        ) : null}
+        <View style={[styles.settingItem, { backgroundColor: colors.surface }]}> 
+          <Text style={[styles.settingLabel, { color: colors.text }]}>Enable SMS transaction import</Text>
+          <Switch
+            value={smsEnabled}
+            onValueChange={handleToggleSms}
+            trackColor={{ false: '#767577', true: colors.primary }}
+            thumbColor={'#ffffff'}
+            disabled={smsBusy}
+          />
+        </View>
+        <View style={[styles.banner, { backgroundColor: colors.surface, borderColor: colors.border }]}> 
+          <Text style={{ color: colors.text }}>
+            Privacy: SMS permission is used only to detect transaction alerts and store structured transaction data. Raw SMS text will not be sent off the device.
+          </Text>
+        </View>
+        {user?.id ? (
+          <TouchableOpacity onPress={handleClearTransactions} style={[styles.removeBtn, { backgroundColor: colors.danger, marginHorizontal: 16, marginTop: 8 }]}> 
+            <Text style={styles.saveText}>Clear imported transactions</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <View style={[styles.section, { borderColor: colors.border }]}> 
