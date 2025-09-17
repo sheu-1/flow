@@ -33,7 +33,7 @@ export async function readRecentSms(limit = 50): Promise<RawSms[]> {
   if (Platform.OS !== 'android') return [];
   const hasPerm = await ensureReadPermissions();
   if (!hasPerm) return [];
-  const SmsAndroid: SmsAndroidModule | undefined = safeRequire('react-native-get-sms-android');
+  const SmsAndroid: SmsAndroidModule | undefined = loadSmsAndroidModule();
   if (!SmsAndroid) return [];
 
   return new Promise<RawSms[]>((resolve) => {
@@ -68,7 +68,7 @@ export async function startSmsListener(onMessage?: (raw: RawSms) => void): Promi
 
   // Try broadcast listener
   try {
-    const SmsListener: SmsListenerModule | undefined = safeRequire('react-native-android-sms-listener');
+    const SmsListener: SmsListenerModule | undefined = loadSmsListenerModule();
     if (SmsListener && typeof SmsListener.addListener === 'function') {
       if (subscription) subscription.remove();
       subscription = SmsListener.addListener(async (message) => {
@@ -89,7 +89,7 @@ export async function startSmsListener(onMessage?: (raw: RawSms) => void): Promi
 
   // Fallback: polling using react-native-get-sms-android
   try {
-    const SmsAndroid: SmsAndroidModule | undefined = safeRequire('react-native-get-sms-android');
+    const SmsAndroid: SmsAndroidModule | undefined = loadSmsAndroidModule();
     if (!SmsAndroid) {
       console.warn('[SMS] Polling module not available');
       return;
@@ -160,11 +160,23 @@ async function ensureReadPermissions(): Promise<boolean> {
   }
 }
 
-function safeRequire<T = any>(name: string): T | undefined {
+function loadSmsListenerModule(): SmsListenerModule | undefined {
+  if (Platform.OS !== 'android') return undefined;
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const mod = require(name);
-    return mod?.default || mod;
+    const mod = require('react-native-android-sms-listener');
+    return (mod?.default || mod) as SmsListenerModule;
+  } catch {
+    return undefined;
+  }
+}
+
+function loadSmsAndroidModule(): SmsAndroidModule | undefined {
+  if (Platform.OS !== 'android') return undefined;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const mod = require('react-native-get-sms-android');
+    return (mod?.default || mod) as SmsAndroidModule;
   } catch {
     return undefined;
   }
