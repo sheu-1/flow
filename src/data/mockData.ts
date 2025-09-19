@@ -1,4 +1,4 @@
-import { Transaction, Category } from '../types';
+import { Transaction, Category } from '../types/index';
 
 export const mockTransactions: Transaction[] = [
   // Recent transactions (current month)

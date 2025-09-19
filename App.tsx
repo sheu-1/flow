@@ -21,6 +21,7 @@ import { initDB } from './src/services/Database';
 import { syncTransactions } from './src/services/SyncService';
 import { ThemeProvider, useTheme } from './src/theme/ThemeProvider';
 import AuthScreen from './src/screens/AuthScreen';
+import { SplashScreen as CustomSplashScreen } from './src/components/SplashScreen';
 
 // Keep the native splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync().catch(() => {
@@ -47,6 +48,7 @@ function makeNavTheme(pal: typeof DarkColors) {
 function AppContainer() {
   const { user, loading } = useAuth();
   const { colors } = useTheme();
+  const [showSplash, setShowSplash] = React.useState(true);
 
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;
@@ -87,9 +89,13 @@ function AppContainer() {
     }
   }, [loading]);
 
-  if (loading) {
-    // Keep the native splash visible by rendering nothing here
-    return null;
+  const handleSplashComplete = () => {
+    setShowSplash(false);
+  };
+
+  if (loading || showSplash) {
+    // Show custom splash screen during loading or splash animation
+    return loading ? null : <CustomSplashScreen onAnimationComplete={handleSplashComplete} />;
   }
 
   if (!user) {

@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { spacing, fontSize, borderRadius } from '../theme/colors';
 import { useThemeColors } from '../theme/ThemeProvider';
@@ -7,64 +7,57 @@ import { useAuth } from '../hooks/useAuth';
 import { AggregatePeriod } from '../types';
 import { getAggregatesByPeriod, getCategoryBreakdown } from '../services/TransactionService';
 import { Dimensions } from 'react-native';
+import { MoneyCard } from '../components/MoneyCard';
+import { SimplePieChart } from '../components/SimplePieChart';
 
 export default function ReportsScreen() {
   const colors = useThemeColors();
   const { user } = useAuth();
-  const [period, setPeriod] = useState<AggregatePeriod>('monthly');
+  const [period, setPeriod] = useState<AggregatePeriod>('daily');
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [series, setSeries] = useState<{ labels: string[]; income: number[]; expense: number[] }>({ labels: [], income: [], expense: [] });
   const [category, setCategory] = useState<Record<string, number>>({});
-  const [ChartKit, setChartKit] = useState<null | { LineChart: any; BarChart: any }>(null);
 
   const rangeCount = useMemo(() => {
-    if (period === 'daily') return 30; // last 30 days
-    if (period === 'weekly') return 12; // last 12 weeks
-    if (period === 'monthly') return 12; // last 12 months
-    return 5; // last 5 years
+    if (period === 'daily') return 24; // 24 hours
+    if (period === 'weekly') return 7; // 7 days of the week
+    if (period === 'monthly') return 12; // 12 months
+    return 5; // Last 5 years
   }, [period]);
 
-  // Lazy-load chart kit to avoid native locale crash; fall back gracefully
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const mod = await import('react-native-chart-kit');
-        if (mounted) setChartKit({ LineChart: mod.LineChart, BarChart: mod.BarChart });
-      } catch (e) {
-        // If chart kit fails to load (e.g., locale hook issue), keep it null to render fallback
-        if (mounted) setChartKit(null);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
+  const loadData = useCallback(async (showLoading = true) => {
     if (!user?.id) return;
-    setLoading(true);
-    (async () => {
-      try {
-        const buckets = await getAggregatesByPeriod(user.id, period, rangeCount);
-        const labels = buckets.map((b) => b.periodLabel);
-        const income = buckets.map((b) => b.income);
-        const expense = buckets.map((b) => b.expense);
-        setSeries({ labels, income, expense });
+    if (showLoading) setLoading(true);
+    try {
+      const buckets = await getAggregatesByPeriod(user.id, period, rangeCount);
+      const labels = buckets.map((b) => b.periodLabel);
+      const income = buckets.map((b) => b.income);
+      const expense = buckets.map((b) => b.expense);
+      setSeries({ labels, income, expense });
 
-        const start = buckets[0]?.start;
-        const end = buckets[buckets.length - 1]?.end;
-        const cat = await getCategoryBreakdown(user.id, start, end);
-        setCategory(cat);
-      } catch (e) {
-        // swallow and show empty
-        setSeries({ labels: [], income: [], expense: [] });
-        setCategory({});
-      } finally {
-        setLoading(false);
-      }
-    })();
+      const start = buckets[0]?.start;
+      const end = buckets[buckets.length - 1]?.end;
+      const cat = await getCategoryBreakdown(user.id, start, end);
+      setCategory(cat);
+    } catch (e) {
+      // swallow and show empty
+      setSeries({ labels: [], income: [], expense: [] });
+      setCategory({});
+    } finally {
+      if (showLoading) setLoading(false);
+      setRefreshing(false);
+    }
   }, [user?.id, period, rangeCount]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadData(false);
+  }, [loadData]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -78,9 +71,35 @@ export default function ReportsScreen() {
     return Object.entries(category).sort(([, a], [, b]) => b - a);
   }, [category]);
 
+  // Compute summary stats from the current series over the selected range
+  const incomeStats = useMemo(() => {
+    const arr = series.income || [];
+    const filtered = arr.filter((n) => Number.isFinite(n));
+    const sum = filtered.reduce((a, b) => a + b, 0);
+    const avg = filtered.length ? sum / filtered.length : 0;
+    const min = filtered.length ? Math.min(...filtered) : 0;
+    const max = filtered.length ? Math.max(...filtered) : 0;
+    return { sum, avg, min, max };
+  }, [series.income]);
+
+  const expenseStats = useMemo(() => {
+    const arr = series.expense || [];
+    const filtered = arr.filter((n) => Number.isFinite(n));
+    const sum = filtered.reduce((a, b) => a + b, 0);
+    const avg = filtered.length ? sum / filtered.length : 0;
+    const min = filtered.length ? Math.min(...filtered) : 0;
+    const max = filtered.length ? Math.max(...filtered) : 0;
+    return { sum, avg, min, max };
+  }, [series.expense]);
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
+        }
+      >
         <Text style={[styles.title, { color: colors.text }]}>Reports</Text>
 
         <View style={[styles.periodSelector, { backgroundColor: colors.surface }]}> 
@@ -103,6 +122,34 @@ export default function ReportsScreen() {
           ))}
         </View>
 
+        {/* Summary statistics */}
+        {!loading && series.labels.length > 0 ? (
+          <View style={{ paddingHorizontal: spacing.md }}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Summary statistics</Text>
+            {/* Income: Min & Max side-by-side */}
+            <View style={styles.cardRow}>
+              <MoneyCard title="Income • Min" amount={incomeStats.min} type="in" period={period} icon="trending-down-outline" />
+              <MoneyCard title="Income • Max" amount={incomeStats.max} type="in" period={period} icon="trending-up-outline" />
+            </View>
+            {/* Income: Avg full-width */}
+            <View style={styles.cardRowSingle}>
+              <MoneyCard title="Income • Avg" amount={incomeStats.avg} type="in" period={period} icon="speedometer-outline" />
+            </View>
+
+            {/* Expense: Min & Max side-by-side */}
+            <View style={styles.cardRow}>
+              <MoneyCard title="Expense • Min" amount={expenseStats.min} type="out" period={period} icon="trending-down-outline" />
+              <MoneyCard title="Expense • Max" amount={expenseStats.max} type="out" period={period} icon="trending-up-outline" />
+            </View>
+            {/* Expense: Avg full-width */}
+            <View style={styles.cardRowSingle}>
+              <MoneyCard title="Expense • Avg" amount={expenseStats.avg} type="out" period={period} icon="speedometer-outline" />
+            </View>
+          </View>
+        ) : null}
+
+        
+
         {loading ? (
           <View style={{ paddingVertical: spacing.xl }}>
             <ActivityIndicator color={colors.primary} />
@@ -113,74 +160,65 @@ export default function ReportsScreen() {
           </View>
         ) : (
           <View style={{ paddingHorizontal: spacing.md }}>
-            {/* Line chart: Income and Expense over time */}
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Income and Expense Over Time</Text>
-            {ChartKit ? (
-            <ChartKit.LineChart
-              data={{
-                labels: series.labels,
-                datasets: [
-                  {
-                    data: series.income,
-                    color: () => colors.success,
-                    strokeWidth: 2,
-                  },
-                  {
-                    data: series.expense,
-                    color: () => colors.danger,
-                    strokeWidth: 2,
-                  },
-                ],
-                legend: ['Income', 'Expense'],
-              }}
-              width={Dimensions.get('window').width - spacing.md * 2}
-              height={220}
-              chartConfig={{
-                backgroundColor: colors.background,
-                backgroundGradientFrom: colors.surface,
-                backgroundGradientTo: colors.surface,
-                decimalPlaces: 0,
-                color: (opacity = 1) => colors.text,
-                labelColor: (opacity = 1) => colors.textSecondary,
-                style: { borderRadius: 16 },
-                propsForDots: { r: '4', strokeWidth: '2' },
-              }}
-              bezier
-              style={{ marginVertical: 8, borderRadius: 16 }}
-            />) : (
-              <View style={styles.emptyState}>
-                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Charts unavailable on this device</Text>
-              </View>
-            )}
-
-            {/* Bar chart: Income vs Expense */}
+            {/* Pie Chart Summary */}
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Period Overview</Text>
+            <SimplePieChart 
+              income={incomeStats.sum} 
+              expense={expenseStats.sum} 
+            />
+            
+            {/* Simple bar chart: Income vs Expense */}
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Income vs Expense</Text>
-            {ChartKit ? (
-            <ChartKit.BarChart
-              data={{
-                labels: series.labels,
-                datasets: [
-                  {
-                    data: series.income.map((income, i) => Math.max(income, series.expense[i])),
-                  },
-                ],
-              }}
-              width={Dimensions.get('window').width - spacing.md * 2}
-              height={220}
-              yAxisLabel="$"
-              yAxisSuffix="k"
-              chartConfig={{
-                backgroundColor: colors.background,
-                backgroundGradientFrom: colors.surface,
-                backgroundGradientTo: colors.surface,
-                decimalPlaces: 0,
-                color: (opacity = 1) => colors.primary,
-                labelColor: (opacity = 1) => colors.textSecondary,
-                style: { borderRadius: 16 },
-              }}
-              style={{ marginVertical: 8, borderRadius: 16 }}
-            />) : null}
-
+            <View style={styles.chartContainer}>
+              <View style={styles.chartLegend}>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendColor, { backgroundColor: colors.success }]} />
+                  <Text style={[styles.legendText, { color: colors.text }]}>Income</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendColor, { backgroundColor: colors.danger }]} />
+                  <Text style={[styles.legendText, { color: colors.text }]}>Expense</Text>
+                </View>
+              </View>
+              
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chartScroll}>
+                <View style={styles.chartBars}>
+                  {series.labels.map((label, index) => {
+                    const income = series.income[index] || 0;
+                    const expense = series.expense[index] || 0;
+                    const maxValue = Math.max(...series.income, ...series.expense);
+                    const incomeHeight = maxValue > 0 ? (income / maxValue) * 120 : 0;
+                    const expenseHeight = maxValue > 0 ? (expense / maxValue) * 120 : 0;
+                    
+                    // Format labels based on period
+                    let displayLabel = label;
+                    if (period === 'daily') {
+                      // For daily: show hour format (0h, 1h, 2h, etc.)
+                      displayLabel = `${index}h`;
+                    } else if (period === 'weekly') {
+                      // For weekly: show day abbreviations (Mon, Tue, etc.)
+                      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                      displayLabel = days[index] || label.substring(0, 3);
+                    } else if (period === 'monthly') {
+                      // For monthly: show month abbreviations (Jan, Feb, etc.)
+                      displayLabel = label.length > 3 ? label.substring(0, 3) : label;
+                    }
+                    
+                    return (
+                      <View key={index} style={styles.barGroup}>
+                        <View style={styles.barContainer}>
+                          <View style={[styles.bar, { height: incomeHeight, backgroundColor: colors.success }]} />
+                          <View style={[styles.bar, { height: expenseHeight, backgroundColor: colors.danger, marginLeft: 4 }]} />
+                        </View>
+                        <Text style={[styles.barLabel, { color: colors.textSecondary }]} numberOfLines={1}>
+                          {displayLabel}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            </View>
 
             {/* Category breakdown simple list */}
             <View style={styles.section}>
@@ -253,6 +291,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     marginTop: spacing.md,
   },
+  cardRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  cardRowSingle: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
   categoryItem: {
     borderRadius: borderRadius.md,
     padding: spacing.md,
@@ -286,5 +332,60 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: fontSize.md,
+  },
+  chartContainer: {
+    backgroundColor: 'transparent',
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  chartLegend: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+    gap: spacing.lg,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  legendColor: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  legendText: {
+    fontSize: fontSize.sm,
+    fontWeight: '500',
+  },
+  chartScroll: {
+    maxHeight: 180,
+  },
+  chartBars: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    paddingHorizontal: spacing.sm,
+    gap: spacing.md,
+  },
+  barGroup: {
+    alignItems: 'center',
+    minWidth: 60,
+  },
+  barContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    height: 120,
+    marginBottom: spacing.xs,
+  },
+  bar: {
+    width: 16,
+    borderRadius: 2,
+    minHeight: 2,
+  },
+  barLabel: {
+    fontSize: fontSize.xs,
+    textAlign: 'center',
+    width: 60,
   },
 });

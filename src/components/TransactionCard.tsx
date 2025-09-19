@@ -44,7 +44,7 @@ export const TransactionCard: React.FC<TransactionCardProps> = ({ transaction, o
     <TouchableOpacity style={[styles.container, { backgroundColor: colors.card }]} onPress={onPress} disabled={!onPress}>
       <View style={[styles.iconContainer, { backgroundColor: colors.surface }]}>
         <Ionicons 
-          name={getCategoryIcon(transaction.category)} 
+          name={getCategoryIcon(transaction.category || '')} 
           size={24} 
           color={transaction.type === 'income' ? colors.success : colors.danger} 
         />
@@ -63,7 +63,7 @@ export const TransactionCard: React.FC<TransactionCardProps> = ({ transaction, o
           ]}>
             {transaction.type === 'income' ? '+' : '-'}{formatCurrency(transaction.amount)}
           </Text>
-          <Text style={[styles.date, { color: colors.textSecondary }]}>{formatDate(transaction.date)}</Text>
+          <Text style={[styles.date, { color: colors.textSecondary }]}>{formatDate(typeof transaction.date === 'string' ? new Date(transaction.date) : transaction.date)}</Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -78,6 +78,12 @@ const styles = StyleSheet.create({
     marginVertical: spacing.xs,
     flexDirection: 'row',
     alignItems: 'center',
+    // Subtle shadow for light mode
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
   },
   iconContainer: {
     width: 40,

@@ -10,9 +10,11 @@ const AuthScreen: React.FC = () => {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [signupSuccess, setSignupSuccess] = useState(false);
 
@@ -42,10 +44,21 @@ const AuthScreen: React.FC = () => {
     return null;
   };
 
+  const validateUsername = (username: string): string | null => {
+    if (mode === 'signup' && username.trim().length < 2) {
+      return 'Username must be at least 2 characters long';
+    }
+    if (mode === 'signup' && !/^[a-zA-Z0-9_\s]+$/.test(username.trim())) {
+      return 'Username can only contain letters, numbers, underscores, and spaces';
+    }
+    return null;
+  };
+
   const onSubmit = async () => {
     setError(null);
     setEmailError(null);
     setPasswordError(null);
+    setUsernameError(null);
     
     // Client-side validation
     if (!validateEmail(email)) {
@@ -59,15 +72,24 @@ const AuthScreen: React.FC = () => {
       return;
     }
     
+    if (mode === 'signup') {
+      const usernameValidation = validateUsername(username);
+      if (usernameValidation) {
+        setUsernameError(usernameValidation);
+        return;
+      }
+    }
+    
     try {
       if (mode === 'login') {
         await signIn(email.trim(), password);
       } else {
-        await signUp(email.trim(), password);
+        await signUp(email.trim(), password, username.trim());
         // Show success screen and clear fields
         setSignupSuccess(true);
         setEmail('');
         setPassword('');
+        setUsername('');
         setShowPassword(false);
       }
     } catch (e: any) {
@@ -116,15 +138,27 @@ const AuthScreen: React.FC = () => {
     setError(null);
     setEmailError(null);
     setPasswordError(null);
+    setUsernameError(null);
     
     try {
       await signInWithGoogle();
     } catch (e: any) {
-      setError('Google sign in failed. Please try again.');
+      const message = e?.message || 'Google sign in failed';
+      
+      if (message.includes('cancelled') || message.includes('canceled')) {
+        // User cancelled the OAuth flow - don't show error
+        return;
+      } else if (message.includes('network') || message.includes('connection')) {
+        setError('Network error. Please check your connection and try again.');
+      } else if (message.includes('redirect') || message.includes('deep')) {
+        setError('Configuration error. Please contact support.');
+      } else {
+        setError('Google sign in failed. Please try again.');
+      }
     }
   };
 
-  const isValid = email.includes('@') && password.length >= 6;
+  const isValid = email.includes('@') && password.length >= 6 && (mode === 'login' || username.trim().length >= 2);
 
   if (signupSuccess) {
     return (
@@ -159,6 +193,24 @@ const AuthScreen: React.FC = () => {
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
             {mode === 'login' ? 'Sign in to continue' : 'Sign up to get started'}
           </Text>
+
+          {mode === 'signup' && (
+            <View style={styles.field}>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>Username</Text>
+              <TextInput
+                value={username}
+                onChangeText={setUsername}
+                autoCapitalize="words"
+                autoCorrect={false}
+                placeholder="Your display name"
+                placeholderTextColor={colors.textMuted}
+                style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+              />
+              {usernameError ? (
+                <Text style={[styles.fieldError, { color: colors.danger }]}>{usernameError}</Text>
+              ) : null}
+            </View>
+          )}
 
           <View style={styles.field}>
             <Text style={[styles.label, { color: colors.textSecondary }]}>Email</Text>

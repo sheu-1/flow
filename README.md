@@ -72,3 +72,72 @@ Quick setup:
 4. In the app, go to `Settings` and enable "SMS Import (Android only)".
 
 Detailed instructions: see [`docs/SMS_SETUP.md`](docs/SMS_SETUP.md).
+
+## Google Sign-In Setup
+
+This app supports Google OAuth authentication through Supabase. Follow these steps to configure it properly:
+
+### 1. App Configuration
+
+The app is configured with the scheme `cashflowtracker` in `app.json`:
+
+```json
+{
+  "expo": {
+    "scheme": "cashflowtracker",
+    "android": {
+      "package": "com.alexsheunda.cashflowtracker"
+    }
+  }
+}
+```
+
+### 2. Google Cloud Console Setup
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select an existing one
+3. Enable the Google+ API
+4. Go to "Credentials" → "Create Credentials" → "OAuth 2.0 Client IDs"
+5. Configure the OAuth consent screen if prompted
+6. Create OAuth Client IDs for both platforms:
+
+#### For Android:
+- **Application type**: Android
+- **Package name**: `com.alexsheunda.cashflowtracker`
+- **SHA-1 certificate fingerprint**: Get this from your keystore
+
+#### For Web (required for Expo):
+- **Application type**: Web application
+- **Authorized redirect URIs**:
+  - `cashflowtracker://redirect`
+  - `https://auth.expo.io/@your-username/cashflow-tracker` (replace with your Expo username)
+
+### 3. Supabase Configuration
+
+1. In your Supabase project dashboard, go to Authentication → Providers
+2. Enable Google provider
+3. Add your Google OAuth Client ID and Client Secret
+4. Set the redirect URL to: `cashflowtracker://redirect`
+
+### 4. Testing
+
+#### With Expo Go:
+- Use the web redirect URI: `https://auth.expo.io/@your-username/cashflow-tracker`
+- Google OAuth will redirect through Expo's servers
+
+#### With Dev Client:
+- Use the custom scheme: `cashflowtracker://redirect`
+- Direct deep linking to your app
+
+### 5. Building for Production
+
+When building for production, ensure:
+1. Your Android app is signed with the same certificate used for the SHA-1 fingerprint
+2. The package name matches exactly: `com.alexsheunda.cashflowtracker`
+3. The redirect URI `cashflowtracker://redirect` is properly configured in Google Cloud Console
+
+### Troubleshooting
+
+- **"Invalid redirect URI"**: Ensure the redirect URI in Google Cloud Console exactly matches `cashflowtracker://redirect`
+- **"Package name mismatch"**: Verify the package name in `app.json` matches the one in Google Cloud Console
+- **Deep linking not working**: Restart the Expo development server after changing the scheme in `app.json`

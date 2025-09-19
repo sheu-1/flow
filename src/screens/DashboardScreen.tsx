@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, RefreshControl } from 'react-native';
 import { MoneyCard } from '../components/MoneyCard';
 import { PeriodSelector } from '../components/PeriodSelector';
 import { PieChart } from '../components/PieChart';
@@ -16,12 +16,14 @@ import { useAuth } from '../hooks/useAuth';
 
 export default function DashboardScreen() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly');
+  const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('daily');
+  const [refreshing, setRefreshing] = useState(false);
   const colors = useThemeColors();
   const { user } = useAuth();
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (showRefreshing = false) => {
     if (!user?.id) return;
+    if (showRefreshing) setRefreshing(true);
     try {
       const rows = await getTransactions(user.id, { limit: 500 });
       const mapped: Transaction[] = rows.map((r) => ({
@@ -35,6 +37,8 @@ export default function DashboardScreen() {
       setTransactions(mapped);
     } catch (e) {
       // ignore
+    } finally {
+      if (showRefreshing) setRefreshing(false);
     }
   }, [user]);
 
@@ -48,6 +52,10 @@ export default function DashboardScreen() {
       refresh();
     }, [refresh])
   );
+
+  const onRefresh = useCallback(() => {
+    refresh(true);
+  }, [refresh]);
 
   const calculatePeriodStats = () => {
     const now = new Date();
@@ -106,11 +114,16 @@ export default function DashboardScreen() {
   const { moneyIn, moneyOut, netBalance, periodLabel } = calculatePeriodStats();
   const recentTransactions = transactions.slice(0, 5);
 
-  const displayName = user?.user_metadata?.full_name || 'User';
+  const displayName = user?.user_metadata?.username || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User';
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
+        }
+      >
         <View style={[styles.header, { paddingTop: spacing.xl }]}> 
           <View style={styles.iconsRow}>
             <View style={styles.headerIcons}>

@@ -9,7 +9,7 @@ import { supabase } from './SupabaseClient';
 WebBrowser.maybeCompleteAuthSession();
 
 // Internal helpers (avoid name collision with context methods)
-export async function signUpApi(email: string, password: string) {
+export async function signUpApi(email: string, password: string, username?: string) {
   if (password.length < 6) {
     throw new Error('Password must be at least 6 characters long');
   }
@@ -18,7 +18,11 @@ export async function signUpApi(email: string, password: string) {
     email,
     password,
     options: {
-      emailRedirectTo: 'com.your.app://auth/callback',
+      emailRedirectTo: makeRedirectUri({ scheme: 'cashflowtracker' }),
+      data: {
+        full_name: username || '',
+        username: username || '',
+      },
     },
   });
 
@@ -55,11 +59,21 @@ export async function signOut() {
 }
 
 export async function signInWithGoogle() {
-  const redirectTo = makeRedirectUri({ path: '/auth/callback' });
+  const redirectUri = makeRedirectUri({
+    scheme: 'cashflowtracker',
+  });
+  
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo },
+    options: { 
+      redirectTo: redirectUri,
+      queryParams: {
+        access_type: 'offline',
+        prompt: 'consent',
+      },
+    },
   });
+  
   if (error) throw error;
   return data;
 }
@@ -75,7 +89,7 @@ export interface AuthContextValue {
   user: User | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, username?: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -129,10 +143,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLoading(false);
       }
     },
-    signUp: async (email, password) => {
+    signUp: async (email, password, username) => {
       setLoading(true);
       try {
-        await signUpApi(email, password);
+        await signUpApi(email, password, username);
         // Ensure the user is NOT logged in after sign up
         await supabase.auth.signOut();
         setSession(null);

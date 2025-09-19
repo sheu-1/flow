@@ -10,7 +10,15 @@ export const ProfileMenu: React.FC = () => {
   const { user, signOut } = useAuth();
 
   return (
-    <View style={styles.container}>
+    <>
+      {isOpen && (
+        <TouchableOpacity
+          style={styles.fullScreenOverlay}
+          onPress={() => setIsOpen(false)}
+          activeOpacity={1}
+        />
+      )}
+      <View style={styles.container}>
       <TouchableOpacity 
         onPress={() => setIsOpen(!isOpen)}
         style={styles.profileButton}
@@ -21,7 +29,8 @@ export const ProfileMenu: React.FC = () => {
       {isOpen && (
         <View style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={[styles.profileInfo, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.email, { color: colors.text }]}>{user?.email ?? 'Guest'}</Text>
+            <Text style={[styles.loggedInText, { color: colors.textSecondary }]}>Logged in as</Text>
+            <Text style={[styles.email, { color: colors.text }]}>{user?.user_metadata?.username || user?.email?.split('@')[0] || 'Guest'}</Text>
           </View>
           <TouchableOpacity 
             style={styles.menuItem}
@@ -33,14 +42,8 @@ export const ProfileMenu: React.FC = () => {
         </View>
       )}
       
-      {isOpen && (
-        <TouchableOpacity
-          style={styles.overlay}
-          onPress={() => setIsOpen(false)}
-          activeOpacity={1}
-        />
-      )}
-    </View>
+      </View>
+    </>
   );
 };
 
@@ -70,8 +73,23 @@ const styles = StyleSheet.create({
     padding: 16,
     borderBottomWidth: 1,
   },
+  loggedInText: {
+    fontSize: 12,
+    marginBottom: 4,
+  },
   email: {
     fontSize: 14,
+    fontWeight: '600',
+  },
+  fullScreenOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+    zIndex: 999,
   },
   menuItem: {
     flexDirection: 'row',

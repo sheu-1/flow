@@ -45,7 +45,7 @@ export async function getTransactions(userId: string, params: GetTransactionsPar
 function startOfWeek(d: Date) {
   const date = new Date(d);
   const day = date.getDay();
-  const diff = date.getDate() - day; // week starts on Sunday
+  const diff = date.getDate() - day + (day === 0 ? -6 : 1); // week starts on Monday
   return new Date(date.getFullYear(), date.getMonth(), diff, 0, 0, 0, 0);
 }
 
@@ -64,8 +64,8 @@ function startOfYear(d: Date) {
 
 function addPeriod(date: Date, period: AggregatePeriod, count = 1) {
   const d = new Date(date);
-  if (period === 'daily') d.setDate(d.getDate() + 1 * count);
-  if (period === 'weekly') d.setDate(d.getDate() + 7 * count);
+  if (period === 'daily') d.setHours(d.getHours() + 1 * count); // For hourly aggregation
+  if (period === 'weekly') d.setDate(d.getDate() + 1 * count); // For daily aggregation within week
   if (period === 'monthly') d.setMonth(d.getMonth() + count);
   if (period === 'yearly') d.setFullYear(d.getFullYear() + count);
   return d;
@@ -73,14 +73,13 @@ function addPeriod(date: Date, period: AggregatePeriod, count = 1) {
 
 function formatLabel(date: Date, period: AggregatePeriod) {
   if (period === 'daily') {
-    const month = date.toLocaleString('default', { month: 'short' });
-    const day = date.getDate();
-    return `${month} ${day}`;
+    // For daily: return hour (0, 1, 2, ... 23)
+    return `${date.getHours()}`;
   }
   if (period === 'weekly') {
-    const month = date.toLocaleString('default', { month: 'short' });
-    const day = date.getDate();
-    return `${month} ${day}`;
+    // For weekly: return day name (Mon, Tue, Wed, etc.)
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return dayNames[date.getDay()];
   }
   if (period === 'monthly') {
     return date.toLocaleString('default', { month: 'short', year: 'numeric' });
@@ -95,33 +94,105 @@ export async function getAggregatesByPeriod(
 ): Promise<AggregatePoint[]> {
   const now = new Date();
   let start: Date;
-  if (period === 'daily') start = addPeriod(startOfDay(now), 'daily', -rangeCount + 1);
-  else if (period === 'weekly') start = addPeriod(startOfWeek(now), 'weekly', -rangeCount + 1);
-  else if (period === 'monthly') start = addPeriod(startOfMonth(now), 'monthly', -rangeCount + 1);
-  else start = addPeriod(startOfYear(now), 'yearly', -rangeCount + 1);
+  let end: Date;
+  
+  if (period === 'daily') {
+    // Today: 24 hours from midnight to midnight
+    start = startOfDay(now);
+    end = addPeriod(start, 'weekly', 1); // Add 1 day (using weekly logic for day increment)
+  } else if (period === 'weekly') {
+    // This week: Monday to Sunday
+    start = startOfWeek(now);
+    end = addPeriod(start, 'weekly', 7); // Add 7 days
+  } else if (period === 'monthly') {
+    // This year: show months of current year
+    start = startOfYear(now);
+    end = addPeriod(start, 'yearly', 1);
+  } else {
+    // Last 5 years
+    start = addPeriod(startOfYear(now), 'yearly', -rangeCount + 1);
+    end = addPeriod(startOfYear(now), 'yearly', 1);
+  }
 
-  const txns = await getTransactions(userId, { from: start, to: now, limit: 10000, offset: 0 });
+  const txns = await getTransactions(userId, { from: start, to: end, limit: 10000, offset: 0 });
 
   const buckets: AggregatePoint[] = [];
-  let cursor = new Date(start);
-  for (let i = 0; i < rangeCount; i++) {
-    const bucketStart = new Date(cursor);
-    const bucketEnd = addPeriod(bucketStart, period, 1);
-    const inBucket = txns.filter((t) => {
-      const dt = new Date(t.date);
-      return dt >= bucketStart && dt < bucketEnd;
-    });
-    const income = inBucket.filter((t) => t.type === 'income').reduce((sum, t) => sum + Math.abs(t.amount), 0);
-    const expense = inBucket.filter((t) => t.type === 'expense').reduce((sum, t) => sum + Math.abs(t.amount), 0);
-    buckets.push({
-      periodLabel: formatLabel(bucketStart, period),
-      start: bucketStart,
-      end: bucketEnd,
-      income,
-      expense,
-    });
-    cursor = bucketEnd;
+  
+  if (period === 'daily') {
+    // For daily: create 24 hourly buckets
+    for (let hour = 0; hour < 24; hour++) {
+      const bucketStart = new Date(start);
+      bucketStart.setHours(hour, 0, 0, 0);
+      const bucketEnd = new Date(bucketStart);
+      bucketEnd.setHours(hour + 1, 0, 0, 0);
+      
+      const inBucket = txns.filter((t) => {
+        const dt = new Date(t.date);
+        return dt >= bucketStart && dt < bucketEnd;
+      });
+      const income = inBucket.filter((t) => t.type === 'income').reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      const expense = inBucket.filter((t) => t.type === 'expense').reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      buckets.push({
+        periodLabel: `${hour}`,
+        start: bucketStart,
+        end: bucketEnd,
+        income,
+        expense,
+      });
+    }
+  } else if (period === 'weekly') {
+    // For weekly: create 7 daily buckets
+    for (let day = 0; day < 7; day++) {
+      const bucketStart = new Date(start);
+      bucketStart.setDate(start.getDate() + day);
+      bucketStart.setHours(0, 0, 0, 0);
+      const bucketEnd = new Date(bucketStart);
+      bucketEnd.setDate(bucketStart.getDate() + 1);
+      
+      const inBucket = txns.filter((t) => {
+        const dt = new Date(t.date);
+        return dt >= bucketStart && dt < bucketEnd;
+      });
+      const income = inBucket.filter((t) => t.type === 'income').reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      const expense = inBucket.filter((t) => t.type === 'expense').reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      buckets.push({
+        periodLabel: formatLabel(bucketStart, period),
+        start: bucketStart,
+        end: bucketEnd,
+        income,
+        expense,
+      });
+    }
+  } else {
+    // For monthly and yearly: use the original logic
+    let cursor = new Date(start);
+    let actualRangeCount = rangeCount;
+    if (period === 'monthly') actualRangeCount = 12; // Always 12 months for this year
+    
+    for (let i = 0; i < actualRangeCount; i++) {
+      const bucketStart = new Date(cursor);
+      const bucketEnd = addPeriod(bucketStart, period, 1);
+      
+      // Stop if we've gone past the end date
+      if (bucketStart >= end) break;
+      
+      const inBucket = txns.filter((t) => {
+        const dt = new Date(t.date);
+        return dt >= bucketStart && dt < bucketEnd;
+      });
+      const income = inBucket.filter((t) => t.type === 'income').reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      const expense = inBucket.filter((t) => t.type === 'expense').reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      buckets.push({
+        periodLabel: formatLabel(bucketStart, period),
+        start: bucketStart,
+        end: bucketEnd,
+        income,
+        expense,
+      });
+      cursor = bucketEnd;
+    }
   }
+  
   return buckets;
 }
 

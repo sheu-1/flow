@@ -17,7 +17,7 @@ const SettingsScreen: React.FC = () => {
   const orgKeyPresent = !!process.env.EXPO_PUBLIC_OPENROUTER_API_KEY;
   const [smsEnabled, setSmsEnabled] = useState(false);
   const [smsBusy, setSmsBusy] = useState(false);
-  const smsSubRef = useRef<{ remove: () => void } | undefined>();
+  const smsSubRef = useRef<{ remove: () => void } | undefined>(undefined);
 
   useEffect(() => {
     (async () => {

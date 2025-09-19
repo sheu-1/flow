@@ -8,6 +8,7 @@ import {
   FlatList,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { TransactionCard } from '../components/TransactionCard';
@@ -25,10 +26,11 @@ export default function TransactionsScreen() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (showLoading = true) => {
     if (!user?.id) return;
-    setLoading(true);
+    if (showLoading) setLoading(true);
     try {
       const rows = await getTransactions(user.id, { limit: 200 });
       const mapped: Transaction[] = rows.map((r) => ({
@@ -42,12 +44,18 @@ export default function TransactionsScreen() {
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Failed to load transactions');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
+      setRefreshing(false);
     }
   }, [user?.id]);
 
   React.useEffect(() => {
     refresh();
+  }, [refresh]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    refresh(false);
   }, [refresh]);
 
   const handleAddTransaction = async (newTransaction: {
@@ -106,6 +114,9 @@ export default function TransactionsScreen() {
           keyExtractor={(item) => item.id}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContainer}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
+          }
         />
       ) : (
         <View style={styles.emptyState}>
@@ -144,7 +155,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  listContainer: { paddingBottom: spacing.lg },
+  listContainer: { paddingBottom: spacing.lg, paddingTop: spacing.sm },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
