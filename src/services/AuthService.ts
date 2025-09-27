@@ -5,6 +5,7 @@ import { Session, User, AuthChangeEvent } from '@supabase/supabase-js';
 import { makeRedirectUri } from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { supabase } from './SupabaseClient';
+import { PermissionService } from './PermissionService';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -114,9 +115,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     })();
 
     const { data: subscription } = supabase.auth.onAuthStateChange(
-      (event: AuthChangeEvent, newSession: Session | null) => {
+      async (event: AuthChangeEvent, newSession: Session | null) => {
         setSession(newSession);
         setUser(newSession?.user ?? null);
+        
+        // Initialize SMS permissions on first login
+        if (event === 'SIGNED_IN' && newSession?.user) {
+          try {
+            await PermissionService.initializeSmsPermissions();
+          } catch (error) {
+            console.warn('Failed to initialize SMS permissions:', error);
+          }
+        }
       }
     );
 
@@ -136,6 +146,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } = await supabase.auth.getSession();
         setSession(session);
         setUser(session?.user ?? null);
+        
+        // Initialize SMS permissions on successful login
+        if (session?.user) {
+          try {
+            await PermissionService.initializeSmsPermissions();
+          } catch (error) {
+            console.warn('Failed to initialize SMS permissions:', error);
+          }
+        }
       } catch (error) {
         const message = (error as any)?.message || 'Authentication failed';
         throw new Error(message);

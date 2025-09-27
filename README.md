@@ -8,7 +8,11 @@ A React Native (Expo + TypeScript) finance tracking app with a modern dark theme
 - **Transactions**: Browse transaction history with real or mock data
 - **Reports**: Placeholder for future charts and analytics
 - **Settings**: Toggle notifications and other preferences
-- **Android SMS import**: Parse transaction alerts from device SMS and upload structured rows to Supabase (Android-only)
+- **Android SMS Import**: Automatically detect and import transaction alerts from SMS messages (Android-only)
+  - First-time permission request with custom rationale
+  - Settings toggle for enable/disable
+  - Privacy-focused: only structured data is stored, raw SMS stays on device
+  - Supports M-Pesa and bank transaction formats
 
 ## Tech Stack
 
@@ -37,6 +41,27 @@ A React Native (Expo + TypeScript) finance tracking app with a modern dark theme
    ```
 
 3. Use the Expo Go app on your device or run on an emulator
+
+## SMS Import Setup (Android Only)
+
+The app can automatically import transactions from SMS messages:
+
+### First Time Setup
+- On first login, you'll be prompted for SMS permission
+- Permission dialog: "Cashflow Tracker needs access to your SMS messages to automatically track M-Pesa and bank transactions."
+- Grant permission to enable automatic transaction detection
+
+### Settings Control
+- Go to Settings → SMS Import (Android only)
+- Toggle "Enable SMS transaction import" on/off
+- If permission was denied, you can retry from settings
+
+### Privacy Note
+- Only transaction-related SMS are processed
+- Raw SMS text never leaves your device
+- Only structured transaction data (amount, date, category) is stored
+
+For detailed setup instructions, see [docs/SMS_PERMISSIONS.md](docs/SMS_PERMISSIONS.md)
 
 ## Project Structure
 

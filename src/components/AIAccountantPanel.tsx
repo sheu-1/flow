@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform, SafeAreaView } from 'react-native';
+import Animated, { FadeInUp, FadeIn } from 'react-native-reanimated';
+import { Ionicons } from '@expo/vector-icons';
 import { useThemeColors } from '../theme/ThemeProvider';
 import { AggregatePeriod } from '../types';
 import { chat as llmChat, ChatMessage } from '../services/LLM';
@@ -18,8 +20,6 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
-  const [debugOpen, setDebugOpen] = useState(false);
-  const [resolvedContext, setResolvedContext] = useState<string>('');
 
   const contextPromise = useMemo(() => buildFinancialContext(userId, period), [userId, period]);
 
@@ -27,19 +27,6 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
     // scroll to bottom when messages change
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
   }, [messages]);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const ctx = await contextPromise;
-        if (!cancelled) setResolvedContext(ctx);
-      } catch (e) {
-        if (!cancelled) setResolvedContext(`(Failed to build context: ${String(e)})`);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [contextPromise]);
 
   const send = async () => {
     if (!input.trim() || loading) return;
@@ -59,125 +46,227 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
   };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={[styles.container, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Text style={[styles.title, { color: colors.text }]}>AI Accountant</Text>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+        style={styles.keyboardView}
+      >
+        {/* Chat Messages */}
         <ScrollView
           ref={scrollRef}
-          style={styles.messages}
-          contentContainerStyle={{ paddingVertical: 8 }}
-          nestedScrollEnabled
+          style={styles.messagesContainer}
+          contentContainerStyle={styles.messagesContent}
+          showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
         >
-          {messages.map((m, idx) => (
-            <View key={idx} style={[styles.bubble, m.role === 'user' ? styles.userBubble : styles.assistantBubble, { backgroundColor: m.role === 'user' ? colors.primary : colors.surface }]}>
-              <Text style={{ color: m.role === 'user' ? '#fff' : colors.text }}>{m.content}</Text>
-            </View>
+          {messages.map((message, index) => (
+            <Animated.View
+              key={index}
+              entering={FadeInUp.delay(index * 100).springify()}
+              style={[
+                styles.messageWrapper,
+                message.role === 'user' ? styles.userMessageWrapper : styles.assistantMessageWrapper
+              ]}
+            >
+              <View style={[
+                styles.messageBubble,
+                message.role === 'user' ? 
+                  [styles.userBubble, { backgroundColor: colors.primary }] : 
+                  [styles.assistantBubble, { backgroundColor: colors.surface }]
+              ]}>
+                <Text style={[
+                  styles.messageText,
+                  message.role === 'user' ? 
+                    [styles.userText, { color: colors.background }] : 
+                    [styles.assistantText, { color: colors.text }]
+                ]}>
+                  {message.content}
+                </Text>
+              </View>
+            </Animated.View>
           ))}
+          
           {loading && (
-            <View style={styles.loadingRow}>
-              <ActivityIndicator color={colors.primary} />
-              <Text style={{ color: colors.textSecondary, marginLeft: 8 }}>Thinking…</Text>
-            </View>
+            <Animated.View 
+              entering={FadeIn}
+              style={styles.loadingWrapper}
+            >
+              <View style={[styles.loadingBubble, { backgroundColor: colors.surface }]}>
+                <ActivityIndicator color={colors.primary} size="small" />
+                <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Thinking…</Text>
+              </View>
+            </Animated.View>
           )}
         </ScrollView>
-        <TouchableOpacity onPress={() => setDebugOpen(!debugOpen)} style={[styles.debugToggle, { borderTopColor: colors.border }]}> 
-          <Text style={{ color: colors.textSecondary }}>{debugOpen ? 'Hide context' : 'Show context'}</Text>
-        </TouchableOpacity>
-        {debugOpen && (
-          <View style={[styles.contextBox, { backgroundColor: colors.surface, borderColor: colors.border }]}> 
-            <ScrollView style={{ maxHeight: 160 }} nestedScrollEnabled>
-              <Text style={{ color: colors.textSecondary, fontSize: 12, lineHeight: 16 }}>{resolvedContext}</Text>
-            </ScrollView>
+
+        {/* Input Bar */}
+        <View style={styles.inputContainer}>
+          <View style={[styles.inputBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <TouchableOpacity style={styles.iconButton}>
+              <Ionicons name="mic" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+            
+            <TextInput
+              placeholder="Ask your accountant anything…"
+              placeholderTextColor={colors.textMuted}
+              style={[styles.textInput, { color: colors.text }]}
+              value={input}
+              onChangeText={setInput}
+              multiline
+              maxLength={500}
+            />
+            
+            <TouchableOpacity style={styles.iconButton}>
+              <Ionicons name="attach" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              onPress={send} 
+              style={[
+                styles.sendButton, 
+                { backgroundColor: colors.primary, opacity: input.trim() ? 1 : 0.5 }
+              ]}
+              disabled={loading || !input.trim()}
+            >
+              <Ionicons name="send" size={18} color={colors.background} />
+            </TouchableOpacity>
           </View>
-        )}
-        <View style={[styles.inputRow, { borderTopColor: colors.border }]}> 
-          <TextInput
-            placeholder="Ask about your spending, savings, or budget…"
-            placeholderTextColor={colors.textSecondary}
-            style={[styles.input, { color: colors.text }]}
-            value={input}
-            onChangeText={setInput}
-            multiline
-          />
-          <TouchableOpacity onPress={send} style={[styles.sendBtn, { backgroundColor: colors.primary }]} disabled={loading}>
-            <Text style={styles.sendText}>Send</Text>
-          </TouchableOpacity>
         </View>
-      </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    borderWidth: 1,
-    borderRadius: 12,
-    marginHorizontal: 16,
+    flex: 1,
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  messagesContainer: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  messagesContent: {
+    paddingTop: 20,
+    paddingBottom: 20,
+  },
+  messageWrapper: {
     marginVertical: 12,
   },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-    paddingHorizontal: 16,
-    paddingTop: 12,
+  userMessageWrapper: {
+    alignItems: 'flex-end',
   },
-  messages: {
-    height: 260,
-    paddingHorizontal: 12,
+  assistantMessageWrapper: {
+    alignItems: 'flex-start',
   },
-  bubble: {
-    borderRadius: 12,
-    padding: 10,
-    marginVertical: 4,
+  messageBubble: {
     maxWidth: '85%',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
   },
   userBubble: {
-    alignSelf: 'flex-end',
+    marginLeft: 40,
   },
   assistantBubble: {
-    alignSelf: 'flex-start',
+    marginRight: 40,
   },
-  loadingRow: {
+  messageText: {
+    lineHeight: 20,
+    fontFamily: 'System',
+  },
+  userText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  assistantText: {
+    fontSize: 16,
+    fontWeight: '400',
+  },
+  loadingWrapper: {
+    alignItems: 'flex-start',
+    marginVertical: 12,
+  },
+  loadingBubble: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderRadius: 24,
+    marginRight: 40,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  inputRow: {
+  loadingText: {
+    fontSize: 16,
+    marginLeft: 8,
+    fontStyle: 'italic',
+  },
+  inputContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    paddingBottom: 34, // Extra padding for safe area
+  },
+  inputBar: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    borderTopWidth: 1,
-    padding: 8,
-    gap: 8,
-  },
-  input: {
-    flex: 1,
-    minHeight: 40,
-    maxHeight: 120,
-    padding: 8,
-  },
-  sendBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  sendText: {
-    color: '#fff',
-    fontWeight: '700',
-  },
-  debugToggle: {
-    borderTopWidth: 1,
+    alignItems: 'center',
+    borderRadius: 28,
     paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  contextBox: {
+    paddingVertical: 12,
     borderWidth: 1,
-    borderRadius: 8,
-    marginHorizontal: 12,
-    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  iconButton: {
     padding: 8,
+    marginHorizontal: 4,
+  },
+  textInput: {
+    flex: 1,
+    fontSize: 16,
+    lineHeight: 20,
+    maxHeight: 100,
+    marginHorizontal: 8,
+    fontFamily: 'System',
+  },
+  sendButton: {
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+    shadowColor: '#10B981',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
   },
 });
 

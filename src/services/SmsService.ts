@@ -3,6 +3,7 @@ import { requestSmsPermission as requestPerm } from './SmsPermissions';
 import { parseTransactionFromSms, RawSms } from '../utils/SMSParser';
 import { insertTransactionSupabase } from './SupabaseService';
 import { supabase } from './SupabaseClient';
+import { PermissionService } from './PermissionService';
 
 // Types for dynamic imports so TS doesn't error when the modules are absent in web/iOS/dev-client
 // react-native-android-sms-listener: listens for incoming SMS broadcast
@@ -27,10 +28,26 @@ export async function requestSmsPermission(): Promise<boolean> {
 }
 
 /**
+ * Check if SMS ingestion should be active based on permissions and settings
+ */
+export async function canIngestSms(): Promise<boolean> {
+  const status = await PermissionService.getSmsStatus();
+  return status.canImport;
+}
+
+/**
  * Read latest N SMS from inbox (Android-only) using react-native-get-sms-android
  */
 export async function readRecentSms(limit = 50): Promise<RawSms[]> {
   if (Platform.OS !== 'android') return [];
+  
+  // Check if SMS ingestion is allowed
+  const canIngest = await canIngestSms();
+  if (!canIngest) {
+    console.warn('[SMS] SMS ingestion not allowed - check permissions and settings');
+    return [];
+  }
+  
   const hasPerm = await ensureReadPermissions();
   if (!hasPerm) return [];
   const SmsAndroid: SmsAndroidModule | undefined = loadSmsAndroidModule();
@@ -59,6 +76,13 @@ export async function readRecentSms(limit = 50): Promise<RawSms[]> {
  */
 export async function startSmsListener(onMessage?: (raw: RawSms) => void): Promise<{ remove: () => void } | undefined> {
   if (Platform.OS !== 'android') return;
+
+  // Check if SMS ingestion is allowed
+  const canIngest = await canIngestSms();
+  if (!canIngest) {
+    console.warn('[SMS] SMS ingestion not allowed - check permissions and settings');
+    return;
+  }
 
   const granted = await requestPerm();
   if (!granted) {

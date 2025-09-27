@@ -1,23 +1,27 @@
-import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, RefreshControl } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
+import { useAuth } from '../hooks/useAuth';
+import { useThemeColors } from '../theme/ThemeProvider';
+import { getTransactions, getAggregatesByPeriod } from '../services/TransactionService';
+import { notificationService } from '../services/NotificationService';
+import { Transaction, AggregatePeriod } from '../types';
 import { MoneyCard } from '../components/MoneyCard';
-import { PeriodSelector } from '../components/PeriodSelector';
 import { PieChart } from '../components/PieChart';
+import { PeriodSelector } from '../components/PeriodSelector';
+import { ProfileMenu } from '../components/ProfileMenu';
+import NotificationPanel from '../components/NotificationPanel';
 import { TransactionCard } from '../components/TransactionCard';
 import { spacing, fontSize } from '../theme/colors';
-// import { mockTransactions } from '../data/mockData';
-import { Transaction } from '../types';
-import { Ionicons } from '@expo/vector-icons';
-import { getTransactions } from '../services/TransactionService';
-import { useFocusEffect } from '@react-navigation/native';
-import { useThemeColors } from '../theme/ThemeProvider';
-import { ProfileMenu } from '../components/ProfileMenu';
-import { useAuth } from '../hooks/useAuth';
 
 export default function DashboardScreen() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('daily');
   const [refreshing, setRefreshing] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const colors = useThemeColors();
   const { user } = useAuth();
 
@@ -35,12 +39,24 @@ export default function DashboardScreen() {
       }));
       mapped.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       setTransactions(mapped);
+      
+      // Check for spending notifications
+      await notificationService.checkWeeklySpending(user.id);
     } catch (e) {
       // ignore
     } finally {
       if (showRefreshing) setRefreshing(false);
     }
   }, [user]);
+
+  // Listen for notification updates
+  useEffect(() => {
+    const unsubscribe = notificationService.addListener((notifications) => {
+      setUnreadCount(notificationService.getUnreadCount());
+    });
+    setUnreadCount(notificationService.getUnreadCount());
+    return unsubscribe;
+  }, []);
 
   // Initial load
   React.useEffect(() => {
@@ -127,8 +143,15 @@ export default function DashboardScreen() {
         <View style={[styles.header, { paddingTop: spacing.xl }]}> 
           <View style={styles.iconsRow}>
             <View style={styles.headerIcons}>
-              <TouchableOpacity style={styles.iconButton} onPress={() => {}}>
+              <TouchableOpacity style={styles.iconButton} onPress={() => setShowNotifications(true)}>
                 <Ionicons name="notifications-outline" size={24} color={colors.text} />
+                {unreadCount > 0 && (
+                  <View style={[styles.notificationBadge, { backgroundColor: colors.danger }]}>
+                    <Text style={[styles.notificationBadgeText, { color: colors.background }]}>
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </Text>
+                  </View>
+                )}
               </TouchableOpacity>
               <ProfileMenu />
             </View>
@@ -186,6 +209,12 @@ export default function DashboardScreen() {
           )}
         </View>
       </ScrollView>
+      
+      {/* Notification Panel */}
+      <NotificationPanel 
+        visible={showNotifications} 
+        onClose={() => setShowNotifications(false)} 
+      />
     </SafeAreaView>
   );
 }
@@ -206,7 +235,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
-    marginBottom: spacing.xs,
+    marginBottom: 2,
   },
   headerIcons: {
     flexDirection: 'row',
@@ -214,13 +243,29 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   iconButton: {
-    padding: 4,
+    padding: 8,
+    position: 'relative',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  notificationBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
   greetingContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'baseline',
-    paddingTop: spacing.sm,
+    paddingTop: 4,
     paddingHorizontal: spacing.md,
   },
   greeting: {

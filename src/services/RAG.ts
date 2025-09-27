@@ -2,19 +2,21 @@ import { getAggregatesByPeriod, getCategoryBreakdown, getTransactions } from './
 import { AggregatePeriod } from '../types';
 
 export async function buildFinancialContext(userId: string, period: AggregatePeriod) {
-  // 1) Aggregates for 12 buckets (or default logic from Reports)
-  const rangeCount = period === 'daily' ? 30 : period === 'weekly' ? 12 : period === 'monthly' ? 12 : 5;
-  const aggregates = await getAggregatesByPeriod(userId, period, rangeCount);
+  // AI Accountant gets FULL APP VISIBILITY regardless of period filter
+  // 1) Get comprehensive aggregates for multiple periods for better context
+  const monthlyAggregates = await getAggregatesByPeriod(userId, 'monthly', 24); // 2 years of monthly data
+  const weeklyAggregates = await getAggregatesByPeriod(userId, 'weekly', 12); // 3 months of weekly data
+  const dailyAggregates = await getAggregatesByPeriod(userId, 'daily', 30); // 1 month of daily data
 
-  // Determine analysis window from aggregates
+  // Determine full analysis window - go back much further for comprehensive view
   const to = new Date();
-  const startFromAgg = aggregates[0]?.start ? new Date(aggregates[0].start) : new Date(to.getFullYear(), to.getMonth() - 11, 1);
+  const startFromAgg = new Date(to.getFullYear() - 2, 0, 1); // Go back 2 years for full context
 
-  // 2) Category breakdown for the full analysis window
+  // 2) Category breakdown for the ENTIRE app history
   const categories = await getCategoryBreakdown(userId, startFromAgg, to);
 
-  // 3) Transactions within analysis window (wider sample)
-  const recent = await getTransactions(userId, { limit: 1000, offset: 0, from: startFromAgg, to });
+  // 3) Get ALL transactions (increased limit for full visibility)
+  const recent = await getTransactions(userId, { limit: 5000, offset: 0, from: startFromAgg, to });
 
   // Summaries
   const totalIncome = recent.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0);
@@ -22,9 +24,10 @@ export async function buildFinancialContext(userId: string, period: AggregatePer
   const net = totalIncome - totalExpense;
   const savingsRate = totalIncome > 0 ? (net / totalIncome) : 0;
 
-  const lastIdx = aggregates.length - 1;
-  const curr = lastIdx >= 0 ? aggregates[lastIdx] : undefined;
-  const prev = lastIdx - 1 >= 0 ? aggregates[lastIdx - 1] : undefined;
+  // Use monthly aggregates for current/previous comparison
+  const lastIdx = monthlyAggregates.length - 1;
+  const curr = lastIdx >= 0 ? monthlyAggregates[lastIdx] : undefined;
+  const prev = lastIdx - 1 >= 0 ? monthlyAggregates[lastIdx - 1] : undefined;
 
   function fmt(n: number) { return n.toFixed(2); }
   function pct(currVal: number, prevVal: number) {
@@ -32,8 +35,10 @@ export async function buildFinancialContext(userId: string, period: AggregatePer
     return `${(((currVal - prevVal) / prevVal) * 100).toFixed(1)}%`;
   }
 
-  // Lines
-  const aggLines = aggregates.map(a => `- ${a.periodLabel}: income=${fmt(a.income)}, expense=${fmt(a.expense)}`).join('\n');
+  // Lines - include ALL period types for comprehensive context
+  const monthlyLines = monthlyAggregates.map((a: any) => `- ${a.periodLabel}: income=${fmt(a.income)}, expense=${fmt(a.expense)}`).join('\n');
+  const weeklyLines = weeklyAggregates.slice(-4).map((a: any) => `- ${a.periodLabel}: income=${fmt(a.income)}, expense=${fmt(a.expense)}`).join('\n'); // Last 4 weeks
+  const dailyLines = dailyAggregates.slice(-7).map((a: any) => `- ${a.periodLabel}: income=${fmt(a.income)}, expense=${fmt(a.expense)}`).join('\n'); // Last 7 days
   const catLines = Object.entries(categories)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 12)
@@ -68,12 +73,16 @@ export async function buildFinancialContext(userId: string, period: AggregatePer
   ].join('\n');
 
   const context = [
-    `PERIOD SELECTED: ${period}`,
+    `AI ACCOUNTANT - FULL APP VISIBILITY (All Data Available)`,
+    `PERIOD CONTEXT: User selected ${period} view, but AI has access to ALL data`,
     overview,
     comparison,
-    `AGGREGATES (most recent last):\n${aggLines}`,
+    `MONTHLY AGGREGATES (24 months):\n${monthlyLines}`,
+    `RECENT WEEKLY AGGREGATES (4 weeks):\n${weeklyLines}`,
+    `RECENT DAILY AGGREGATES (7 days):\n${dailyLines}`,
     `TOP CATEGORIES (${Object.keys(categories).length} total):\n${catLines}`,
-    `RECENT TRANSACTIONS (redacted, up to 60):\n${txnLines}`,
+    `RECENT TRANSACTIONS (redacted, up to 60 from full history):\n${txnLines}`,
+    `\nNOTE: AI has complete visibility of user's financial data across all time periods, regardless of current filter selection.`,
   ].join('\n\n');
 
   return context;

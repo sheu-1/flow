@@ -34,7 +34,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
-  const [type, setType] = useState<'income' | 'expense'>('expense');
+  const [type, setType] = useState<'income' | 'expense'>('income');
 
   const handleSubmit = () => {
     if (!amount || !description || !selectedCategory) {
@@ -59,7 +59,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
     setAmount('');
     setDescription('');
     setSelectedCategory('');
-    setType('expense');
+    setType('income');
     onClose();
   };
 
@@ -84,19 +84,19 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
         <ScrollView style={styles.content}>
           <View style={[styles.typeSelector, { backgroundColor: colors.surface }]}>
             <TouchableOpacity
-              style={[styles.typeButton, type === 'expense' && styles.typeButtonActive]}
-              onPress={() => setType('expense')}
-            >
-              <Text style={[styles.typeButtonText, { color: colors.textSecondary }, type === 'expense' && styles.typeButtonTextActive, type === 'expense' && { color: colors.text }]}>
-                Expense
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
               style={[styles.typeButton, type === 'income' && styles.typeButtonActive]}
               onPress={() => setType('income')}
             >
               <Text style={[styles.typeButtonText, { color: colors.textSecondary }, type === 'income' && styles.typeButtonTextActive, type === 'income' && { color: colors.text }]}>
                 Income
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.typeButton, type === 'expense' && styles.typeButtonActive]}
+              onPress={() => setType('expense')}
+            >
+              <Text style={[styles.typeButtonText, { color: colors.textSecondary }, type === 'expense' && styles.typeButtonTextActive, type === 'expense' && { color: colors.text }]}>
+                Expense
               </Text>
             </TouchableOpacity>
           </View>

@@ -5,7 +5,7 @@ import { spacing, fontSize, borderRadius } from '../theme/colors';
 import { useThemeColors } from '../theme/ThemeProvider';
 import { useAuth } from '../hooks/useAuth';
 import { AggregatePeriod } from '../types';
-import { getAggregatesByPeriod, getCategoryBreakdown } from '../services/TransactionService';
+import { getAggregatesByPeriod, getCategoriesBreakdown } from '../services/TransactionService';
 import { Dimensions } from 'react-native';
 import { MoneyCard } from '../components/MoneyCard';
 import { SimplePieChart } from '../components/SimplePieChart';
@@ -17,11 +17,14 @@ export default function ReportsScreen() {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [series, setSeries] = useState<{ labels: string[]; income: number[]; expense: number[] }>({ labels: [], income: [], expense: [] });
-  const [category, setCategory] = useState<Record<string, number>>({});
+  const [categories, setCategories] = useState<{ income: Record<string, number>; expense: Record<string, number> }>({ income: {}, expense: {} });
+  const [categoryView, setCategoryView] = useState<'income' | 'expense'>('expense');
+  const [statsView, setStatsView] = useState<'income' | 'expense'>('income');
+  const [currentWeek, setCurrentWeek] = useState(0); // 0 = current week, 1 = previous week, etc.
 
   const rangeCount = useMemo(() => {
     if (period === 'daily') return 24; // 24 hours
-    if (period === 'weekly') return 7; // 7 days of the week
+    if (period === 'weekly') return 28; // 4 weeks (28 days)
     if (period === 'monthly') return 12; // 12 months
     return 5; // Last 5 years
   }, [period]);
@@ -38,12 +41,12 @@ export default function ReportsScreen() {
 
       const start = buckets[0]?.start;
       const end = buckets[buckets.length - 1]?.end;
-      const cat = await getCategoryBreakdown(user.id, start, end);
-      setCategory(cat);
+      const cat = await getCategoriesBreakdown(user.id, start, end);
+      setCategories(cat);
     } catch (e) {
       // swallow and show empty
       setSeries({ labels: [], income: [], expense: [] });
-      setCategory({});
+      setCategories({ income: {}, expense: {} });
     } finally {
       if (showLoading) setLoading(false);
       setRefreshing(false);
@@ -59,6 +62,11 @@ export default function ReportsScreen() {
     loadData();
   }, [loadData]);
 
+  // Reset current week when period changes
+  useEffect(() => {
+    setCurrentWeek(0);
+  }, [period]);
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -68,29 +76,58 @@ export default function ReportsScreen() {
   };
 
   const categoriesSorted = useMemo(() => {
-    return Object.entries(category).sort(([, a], [, b]) => b - a);
-  }, [category]);
+    const currentCategories = categoryView === 'income' ? categories.income : categories.expense;
+    return Object.entries(currentCategories).sort(([, a], [, b]) => (b as number) - (a as number));
+  }, [categories, categoryView]);
 
   // Compute summary stats from the current series over the selected range
   const incomeStats = useMemo(() => {
     const arr = series.income || [];
-    const filtered = arr.filter((n) => Number.isFinite(n));
-    const sum = filtered.reduce((a, b) => a + b, 0);
-    const avg = filtered.length ? sum / filtered.length : 0;
-    const min = filtered.length ? Math.min(...filtered) : 0;
-    const max = filtered.length ? Math.max(...filtered) : 0;
+    const filtered = arr.filter((n) => Number.isFinite(n) && n > 0); // Exclude zero values for min calculation
+    const allFiltered = arr.filter((n) => Number.isFinite(n)); // Include zeros for sum/avg
+    const sum = allFiltered.reduce((a, b) => a + b, 0);
+    const avg = allFiltered.length ? sum / allFiltered.length : 0;
+    const min = filtered.length ? Math.min(...filtered) : 0; // Only non-zero values
+    const max = allFiltered.length ? Math.max(...allFiltered) : 0;
     return { sum, avg, min, max };
   }, [series.income]);
 
   const expenseStats = useMemo(() => {
     const arr = series.expense || [];
-    const filtered = arr.filter((n) => Number.isFinite(n));
-    const sum = filtered.reduce((a, b) => a + b, 0);
-    const avg = filtered.length ? sum / filtered.length : 0;
-    const min = filtered.length ? Math.min(...filtered) : 0;
-    const max = filtered.length ? Math.max(...filtered) : 0;
+    const filtered = arr.filter((n) => Number.isFinite(n) && n > 0); // Exclude zero values for min calculation
+    const allFiltered = arr.filter((n) => Number.isFinite(n)); // Include zeros for sum/avg
+    const sum = allFiltered.reduce((a, b) => a + b, 0);
+    const avg = allFiltered.length ? sum / allFiltered.length : 0;
+    const min = filtered.length ? Math.min(...filtered) : 0; // Only non-zero values
+    const max = allFiltered.length ? Math.max(...allFiltered) : 0;
     return { sum, avg, min, max };
   }, [series.expense]);
+
+  // Get current stats based on selected view
+  const currentStats = useMemo(() => {
+    return statsView === 'income' ? incomeStats : expenseStats;
+  }, [statsView, incomeStats, expenseStats]);
+
+  // For weekly view, slice data into weeks and get current week
+  const currentWeekData = useMemo(() => {
+    if (period !== 'weekly') return series;
+    
+    const weekSize = 7;
+    const startIndex = currentWeek * weekSize;
+    const endIndex = startIndex + weekSize;
+    
+    return {
+      labels: series.labels.slice(startIndex, endIndex),
+      income: series.income.slice(startIndex, endIndex),
+      expense: series.expense.slice(startIndex, endIndex),
+    };
+  }, [series, currentWeek, period]);
+
+  // Calculate total number of weeks available
+  const totalWeeks = useMemo(() => {
+    if (period !== 'weekly') return 1;
+    return Math.ceil(series.labels.length / 7);
+  }, [series.labels.length, period]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -125,25 +162,65 @@ export default function ReportsScreen() {
         {/* Summary statistics */}
         {!loading && series.labels.length > 0 ? (
           <View style={{ paddingHorizontal: spacing.md }}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Summary statistics</Text>
-            {/* Income: Min & Max side-by-side */}
-            <View style={styles.cardRow}>
-              <MoneyCard title="Income • Min" amount={incomeStats.min} type="in" period={period} icon="trending-down-outline" />
-              <MoneyCard title="Income • Max" amount={incomeStats.max} type="in" period={period} icon="trending-up-outline" />
-            </View>
-            {/* Income: Avg full-width */}
-            <View style={styles.cardRowSingle}>
-              <MoneyCard title="Income • Avg" amount={incomeStats.avg} type="in" period={period} icon="speedometer-outline" />
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Summary Statistics</Text>
+            
+            <View style={[styles.categoryToggle, { backgroundColor: colors.surface }]}>
+              <TouchableOpacity
+                style={[
+                  styles.categoryToggleButton,
+                  statsView === 'income' && { backgroundColor: colors.success }
+                ]}
+                onPress={() => setStatsView('income')}
+              >
+                <Text style={[
+                  styles.categoryToggleText,
+                  { color: statsView === 'income' ? colors.text : colors.textSecondary }
+                ]}>
+                  Income
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.categoryToggleButton,
+                  statsView === 'expense' && { backgroundColor: colors.danger }
+                ]}
+                onPress={() => setStatsView('expense')}
+              >
+                <Text style={[
+                  styles.categoryToggleText,
+                  { color: statsView === 'expense' ? colors.text : colors.textSecondary }
+                ]}>
+                  Expenses
+                </Text>
+              </TouchableOpacity>
             </View>
 
-            {/* Expense: Min & Max side-by-side */}
+            {/* Min & Max side-by-side */}
             <View style={styles.cardRow}>
-              <MoneyCard title="Expense • Min" amount={expenseStats.min} type="out" period={period} icon="trending-down-outline" />
-              <MoneyCard title="Expense • Max" amount={expenseStats.max} type="out" period={period} icon="trending-up-outline" />
+              <MoneyCard 
+                title={`${statsView === 'income' ? 'Income' : 'Expense'} • Min`} 
+                amount={currentStats.min} 
+                type={statsView === 'income' ? 'in' : 'out'} 
+                period={period} 
+                icon="trending-down-outline" 
+              />
+              <MoneyCard 
+                title={`${statsView === 'income' ? 'Income' : 'Expense'} • Max`} 
+                amount={currentStats.max} 
+                type={statsView === 'income' ? 'in' : 'out'} 
+                period={period} 
+                icon="trending-up-outline" 
+              />
             </View>
-            {/* Expense: Avg full-width */}
+            {/* Avg full-width */}
             <View style={styles.cardRowSingle}>
-              <MoneyCard title="Expense • Avg" amount={expenseStats.avg} type="out" period={period} icon="speedometer-outline" />
+              <MoneyCard 
+                title={`${statsView === 'income' ? 'Income' : 'Expense'} • Avg`} 
+                amount={currentStats.avg} 
+                type={statsView === 'income' ? 'in' : 'out'} 
+                period={period} 
+                icon="speedometer-outline" 
+              />
             </View>
           </View>
         ) : null}
@@ -183,10 +260,10 @@ export default function ReportsScreen() {
               
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chartScroll}>
                 <View style={styles.chartBars}>
-                  {series.labels.map((label, index) => {
-                    const income = series.income[index] || 0;
-                    const expense = series.expense[index] || 0;
-                    const maxValue = Math.max(...series.income, ...series.expense);
+                  {currentWeekData.labels.map((label, index) => {
+                    const income = currentWeekData.income[index] || 0;
+                    const expense = currentWeekData.expense[index] || 0;
+                    const maxValue = Math.max(...currentWeekData.income, ...currentWeekData.expense);
                     const incomeHeight = maxValue > 0 ? (income / maxValue) * 120 : 0;
                     const expenseHeight = maxValue > 0 ? (expense / maxValue) * 120 : 0;
                     
@@ -196,9 +273,14 @@ export default function ReportsScreen() {
                       // For daily: show hour format (0h, 1h, 2h, etc.)
                       displayLabel = `${index}h`;
                     } else if (period === 'weekly') {
-                      // For weekly: show day abbreviations (Mon, Tue, etc.)
-                      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-                      displayLabel = days[index] || label.substring(0, 3);
+                      // For weekly: show day abbreviation with date (Mon 23, Tue 24, etc.)
+                      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                      const date = new Date();
+                      const totalDaysBack = (currentWeek * 7) + (currentWeekData.labels.length - 1 - index);
+                      date.setDate(date.getDate() - totalDaysBack);
+                      const dayName = days[date.getDay()];
+                      const dayOfMonth = date.getDate();
+                      displayLabel = `${dayName} ${dayOfMonth}`;
                     } else if (period === 'monthly') {
                       // For monthly: show month abbreviations (Jan, Feb, etc.)
                       displayLabel = label.length > 3 ? label.substring(0, 3) : label;
@@ -220,23 +302,117 @@ export default function ReportsScreen() {
               </ScrollView>
             </View>
 
-            {/* Category breakdown simple list */}
+            {/* Week Navigation - Enhanced with month indicators */}
+            {period === 'weekly' && totalWeeks > 1 && (
+              <View style={styles.weekSelectorContainer}>
+                <View style={styles.weekSelectorHeader}>
+                  <TouchableOpacity 
+                    onPress={() => setCurrentWeek(Math.min(currentWeek + 1, totalWeeks - 1))}
+                    disabled={currentWeek >= totalWeeks - 1}
+                    style={[styles.navButton, { opacity: currentWeek >= totalWeeks - 1 ? 0.3 : 1 }]}
+                  >
+                    <Ionicons name="chevron-back" size={24} color={colors.text} />
+                  </TouchableOpacity>
+                  
+                  <View style={styles.weekIndicatorContainer}>
+                    <Text style={[styles.weekIndicator, { color: colors.text }]}>
+                      Week {currentWeek + 1} of {totalWeeks}
+                    </Text>
+                    {(() => {
+                      // Calculate month for current week
+                      const date = new Date();
+                      date.setDate(date.getDate() - (currentWeek * 7));
+                      const monthName = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+                      return (
+                        <Text style={[styles.monthIndicator, { color: colors.textSecondary }]}>
+                          {monthName}
+                        </Text>
+                      );
+                    })()}
+                  </View>
+                  
+                  <TouchableOpacity 
+                    onPress={() => setCurrentWeek(Math.max(currentWeek - 1, 0))}
+                    disabled={currentWeek <= 0}
+                    style={[styles.navButton, { opacity: currentWeek <= 0 ? 0.3 : 1 }]}
+                  >
+                    <Ionicons name="chevron-forward" size={24} color={colors.text} />
+                  </TouchableOpacity>
+                </View>
+                
+                {/* Week dots indicator */}
+                <View style={styles.weekDotsContainer}>
+                  {Array.from({ length: totalWeeks }, (_, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      onPress={() => setCurrentWeek(index)}
+                      style={[
+                        styles.weekDot,
+                        {
+                          backgroundColor: index === currentWeek ? colors.primary : colors.surface,
+                          borderColor: colors.border,
+                        }
+                      ]}
+                    />
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* Category breakdown with horizontal scrolling */}
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Expenses by Category</Text>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Categories by Type</Text>
+              
+              <View style={[styles.categoryToggle, { backgroundColor: colors.surface }]}>
+                <TouchableOpacity
+                  style={[
+                    styles.categoryToggleButton,
+                    categoryView === 'income' && { backgroundColor: colors.success }
+                  ]}
+                  onPress={() => setCategoryView('income')}
+                >
+                  <Text style={[
+                    styles.categoryToggleText,
+                    { color: categoryView === 'income' ? colors.text : colors.textSecondary }
+                  ]}>
+                    Income
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.categoryToggleButton,
+                    categoryView === 'expense' && { backgroundColor: colors.danger }
+                  ]}
+                  onPress={() => setCategoryView('expense')}
+                >
+                  <Text style={[
+                    styles.categoryToggleText,
+                    { color: categoryView === 'expense' ? colors.text : colors.textSecondary }
+                  ]}>
+                    Expenses
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              
               {categoriesSorted.length > 0 ? (
                 categoriesSorted.map(([cat, amount]) => (
                   <View key={cat} style={[styles.categoryItem, { backgroundColor: colors.card }]}> 
                     <View style={styles.categoryInfo}>
                       <Text style={[styles.categoryName, { color: colors.text }]}>{cat}</Text>
-                      <Text style={[styles.categoryAmount, { color: colors.danger }]}>{formatCurrency(amount)}</Text>
+                      <Text style={[
+                        styles.categoryAmount, 
+                        { color: categoryView === 'income' ? colors.success : colors.danger }
+                      ]}>
+                        {formatCurrency(amount as number)}
+                      </Text>
                     </View>
                     <View style={[styles.categoryBar, { backgroundColor: colors.surface }]}>
                       <View
                         style={[
                           styles.categoryBarFill,
                           {
-                            width: `${(amount / Math.max(...categoriesSorted.map(([, v]) => v))) * 100}%`,
-                            backgroundColor: colors.danger,
+                            width: `${((amount as number) / Math.max(...categoriesSorted.map(([, v]) => v as number))) * 100}%`,
+                            backgroundColor: categoryView === 'income' ? colors.success : colors.danger,
                           },
                         ]}
                       />
@@ -245,7 +421,9 @@ export default function ReportsScreen() {
                 ))
               ) : (
                 <View style={styles.emptyState}>
-                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No expenses in this period</Text>
+                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                    No {categoryView === 'income' ? 'income' : 'expenses'} in this period
+                  </Text>
                 </View>
               )}
             </View>
@@ -370,7 +548,7 @@ const styles = StyleSheet.create({
   },
   barGroup: {
     alignItems: 'center',
-    minWidth: 60,
+    minWidth: 50,
   },
   barContainer: {
     flexDirection: 'row',
@@ -386,6 +564,77 @@ const styles = StyleSheet.create({
   barLabel: {
     fontSize: fontSize.xs,
     textAlign: 'center',
-    width: 60,
+    width: 50,
+  },
+  categoryToggle: {
+    flexDirection: 'row',
+    borderRadius: borderRadius.md,
+    padding: spacing.xs,
+    marginBottom: spacing.lg,
+    marginHorizontal: spacing.md,
+  },
+  categoryToggleButton: {
+    flex: 1,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    marginHorizontal: spacing.xs,
+  },
+  categoryToggleText: {
+    fontSize: fontSize.md,
+    fontWeight: '700',
+  },
+  chartHeaderContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  weekNavigation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  navButton: {
+    padding: spacing.xs,
+    borderRadius: borderRadius.sm,
+  },
+  weekIndicator: {
+    fontSize: fontSize.md,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  weekSelectorContainer: {
+    marginTop: spacing.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    backgroundColor: 'transparent',
+  },
+  weekSelectorHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  weekIndicatorContainer: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  monthIndicator: {
+    fontSize: fontSize.sm,
+    fontWeight: '500',
+    marginTop: spacing.xs / 2,
+  },
+  weekDotsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: spacing.sm,
+  },
+  weekDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 1,
   },
 });

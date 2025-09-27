@@ -101,9 +101,9 @@ export async function getAggregatesByPeriod(
     start = startOfDay(now);
     end = addPeriod(start, 'weekly', 1); // Add 1 day (using weekly logic for day increment)
   } else if (period === 'weekly') {
-    // This week: Monday to Sunday
-    start = startOfWeek(now);
-    end = addPeriod(start, 'weekly', 7); // Add 7 days
+    // Last 28 days (4 weeks): stretching back from today
+    end = addPeriod(startOfDay(now), 'weekly', 1); // End of today
+    start = addPeriod(end, 'weekly', -rangeCount); // rangeCount days back
   } else if (period === 'monthly') {
     // This year: show months of current year
     start = startOfYear(now);
@@ -141,8 +141,9 @@ export async function getAggregatesByPeriod(
       });
     }
   } else if (period === 'weekly') {
-    // For weekly: create 7 daily buckets
-    for (let day = 0; day < 7; day++) {
+    // For weekly: create daily buckets for the specified range
+    const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    for (let day = 0; day < daysDiff; day++) {
       const bucketStart = new Date(start);
       bucketStart.setDate(start.getDate() + day);
       bucketStart.setHours(0, 0, 0, 0);
@@ -155,8 +156,12 @@ export async function getAggregatesByPeriod(
       });
       const income = inBucket.filter((t) => t.type === 'income').reduce((sum, t) => sum + Math.abs(t.amount), 0);
       const expense = inBucket.filter((t) => t.type === 'expense').reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      
+      // Use standard day label formatting
+      const label = formatLabel(bucketStart, period);
+      
       buckets.push({
-        periodLabel: formatLabel(bucketStart, period),
+        periodLabel: label,
         start: bucketStart,
         end: bucketEnd,
         income,
@@ -208,4 +213,40 @@ export async function getCategoryBreakdown(
     acc[key] = (acc[key] || 0) + Math.abs(t.amount);
     return acc;
   }, {} as Record<string, number>);
+}
+
+export async function getIncomeCategoryBreakdown(
+  userId: string,
+  from?: Date | string,
+  to?: Date | string
+): Promise<Record<string, number>> {
+  const txns = await getTransactions(userId, { from, to, limit: 10000, offset: 0 });
+  const income = txns.filter((t) => t.type === 'income');
+  return income.reduce((acc, t) => {
+    const key = t.category || 'Other';
+    acc[key] = (acc[key] || 0) + Math.abs(t.amount);
+    return acc;
+  }, {} as Record<string, number>);
+}
+
+export async function getCategoriesBreakdown(
+  userId: string,
+  from?: Date | string,
+  to?: Date | string
+): Promise<{ income: Record<string, number>; expense: Record<string, number> }> {
+  const txns = await getTransactions(userId, { from, to, limit: 10000, offset: 0 });
+  
+  const income = txns.filter((t) => t.type === 'income').reduce((acc, t) => {
+    const key = t.category || 'Other';
+    acc[key] = (acc[key] || 0) + Math.abs(t.amount);
+    return acc;
+  }, {} as Record<string, number>);
+  
+  const expense = txns.filter((t) => t.type === 'expense').reduce((acc, t) => {
+    const key = t.category || 'Other';
+    acc[key] = (acc[key] || 0) + Math.abs(t.amount);
+    return acc;
+  }, {} as Record<string, number>);
+  
+  return { income, expense };
 }

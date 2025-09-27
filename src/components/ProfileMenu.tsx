@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, Modal } from 'react-native';
 import { useThemeColors } from '../theme/ThemeProvider';
 import { useAuth } from '../hooks/useAuth';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,15 +10,7 @@ export const ProfileMenu: React.FC = () => {
   const { user, signOut } = useAuth();
 
   return (
-    <>
-      {isOpen && (
-        <TouchableOpacity
-          style={styles.fullScreenOverlay}
-          onPress={() => setIsOpen(false)}
-          activeOpacity={1}
-        />
-      )}
-      <View style={styles.container}>
+    <View style={styles.container}>
       <TouchableOpacity 
         onPress={() => setIsOpen(!isOpen)}
         style={styles.profileButton}
@@ -26,39 +18,60 @@ export const ProfileMenu: React.FC = () => {
         <Ionicons name="person-circle" size={32} color={colors.primary} />
       </TouchableOpacity>
 
-      {isOpen && (
-        <View style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={[styles.profileInfo, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.loggedInText, { color: colors.textSecondary }]}>Logged in as</Text>
-            <Text style={[styles.email, { color: colors.text }]}>{user?.user_metadata?.username || user?.email?.split('@')[0] || 'Guest'}</Text>
+      <Modal
+        visible={isOpen}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsOpen(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          onPress={() => setIsOpen(false)}
+          activeOpacity={1}
+        >
+          <View style={styles.modalContent}>
+            <View style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={[styles.profileInfo, { borderBottomColor: colors.border }]}>
+                <Text style={[styles.loggedInText, { color: colors.textSecondary }]}>Logged in as</Text>
+                <Text style={[styles.email, { color: colors.text }]}>{user?.user_metadata?.username || user?.email?.split('@')[0] || 'Guest'}</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.menuItem}
+                onPress={() => {
+                  setIsOpen(false);
+                  signOut();
+                }}
+              >
+                <Ionicons name="log-out-outline" size={20} color={colors.danger} style={styles.icon} />
+                <Text style={[styles.menuText, { color: colors.danger }]}>Sign Out</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-          <TouchableOpacity 
-            style={styles.menuItem}
-            onPress={signOut}
-          >
-            <Ionicons name="log-out-outline" size={20} color={colors.danger} style={styles.icon} />
-            <Text style={[styles.menuText, { color: colors.danger }]}>Sign Out</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-      
-      </View>
-    </>
+        </TouchableOpacity>
+      </Modal>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     position: 'relative',
-    zIndex: 1000,
   },
   profileButton: {
     padding: 8,
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: 100, // Adjust based on header height
+    paddingRight: 20,
+  },
+  modalContent: {
+    // Container for positioning the dropdown
+  },
   dropdown: {
-    position: 'absolute',
-    top: 50,
-    right: 0,
     width: 200,
     borderRadius: 8,
     borderWidth: 1,
@@ -81,16 +94,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  fullScreenOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    width: '100%',
-    height: '100%',
-    zIndex: 999,
-  },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -101,13 +104,5 @@ const styles = StyleSheet.create({
   },
   menuText: {
     fontSize: 14,
-  },
-  overlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'transparent',
   },
 });
