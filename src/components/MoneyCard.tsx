@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { spacing, borderRadius, fontSize } from '../theme/colors';
 import { useThemeColors } from '../theme/ThemeProvider';
+import { useCurrency } from '../services/CurrencyProvider';
 
 interface MoneyCardProps {
   title: string;
@@ -20,12 +21,7 @@ export const MoneyCard: React.FC<MoneyCardProps> = ({
   icon,
 }) => {
   const colors = useThemeColors();
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(Math.abs(amount));
-  };
+  const { formatCurrency } = useCurrency();
 
   const getCardColor = () => {
     switch (type) {
@@ -66,7 +62,7 @@ export const MoneyCard: React.FC<MoneyCardProps> = ({
       
       <Text style={[styles.amount, { color: getCardColor() }]}>
         {type === 'out' && amount > 0 ? '-' : ''}
-        {formatCurrency(amount)}
+        {formatCurrency(Math.abs(amount))}
       </Text>
     </View>
   );

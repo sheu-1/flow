@@ -141,7 +141,11 @@ const AuthScreen: React.FC = () => {
     setUsernameError(null);
     
     try {
-      await signInWithGoogle();
+      const googleResult = await signInWithGoogle();
+      console.log('Google sign-in successful:', {
+        email: googleResult.user.email,
+        name: googleResult.user.name,
+      });
     } catch (e: any) {
       const message = e?.message || 'Google sign in failed';
       
@@ -152,6 +156,10 @@ const AuthScreen: React.FC = () => {
         setError('Network error. Please check your connection and try again.');
       } else if (message.includes('redirect') || message.includes('deep')) {
         setError('Configuration error. Please contact support.');
+      } else if (message.includes('OAuth flow was')) {
+        setError('Sign-in was cancelled or failed. Please try again.');
+      } else if (message.includes('Failed to obtain access token')) {
+        setError('Authentication failed. Please try again.');
       } else {
         setError('Google sign in failed. Please try again.');
       }

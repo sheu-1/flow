@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Svg, Circle, G } from 'react-native-svg';
 import { spacing, borderRadius, fontSize } from '../theme/colors';
 import { useThemeColors } from '../theme/ThemeProvider';
+import { useCurrency } from '../services/CurrencyProvider';
 
 interface PieChartProps {
   moneyIn: number;
@@ -11,16 +12,10 @@ interface PieChartProps {
 
 export const PieChart: React.FC<PieChartProps> = ({ moneyIn, moneyOut }) => {
   const colors = useThemeColors();
+  const { formatCurrency } = useCurrency();
   const total = moneyIn + moneyOut;
   const moneyInPercentage = total > 0 ? (moneyIn / total) * 100 : 0;
   const moneyOutPercentage = total > 0 ? (moneyOut / total) * 100 : 0;
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
-  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.card }]}>

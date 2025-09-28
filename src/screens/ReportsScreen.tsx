@@ -9,10 +9,12 @@ import { getAggregatesByPeriod, getCategoriesBreakdown } from '../services/Trans
 import { Dimensions } from 'react-native';
 import { MoneyCard } from '../components/MoneyCard';
 import { SimplePieChart } from '../components/SimplePieChart';
+import { useCurrency } from '../services/CurrencyProvider';
 
 export default function ReportsScreen() {
   const colors = useThemeColors();
   const { user } = useAuth();
+  const { formatCurrency } = useCurrency();
   const [period, setPeriod] = useState<AggregatePeriod>('daily');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -67,13 +69,7 @@ export default function ReportsScreen() {
     setCurrentWeek(0);
   }, [period]);
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      maximumFractionDigits: 0,
-    }).format(amount || 0);
-  };
+  // Currency formatting provided by CurrencyProvider
 
   const categoriesSorted = useMemo(() => {
     const currentCategories = categoryView === 'income' ? categories.income : categories.expense;

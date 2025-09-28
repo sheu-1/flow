@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { spacing, borderRadius, fontSize } from '../theme/colors';
 import { useThemeColors } from '../theme/ThemeProvider';
 import { Transaction } from '../types';
+import { useCurrency } from '../services/CurrencyProvider';
 
 interface TransactionCardProps {
   transaction: Transaction;
@@ -12,12 +13,7 @@ interface TransactionCardProps {
 
 export const TransactionCard: React.FC<TransactionCardProps> = ({ transaction, onPress }) => {
   const colors = useThemeColors();
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(Math.abs(amount));
-  };
+  const { formatCurrency } = useCurrency();
 
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('en-US', {

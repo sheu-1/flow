@@ -15,15 +15,18 @@ import { ProfileMenu } from '../components/ProfileMenu';
 import NotificationPanel from '../components/NotificationPanel';
 import { TransactionCard } from '../components/TransactionCard';
 import { spacing, fontSize } from '../theme/colors';
+import { useCurrency } from '../services/CurrencyProvider';
 
 export default function DashboardScreen() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('daily');
   const [refreshing, setRefreshing] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
   const colors = useThemeColors();
   const { user } = useAuth();
+  const { currency, availableCurrencies, setCurrency } = useCurrency();
+  const [currencyOpen, setCurrencyOpen] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const refresh = useCallback(async (showRefreshing = false) => {
     if (!user?.id) return;
@@ -141,12 +144,13 @@ export default function DashboardScreen() {
         }
       >
         <View style={[styles.header, { paddingTop: spacing.xl }]}> 
-          <View style={styles.iconsRow}>
+          <View style={styles.headerTopRow}>
+            <Text style={[styles.greeting, { color: colors.text }]}>Hello, {displayName}</Text>
             <View style={styles.headerIcons}>
               <TouchableOpacity style={styles.iconButton} onPress={() => setShowNotifications(true)}>
                 <Ionicons name="notifications-outline" size={24} color={colors.text} />
                 {unreadCount > 0 && (
-                  <View style={[styles.notificationBadge, { backgroundColor: colors.danger }]}>
+                  <View style={[styles.notificationBadge, { backgroundColor: colors.danger }]}> 
                     <Text style={[styles.notificationBadgeText, { color: colors.background }]}>
                       {unreadCount > 99 ? '99+' : unreadCount}
                     </Text>
@@ -156,16 +160,34 @@ export default function DashboardScreen() {
               <ProfileMenu />
             </View>
           </View>
-          <View style={styles.greetingContainer}>
-            <Text style={[styles.greeting, { color: colors.text }]}>Hello, {displayName}</Text>
+          <View style={styles.dateCurrencyRow}>
             <Text style={[styles.dateText, { color: colors.textSecondary }]}>{new Date().toLocaleDateString()}</Text>
+            <View style={styles.currencyRight}>
+              <TouchableOpacity
+                style={[styles.currencyButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
+                onPress={() => setCurrencyOpen((open) => !open)}
+              >
+                <Text style={[styles.currencyButtonText, { color: colors.text }]} numberOfLines={1}>{currency}</Text>
+                <Ionicons name={currencyOpen ? 'chevron-up' : 'chevron-down'} size={16} color={colors.text} />
+              </TouchableOpacity>
+              {currencyOpen && (
+                <View style={[styles.currencyMenu, { borderColor: colors.border, backgroundColor: colors.card }]}> 
+                  <ScrollView style={{ maxHeight: 160 }}>
+                    {availableCurrencies.map((c) => (
+                      <TouchableOpacity key={c} style={styles.currencyMenuItem} onPress={() => { setCurrency(c); setCurrencyOpen(false); }}>
+                        <Text style={{ color: c === currency ? colors.primary : colors.text, fontWeight: '600' }}>{c}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+            </View>
           </View>
         </View>
         <PeriodSelector
           selectedPeriod={selectedPeriod}
           onPeriodChange={setSelectedPeriod}
         />
-
         <View style={styles.cardsRow}>
           <MoneyCard
             title="Money In"
@@ -237,6 +259,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     marginBottom: 2,
   },
+  headerTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    marginBottom: 2,
+  },
   headerIcons: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -276,6 +305,41 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 0,
   },
+  dateCurrencyRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    marginTop: 4,
+  },
+  currencyRight: {
+    flexShrink: 1,
+    maxWidth: '40%',
+  },
+  currencyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderWidth: 1,
+    borderRadius: 8,
+  },
+  currencyButtonText: {
+    fontSize: fontSize.md,
+    fontWeight: '700',
+    marginRight: spacing.xs,
+  },
+  currencyMenu: {
+    marginTop: spacing.xs,
+    borderWidth: 1,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  currencyMenuItem: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
   profileButton: {
     padding: spacing.xs,
     borderRadius: 999,
@@ -296,6 +360,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginHorizontal: spacing.md,
     marginBottom: spacing.md,
+  },
+  currencySelectorRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  currencyChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: 16,
+    borderWidth: 1,
   },
   emptyState: {
     alignItems: 'center',

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { spacing, fontSize } from '../theme/colors';
 import { useThemeColors } from '../theme/ThemeProvider';
+import { useCurrency } from '../services/CurrencyProvider';
 
 interface SimplePieChartProps {
   income: number;
@@ -15,18 +16,11 @@ export const SimplePieChart: React.FC<SimplePieChartProps> = ({
   size = 100,
 }) => {
   const colors = useThemeColors();
+  const { formatCurrency } = useCurrency();
   
   const total = income + expense;
   const incomePercentage = total > 0 ? (income / total) * 100 : 0;
   const expensePercentage = total > 0 ? (expense / total) * 100 : 0;
-  
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      maximumFractionDigits: 0,
-    }).format(amount || 0);
-  };
 
   // Simple horizontal bar representation
   return (

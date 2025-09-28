@@ -6,6 +6,7 @@ import { makeRedirectUri } from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { supabase } from './SupabaseClient';
 import { PermissionService } from './PermissionService';
+import { googleAuthService, GoogleAuthResult } from './GoogleAuthService';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -59,24 +60,25 @@ export async function signOut() {
   if (error) throw error;
 }
 
-export async function signInWithGoogle() {
-  const redirectUri = makeRedirectUri({
-    scheme: 'cashflowtracker',
-  });
-  
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: { 
-      redirectTo: redirectUri,
-      queryParams: {
-        access_type: 'offline',
-        prompt: 'consent',
-      },
-    },
-  });
-  
-  if (error) throw error;
-  return data;
+export async function signInWithGoogle(): Promise<GoogleAuthResult> {
+  try {
+    // Use the new PKCE-based Google OAuth service
+    const googleResult = await googleAuthService.signInWithGoogle();
+    
+    // Sign in to Supabase using the Google ID token
+    const { data, error } = await supabase.auth.signInWithIdToken({
+      provider: 'google',
+      token: googleResult.idToken || googleResult.accessToken,
+      access_token: googleResult.accessToken,
+    });
+    
+    if (error) throw error;
+    
+    return googleResult;
+  } catch (error) {
+    console.error('Google sign-in error:', error);
+    throw error;
+  }
 }
 
 export async function getCurrentUser(): Promise<User | null> {
@@ -91,7 +93,7 @@ export interface AuthContextValue {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, username?: string) => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: () => Promise<GoogleAuthResult>;
   signOut: () => Promise<void>;
 }
 
@@ -180,7 +182,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     signInWithGoogle: async () => {
       setLoading(true);
       try {
-        await signInWithGoogle();
+        const googleResult = await signInWithGoogle();
+        
+        // Get the updated session after Google sign-in
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        // Initialize SMS permissions on successful login
+        if (session?.user) {
+          try {
+            await PermissionService.initializeSmsPermissions();
+          } catch (error) {
+            console.warn('Failed to initialize SMS permissions:', error);
+          }
+        }
+        
+        return googleResult;
       } catch (error) {
         const message = (error as any)?.message || 'Google sign in failed';
         throw new Error(message);

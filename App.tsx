@@ -8,7 +8,6 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar, View } from 'react-native';
 import { colors as DarkColors } from './src/theme/colors';
-import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import * as SplashScreen from 'expo-splash-screen';
 
 import DashboardScreen from './src/screens/DashboardScreen';
@@ -17,8 +16,10 @@ import ReportsScreen from './src/screens/ReportsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import AIAccountantScreen from './src/screens/AIAccountantScreen';
 import { AuthProvider, useAuth } from './src/services/AuthService';
-import { initDB } from './src/services/Database';
-import { syncTransactions } from './src/services/SyncService';
+// SQLite sync removed: Supabase is the source of truth
+// import { initDB } from './src/services/Database';
+// import { syncTransactions } from './src/services/SyncService';
+import { CurrencyProvider } from './src/services/CurrencyProvider';
 import { ThemeProvider, useTheme } from './src/theme/ThemeProvider';
 import AuthScreen from './src/screens/AuthScreen';
 import { SplashScreen as CustomSplashScreen } from './src/components/SplashScreen';
@@ -50,37 +51,7 @@ function AppContainer() {
   const { colors } = useTheme();
   const [showSplash, setShowSplash] = React.useState(true);
 
-  useEffect(() => {
-    let unsubscribe: (() => void) | null = null;
-    (async () => {
-      await initDB();
-
-      // Initial sync on startup if logged in
-      if (user?.id) {
-        try {
-          await syncTransactions(user.id);
-        } catch (e) {
-          // Swallow errors to not block UI
-          console.warn('Initial sync failed', e);
-        }
-      }
-
-      // Listen to network changes to trigger sync
-      unsubscribe = NetInfo.addEventListener(async (state: NetInfoState) => {
-        if (state.isConnected && state.isInternetReachable && user?.id) {
-          try {
-            await syncTransactions(user.id);
-          } catch (e) {
-            console.warn('Sync on reconnect failed', e);
-          }
-        }
-      });
-    })();
-
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
-  }, [user?.id]);
+  // Removed local SQLite init and network-based sync; Supabase is the source of truth
 
   // Hide the native splash as soon as our auth loading completes
   useEffect(() => {
@@ -182,10 +153,12 @@ function AppContainer() {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <AppContainer />
-      </AuthProvider>
-    </ThemeProvider>
+    <CurrencyProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <AppContainer />
+        </AuthProvider>
+      </ThemeProvider>
+    </CurrencyProvider>
   );
 }

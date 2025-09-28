@@ -21,17 +21,11 @@ async function detectDuplicate(userId: string, parsed: ParsedTransaction) {
   if (parsed.reference) {
     const { data, error } = await supabase
       .from('transactions')
-      .select('id, metadata')
+      .select('id')
       .eq('user_id', userId)
-      .limit(100); // Get more records to check metadata
-    if (!error && data) {
-      const duplicate = data.find(row => 
-        row.metadata && 
-        typeof row.metadata === 'object' && 
-        row.metadata.reference === parsed.reference
-      );
-      if (duplicate) return duplicate;
-    }
+      .filter('metadata->>reference', 'eq', parsed.reference)
+      .limit(1);
+    if (!error && data && data.length > 0) return data[0];
   }
   const { data, error } = await supabase
     .from('transactions')
