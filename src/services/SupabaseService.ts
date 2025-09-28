@@ -5,9 +5,9 @@ export type SupabaseInsertPayload = {
   user_id: string;
   type: 'income' | 'expense';
   amount: number;
+  category: string | null;
   sender: string | null;
-  reference: string | null;
-  message: string;
+  metadata: Record<string, any> | null;
   date: string; // ISO
 };
 
@@ -21,11 +21,17 @@ async function detectDuplicate(userId: string, parsed: ParsedTransaction) {
   if (parsed.reference) {
     const { data, error } = await supabase
       .from('transactions')
-      .select('id, reference')
+      .select('id, metadata')
       .eq('user_id', userId)
-      .eq('reference', parsed.reference)
-      .limit(1);
-    if (!error && data && data.length > 0) return data[0];
+      .limit(100); // Get more records to check metadata
+    if (!error && data) {
+      const duplicate = data.find(row => 
+        row.metadata && 
+        typeof row.metadata === 'object' && 
+        row.metadata.reference === parsed.reference
+      );
+      if (duplicate) return duplicate;
+    }
   }
   const { data, error } = await supabase
     .from('transactions')
@@ -63,9 +69,14 @@ export async function insertTransactionSupabase(
       user_id: userId,
       type: parsed.type === 'credit' ? 'income' : 'expense',
       amount: parsed.amount,
+      category: 'SMS Import', // Default category for SMS transactions
       sender: parsed.sender ?? null,
-      reference: parsed.reference ?? null,
-      message: parsed.message,
+      metadata: {
+        reference: parsed.reference,
+        message: parsed.message,
+        source: 'sms',
+        parsed_at: new Date().toISOString()
+      },
       date: parsed.dateISO || new Date().toISOString(),
     };
 
