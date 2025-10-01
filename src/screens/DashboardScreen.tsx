@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -136,14 +136,16 @@ export default function DashboardScreen() {
   const displayName = user?.user_metadata?.username || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User';
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <ScrollView 
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
         }
+        stickyHeaderIndices={[1]} // Make the period selector (index 1) sticky
       >
-        <View style={[styles.header, { paddingTop: spacing.xl }]}> 
+        {/* Scrollable Header */}
+        <View style={[styles.header, { backgroundColor: colors.background }]}>
           <View style={styles.headerTopRow}>
             <Text style={[styles.greeting, { color: colors.text }]}>Hello, {displayName}</Text>
             <View style={styles.headerIcons}>
@@ -160,6 +162,7 @@ export default function DashboardScreen() {
               <ProfileMenu />
             </View>
           </View>
+          
           <View style={styles.dateCurrencyRow}>
             <Text style={[styles.dateText, { color: colors.textSecondary }]}>{new Date().toLocaleDateString()}</Text>
             <View style={styles.currencyRight}>
@@ -184,10 +187,17 @@ export default function DashboardScreen() {
             </View>
           </View>
         </View>
-        <PeriodSelector
-          selectedPeriod={selectedPeriod}
-          onPeriodChange={setSelectedPeriod}
-        />
+        
+        {/* Sticky Period Selector */}
+        <View style={[styles.stickyPeriodSelector, { backgroundColor: colors.background }]}>
+          <PeriodSelector
+            selectedPeriod={selectedPeriod}
+            onPeriodChange={setSelectedPeriod}
+          />
+        </View>
+        
+        {/* Main Content */}
+        <View>
         <View style={styles.cardsRow}>
           <MoneyCard
             title="Money In"
@@ -217,18 +227,19 @@ export default function DashboardScreen() {
 
         <PieChart moneyIn={moneyIn} moneyOut={moneyOut} />
 
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Transactions</Text>
-          {recentTransactions.length > 0 ? (
-            recentTransactions.map((transaction) => (
-              <TransactionCard key={transaction.id} transaction={transaction} />
-            ))
-          ) : (
-            <View style={styles.emptyState}>
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No transactions yet</Text>
-              <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>Add your first transaction to get started</Text>
-            </View>
-          )}
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Transactions</Text>
+            {recentTransactions.length > 0 ? (
+              recentTransactions.map((transaction) => (
+                <TransactionCard key={transaction.id} transaction={transaction} />
+              ))
+            ) : (
+              <View style={styles.emptyState}>
+                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No transactions yet</Text>
+                <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>Add your first transaction to get started</Text>
+              </View>
+            )}
+          </View>
         </View>
       </ScrollView>
       
@@ -246,11 +257,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    flexDirection: 'column',
-    justifyContent: 'flex-start',
-    alignItems: 'stretch',
-    padding: 16,
-    paddingBottom: 8,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  stickyPeriodSelector: {
+    paddingVertical: spacing.xs,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
   },
   iconsRow: {
     flexDirection: 'row',

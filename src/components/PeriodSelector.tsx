@@ -6,11 +6,13 @@ import { useThemeColors } from '../theme/ThemeProvider';
 interface PeriodSelectorProps {
   selectedPeriod: 'daily' | 'weekly' | 'monthly' | 'yearly';
   onPeriodChange: (period: 'daily' | 'weekly' | 'monthly' | 'yearly') => void;
+  removeMargin?: boolean; // Option to remove margins when used in sticky headers
 }
 
 export const PeriodSelector: React.FC<PeriodSelectorProps> = ({
   selectedPeriod,
   onPeriodChange,
+  removeMargin = false,
 }) => {
   const colors = useThemeColors();
   const periods = [
@@ -21,7 +23,7 @@ export const PeriodSelector: React.FC<PeriodSelectorProps> = ({
   ];
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.surface }] }>
+    <View style={[styles.container, { backgroundColor: colors.surface }, removeMargin && styles.noMargin] }>
       {periods.map((period) => (
         <TouchableOpacity
           key={period.key}
@@ -63,5 +65,9 @@ const styles = StyleSheet.create({
   periodButtonText: {
     fontWeight: '600',
     fontSize: fontSize.sm,
+  },
+  noMargin: {
+    marginHorizontal: 0,
+    marginBottom: 0,
   },
 });

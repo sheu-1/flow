@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Animated } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { spacing, fontSize, borderRadius } from '../theme/colors';
 import { useThemeColors } from '../theme/ThemeProvider';
@@ -126,34 +127,44 @@ export default function ReportsScreen() {
   }, [series.labels.length, period]);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <ScrollView 
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
         }
+        stickyHeaderIndices={[1]} // Make the period selector (index 1) sticky
       >
-        <Text style={[styles.title, { color: colors.text }]}>Reports</Text>
-
-        <View style={[styles.periodSelector, { backgroundColor: colors.surface }]}> 
-          {(['daily', 'weekly', 'monthly', 'yearly'] as const).map((p) => (
-            <TouchableOpacity
-              key={p}
-              style={[styles.periodButton, period === p && { backgroundColor: colors.primary }]}
-              onPress={() => setPeriod(p)}
-            >
-              <Text
-                style={[
-                  styles.periodButtonText,
-                  { color: colors.textSecondary },
-                  period === p && { color: colors.text },
-                ]}
-              >
-                {p === 'daily' ? 'Daily' : p === 'weekly' ? 'Weekly' : p === 'monthly' ? 'Monthly' : 'Yearly'}
-              </Text>
-            </TouchableOpacity>
-          ))}
+        {/* Scrollable Header */}
+        <View style={[styles.header, { backgroundColor: colors.background }]}>
+          <Text style={[styles.title, { color: colors.text }]}>Reports</Text>
         </View>
+        
+        {/* Sticky Period Selector */}
+        <View style={[styles.stickyPeriodSelector, { backgroundColor: colors.background }]}>
+          <View style={[styles.periodSelector, { backgroundColor: colors.surface }]}> 
+            {(['daily', 'weekly', 'monthly', 'yearly'] as const).map((p) => (
+              <TouchableOpacity
+                key={p}
+                style={[styles.periodButton, period === p && { backgroundColor: colors.primary }]}
+                onPress={() => setPeriod(p)}
+              >
+                <Text
+                  style={[
+                    styles.periodButtonText,
+                    { color: colors.textSecondary },
+                    period === p && { color: colors.text },
+                  ]}
+                >
+                  {p === 'daily' ? 'Daily' : p === 'weekly' ? 'Weekly' : p === 'monthly' ? 'Monthly' : 'Yearly'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+        
+        {/* Main Content */}
+        <View>
 
         {/* Summary statistics */}
         {!loading && series.labels.length > 0 ? (
@@ -425,6 +436,7 @@ export default function ReportsScreen() {
             </View>
           </View>
         )}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -434,16 +446,26 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  header: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+  },
   title: {
     fontSize: fontSize.xl,
     fontWeight: 'bold',
-    margin: spacing.md,
-    marginTop: spacing.xl,
+  },
+  stickyPeriodSelector: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
   },
   periodSelector: {
     flexDirection: 'row',
-    marginHorizontal: spacing.md,
-    marginBottom: spacing.lg,
     borderRadius: borderRadius.md,
     padding: spacing.xs,
   },

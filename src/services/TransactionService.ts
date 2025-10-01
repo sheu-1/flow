@@ -22,6 +22,7 @@ export async function getTransactions(userId: string, params: GetTransactionsPar
     .select('*')
     .eq('user_id', userId)
     .order('date', { ascending: false })
+    .limit(limit)
     .range(offset, offset + limit - 1);
 
   if (from) query = query.gte('date', toISO(from)!);
@@ -29,17 +30,21 @@ export async function getTransactions(userId: string, params: GetTransactionsPar
 
   const { data, error } = await query;
   if (error) throw error;
-  return (data || []).map((r) => ({
-    id: r.id,
-    user_id: r.user_id,
-    type: r.type as 'income' | 'expense',
-    amount: Number(r.amount),
-    category: r.category,
-    sender: r.sender,
-    metadata: r.metadata,
-    date: r.date,
-    created_at: r.created_at,
-  }));
+  
+  // Filter out any null/undefined entries and map to Transaction type
+  return (data || [])
+    .filter((r) => r && r.id) // Ensure valid records
+    .map((r) => ({
+      id: r.id,
+      user_id: r.user_id,
+      type: r.type as 'income' | 'expense',
+      amount: Number(r.amount),
+      category: r.category,
+      sender: r.sender,
+      metadata: r.metadata,
+      date: r.date,
+      created_at: r.created_at,
+    }));
 }
 
 function startOfWeek(d: Date) {
