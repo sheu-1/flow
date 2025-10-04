@@ -1,8 +1,264 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../theme/ThemeProvider';
+
+// Complete country data for autocomplete
+const COUNTRIES = [
+  { name: 'Afghanistan', code: 'AF', callingCode: '93' },
+  { name: 'Åland Islands', code: 'AX', callingCode: '358' },
+  { name: 'Albania', code: 'AL', callingCode: '355' },
+  { name: 'Algeria', code: 'DZ', callingCode: '213' },
+  { name: 'American Samoa', code: 'AS', callingCode: '1684' },
+  { name: 'Andorra', code: 'AD', callingCode: '376' },
+  { name: 'Angola', code: 'AO', callingCode: '244' },
+  { name: 'Anguilla', code: 'AI', callingCode: '1264' },
+  { name: 'Antarctica', code: 'AQ', callingCode: '672' },
+  { name: 'Antigua and Barbuda', code: 'AG', callingCode: '1268' },
+  { name: 'Argentina', code: 'AR', callingCode: '54' },
+  { name: 'Armenia', code: 'AM', callingCode: '374' },
+  { name: 'Aruba', code: 'AW', callingCode: '297' },
+  { name: 'Australia', code: 'AU', callingCode: '61' },
+  { name: 'Austria', code: 'AT', callingCode: '43' },
+  { name: 'Azerbaijan', code: 'AZ', callingCode: '994' },
+  { name: 'Bahamas', code: 'BS', callingCode: '1242' },
+  { name: 'Bahrain', code: 'BH', callingCode: '973' },
+  { name: 'Bangladesh', code: 'BD', callingCode: '880' },
+  { name: 'Barbados', code: 'BB', callingCode: '1246' },
+  { name: 'Belarus', code: 'BY', callingCode: '375' },
+  { name: 'Belgium', code: 'BE', callingCode: '32' },
+  { name: 'Belize', code: 'BZ', callingCode: '501' },
+  { name: 'Benin', code: 'BJ', callingCode: '229' },
+  { name: 'Bermuda', code: 'BM', callingCode: '1441' },
+  { name: 'Bhutan', code: 'BT', callingCode: '975' },
+  { name: 'Bolivia', code: 'BO', callingCode: '591' },
+  { name: 'Bosnia and Herzegovina', code: 'BA', callingCode: '387' },
+  { name: 'Botswana', code: 'BW', callingCode: '267' },
+  { name: 'Bouvet Island', code: 'BV', callingCode: '47' },
+  { name: 'Brazil', code: 'BR', callingCode: '55' },
+  { name: 'British Indian Ocean Territory', code: 'IO', callingCode: '246' },
+  { name: 'Brunei Darussalam', code: 'BN', callingCode: '673' },
+  { name: 'Bulgaria', code: 'BG', callingCode: '359' },
+  { name: 'Burkina Faso', code: 'BF', callingCode: '226' },
+  { name: 'Burundi', code: 'BI', callingCode: '257' },
+  { name: 'Cambodia', code: 'KH', callingCode: '855' },
+  { name: 'Cameroon', code: 'CM', callingCode: '237' },
+  { name: 'Canada', code: 'CA', callingCode: '1' },
+  { name: 'Cape Verde', code: 'CV', callingCode: '238' },
+  { name: 'Cayman Islands', code: 'KY', callingCode: '1345' },
+  { name: 'Central African Republic', code: 'CF', callingCode: '236' },
+  { name: 'Chad', code: 'TD', callingCode: '235' },
+  { name: 'Chile', code: 'CL', callingCode: '56' },
+  { name: 'China', code: 'CN', callingCode: '86' },
+  { name: 'Christmas Island', code: 'CX', callingCode: '61' },
+  { name: 'Cocos (Keeling) Islands', code: 'CC', callingCode: '61' },
+  { name: 'Colombia', code: 'CO', callingCode: '57' },
+  { name: 'Comoros', code: 'KM', callingCode: '269' },
+  { name: 'Congo', code: 'CG', callingCode: '242' },
+  { name: 'Congo, Democratic Republic', code: 'CD', callingCode: '243' },
+  { name: 'Cook Islands', code: 'CK', callingCode: '682' },
+  { name: 'Costa Rica', code: 'CR', callingCode: '506' },
+  { name: 'Côte d\'Ivoire', code: 'CI', callingCode: '225' },
+  { name: 'Croatia', code: 'HR', callingCode: '385' },
+  { name: 'Cuba', code: 'CU', callingCode: '53' },
+  { name: 'Cyprus', code: 'CY', callingCode: '357' },
+  { name: 'Czech Republic', code: 'CZ', callingCode: '420' },
+  { name: 'Denmark', code: 'DK', callingCode: '45' },
+  { name: 'Djibouti', code: 'DJ', callingCode: '253' },
+  { name: 'Dominica', code: 'DM', callingCode: '1767' },
+  { name: 'Dominican Republic', code: 'DO', callingCode: '1809' },
+  { name: 'Ecuador', code: 'EC', callingCode: '593' },
+  { name: 'Egypt', code: 'EG', callingCode: '20' },
+  { name: 'El Salvador', code: 'SV', callingCode: '503' },
+  { name: 'Equatorial Guinea', code: 'GQ', callingCode: '240' },
+  { name: 'Eritrea', code: 'ER', callingCode: '291' },
+  { name: 'Estonia', code: 'EE', callingCode: '372' },
+  { name: 'Ethiopia', code: 'ET', callingCode: '251' },
+  { name: 'Falkland Islands', code: 'FK', callingCode: '500' },
+  { name: 'Faroe Islands', code: 'FO', callingCode: '298' },
+  { name: 'Fiji', code: 'FJ', callingCode: '679' },
+  { name: 'Finland', code: 'FI', callingCode: '358' },
+  { name: 'France', code: 'FR', callingCode: '33' },
+  { name: 'French Guiana', code: 'GF', callingCode: '594' },
+  { name: 'French Polynesia', code: 'PF', callingCode: '689' },
+  { name: 'French Southern Territories', code: 'TF', callingCode: '262' },
+  { name: 'Gabon', code: 'GA', callingCode: '241' },
+  { name: 'Gambia', code: 'GM', callingCode: '220' },
+  { name: 'Georgia', code: 'GE', callingCode: '995' },
+  { name: 'Germany', code: 'DE', callingCode: '49' },
+  { name: 'Ghana', code: 'GH', callingCode: '233' },
+  { name: 'Gibraltar', code: 'GI', callingCode: '350' },
+  { name: 'Greece', code: 'GR', callingCode: '30' },
+  { name: 'Greenland', code: 'GL', callingCode: '299' },
+  { name: 'Grenada', code: 'GD', callingCode: '1473' },
+  { name: 'Guadeloupe', code: 'GP', callingCode: '590' },
+  { name: 'Guam', code: 'GU', callingCode: '1671' },
+  { name: 'Guatemala', code: 'GT', callingCode: '502' },
+  { name: 'Guernsey', code: 'GG', callingCode: '44' },
+  { name: 'Guinea', code: 'GN', callingCode: '224' },
+  { name: 'Guinea-Bissau', code: 'GW', callingCode: '245' },
+  { name: 'Guyana', code: 'GY', callingCode: '592' },
+  { name: 'Haiti', code: 'HT', callingCode: '509' },
+  { name: 'Heard Island and McDonald Islands', code: 'HM', callingCode: '672' },
+  { name: 'Holy See (Vatican City State)', code: 'VA', callingCode: '379' },
+  { name: 'Honduras', code: 'HN', callingCode: '504' },
+  { name: 'Hong Kong', code: 'HK', callingCode: '852' },
+  { name: 'Hungary', code: 'HU', callingCode: '36' },
+  { name: 'Iceland', code: 'IS', callingCode: '354' },
+  { name: 'India', code: 'IN', callingCode: '91' },
+  { name: 'Indonesia', code: 'ID', callingCode: '62' },
+  { name: 'Iran', code: 'IR', callingCode: '98' },
+  { name: 'Iraq', code: 'IQ', callingCode: '964' },
+  { name: 'Ireland', code: 'IE', callingCode: '353' },
+  { name: 'Isle of Man', code: 'IM', callingCode: '44' },
+  { name: 'Israel', code: 'IL', callingCode: '972' },
+  { name: 'Italy', code: 'IT', callingCode: '39' },
+  { name: 'Jamaica', code: 'JM', callingCode: '1876' },
+  { name: 'Japan', code: 'JP', callingCode: '81' },
+  { name: 'Jersey', code: 'JE', callingCode: '44' },
+  { name: 'Jordan', code: 'JO', callingCode: '962' },
+  { name: 'Kazakhstan', code: 'KZ', callingCode: '7' },
+  { name: 'Kenya', code: 'KE', callingCode: '254' },
+  { name: 'Kiribati', code: 'KI', callingCode: '686' },
+  { name: 'Korea, Democratic People\'s Republic of', code: 'KP', callingCode: '850' },
+  { name: 'Korea, Republic of', code: 'KR', callingCode: '82' },
+  { name: 'Kuwait', code: 'KW', callingCode: '965' },
+  { name: 'Kyrgyzstan', code: 'KG', callingCode: '996' },
+  { name: 'Lao People\'s Democratic Republic', code: 'LA', callingCode: '856' },
+  { name: 'Latvia', code: 'LV', callingCode: '371' },
+  { name: 'Lebanon', code: 'LB', callingCode: '961' },
+  { name: 'Lesotho', code: 'LS', callingCode: '266' },
+  { name: 'Liberia', code: 'LR', callingCode: '231' },
+  { name: 'Libya', code: 'LY', callingCode: '218' },
+  { name: 'Liechtenstein', code: 'LI', callingCode: '423' },
+  { name: 'Lithuania', code: 'LT', callingCode: '370' },
+  { name: 'Luxembourg', code: 'LU', callingCode: '352' },
+  { name: 'Macao', code: 'MO', callingCode: '853' },
+  { name: 'Macedonia', code: 'MK', callingCode: '389' },
+  { name: 'Madagascar', code: 'MG', callingCode: '261' },
+  { name: 'Malawi', code: 'MW', callingCode: '265' },
+  { name: 'Malaysia', code: 'MY', callingCode: '60' },
+  { name: 'Maldives', code: 'MV', callingCode: '960' },
+  { name: 'Mali', code: 'ML', callingCode: '223' },
+  { name: 'Malta', code: 'MT', callingCode: '356' },
+  { name: 'Marshall Islands', code: 'MH', callingCode: '692' },
+  { name: 'Martinique', code: 'MQ', callingCode: '596' },
+  { name: 'Mauritania', code: 'MR', callingCode: '222' },
+  { name: 'Mauritius', code: 'MU', callingCode: '230' },
+  { name: 'Mayotte', code: 'YT', callingCode: '262' },
+  { name: 'Mexico', code: 'MX', callingCode: '52' },
+  { name: 'Micronesia', code: 'FM', callingCode: '691' },
+  { name: 'Moldova', code: 'MD', callingCode: '373' },
+  { name: 'Monaco', code: 'MC', callingCode: '377' },
+  { name: 'Mongolia', code: 'MN', callingCode: '976' },
+  { name: 'Montenegro', code: 'ME', callingCode: '382' },
+  { name: 'Montserrat', code: 'MS', callingCode: '1664' },
+  { name: 'Morocco', code: 'MA', callingCode: '212' },
+  { name: 'Mozambique', code: 'MZ', callingCode: '258' },
+  { name: 'Myanmar', code: 'MM', callingCode: '95' },
+  { name: 'Namibia', code: 'NA', callingCode: '264' },
+  { name: 'Nauru', code: 'NR', callingCode: '674' },
+  { name: 'Nepal', code: 'NP', callingCode: '977' },
+  { name: 'Netherlands', code: 'NL', callingCode: '31' },
+  { name: 'Netherlands Antilles', code: 'AN', callingCode: '599' },
+  { name: 'New Caledonia', code: 'NC', callingCode: '687' },
+  { name: 'New Zealand', code: 'NZ', callingCode: '64' },
+  { name: 'Nicaragua', code: 'NI', callingCode: '505' },
+  { name: 'Niger', code: 'NE', callingCode: '227' },
+  { name: 'Nigeria', code: 'NG', callingCode: '234' },
+  { name: 'Niue', code: 'NU', callingCode: '683' },
+  { name: 'Norfolk Island', code: 'NF', callingCode: '672' },
+  { name: 'Northern Mariana Islands', code: 'MP', callingCode: '1670' },
+  { name: 'Norway', code: 'NO', callingCode: '47' },
+  { name: 'Oman', code: 'OM', callingCode: '968' },
+  { name: 'Pakistan', code: 'PK', callingCode: '92' },
+  { name: 'Palau', code: 'PW', callingCode: '680' },
+  { name: 'Palestinian Territory', code: 'PS', callingCode: '970' },
+  { name: 'Panama', code: 'PA', callingCode: '507' },
+  { name: 'Papua New Guinea', code: 'PG', callingCode: '675' },
+  { name: 'Paraguay', code: 'PY', callingCode: '595' },
+  { name: 'Peru', code: 'PE', callingCode: '51' },
+  { name: 'Philippines', code: 'PH', callingCode: '63' },
+  { name: 'Pitcairn', code: 'PN', callingCode: '64' },
+  { name: 'Poland', code: 'PL', callingCode: '48' },
+  { name: 'Portugal', code: 'PT', callingCode: '351' },
+  { name: 'Puerto Rico', code: 'PR', callingCode: '1787' },
+  { name: 'Qatar', code: 'QA', callingCode: '974' },
+  { name: 'Réunion', code: 'RE', callingCode: '262' },
+  { name: 'Romania', code: 'RO', callingCode: '40' },
+  { name: 'Russian Federation', code: 'RU', callingCode: '7' },
+  { name: 'Rwanda', code: 'RW', callingCode: '250' },
+  { name: 'Saint Barthélemy', code: 'BL', callingCode: '590' },
+  { name: 'Saint Helena', code: 'SH', callingCode: '290' },
+  { name: 'Saint Kitts and Nevis', code: 'KN', callingCode: '1869' },
+  { name: 'Saint Lucia', code: 'LC', callingCode: '1758' },
+  { name: 'Saint Martin', code: 'MF', callingCode: '590' },
+  { name: 'Saint Pierre and Miquelon', code: 'PM', callingCode: '508' },
+  { name: 'Saint Vincent and the Grenadines', code: 'VC', callingCode: '1784' },
+  { name: 'Samoa', code: 'WS', callingCode: '685' },
+  { name: 'San Marino', code: 'SM', callingCode: '378' },
+  { name: 'Sao Tome and Principe', code: 'ST', callingCode: '239' },
+  { name: 'Saudi Arabia', code: 'SA', callingCode: '966' },
+  { name: 'Senegal', code: 'SN', callingCode: '221' },
+  { name: 'Serbia', code: 'RS', callingCode: '381' },
+  { name: 'Seychelles', code: 'SC', callingCode: '248' },
+  { name: 'Sierra Leone', code: 'SL', callingCode: '232' },
+  { name: 'Singapore', code: 'SG', callingCode: '65' },
+  { name: 'Slovakia', code: 'SK', callingCode: '421' },
+  { name: 'Slovenia', code: 'SI', callingCode: '386' },
+  { name: 'Solomon Islands', code: 'SB', callingCode: '677' },
+  { name: 'Somalia', code: 'SO', callingCode: '252' },
+  { name: 'South Africa', code: 'ZA', callingCode: '27' },
+  { name: 'South Georgia and the South Sandwich Islands', code: 'GS', callingCode: '500' },
+  { name: 'Spain', code: 'ES', callingCode: '34' },
+  { name: 'Sri Lanka', code: 'LK', callingCode: '94' },
+  { name: 'Sudan', code: 'SD', callingCode: '249' },
+  { name: 'Suriname', code: 'SR', callingCode: '597' },
+  { name: 'Svalbard and Jan Mayen', code: 'SJ', callingCode: '47' },
+  { name: 'Swaziland', code: 'SZ', callingCode: '268' },
+  { name: 'Sweden', code: 'SE', callingCode: '46' },
+  { name: 'Switzerland', code: 'CH', callingCode: '41' },
+  { name: 'Syrian Arab Republic', code: 'SY', callingCode: '963' },
+  { name: 'Taiwan', code: 'TW', callingCode: '886' },
+  { name: 'Tajikistan', code: 'TJ', callingCode: '992' },
+  { name: 'Tanzania', code: 'TZ', callingCode: '255' },
+  { name: 'Thailand', code: 'TH', callingCode: '66' },
+  { name: 'Timor-Leste', code: 'TL', callingCode: '670' },
+  { name: 'Togo', code: 'TG', callingCode: '228' },
+  { name: 'Tokelau', code: 'TK', callingCode: '690' },
+  { name: 'Tonga', code: 'TO', callingCode: '676' },
+  { name: 'Trinidad and Tobago', code: 'TT', callingCode: '1868' },
+  { name: 'Tunisia', code: 'TN', callingCode: '216' },
+  { name: 'Turkey', code: 'TR', callingCode: '90' },
+  { name: 'Turkmenistan', code: 'TM', callingCode: '993' },
+  { name: 'Turks and Caicos Islands', code: 'TC', callingCode: '1649' },
+  { name: 'Tuvalu', code: 'TV', callingCode: '688' },
+  { name: 'Uganda', code: 'UG', callingCode: '256' },
+  { name: 'Ukraine', code: 'UA', callingCode: '380' },
+  { name: 'United Arab Emirates', code: 'AE', callingCode: '971' },
+  { name: 'United Kingdom', code: 'GB', callingCode: '44' },
+  { name: 'United States', code: 'US', callingCode: '1' },
+  { name: 'United States Minor Outlying Islands', code: 'UM', callingCode: '1' },
+  { name: 'Uruguay', code: 'UY', callingCode: '598' },
+  { name: 'Uzbekistan', code: 'UZ', callingCode: '998' },
+  { name: 'Vanuatu', code: 'VU', callingCode: '678' },
+  { name: 'Venezuela', code: 'VE', callingCode: '58' },
+  { name: 'Viet Nam', code: 'VN', callingCode: '84' },
+  { name: 'Virgin Islands, British', code: 'VG', callingCode: '1284' },
+  { name: 'Virgin Islands, U.S.', code: 'VI', callingCode: '1340' },
+  { name: 'Wallis and Futuna', code: 'WF', callingCode: '681' },
+  { name: 'Western Sahara', code: 'EH', callingCode: '212' },
+  { name: 'Yemen', code: 'YE', callingCode: '967' },
+  { name: 'Zambia', code: 'ZM', callingCode: '260' },
+  { name: 'Zimbabwe', code: 'ZW', callingCode: '263' },
+];
+
+type Country = {
+  name: string;
+  code: string;
+  callingCode: string;
+};
 
 const AuthScreen: React.FC = () => {
   const { signIn, signUp, signInWithGoogle, loading } = useAuth();
@@ -11,6 +267,15 @@ const AuthScreen: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
+  const [countryInput, setCountryInput] = useState('United States');
+  const [selectedCountry, setSelectedCountry] = useState<Country>({
+    name: 'United States',
+    code: 'US',
+    callingCode: '1',
+  });
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [filteredCountries, setFilteredCountries] = useState<Country[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
@@ -84,12 +349,19 @@ const AuthScreen: React.FC = () => {
       if (mode === 'login') {
         await signIn(email.trim(), password);
       } else {
-        await signUp(email.trim(), password, username.trim());
+        await signUp(email.trim(), password, username.trim(), phoneNumber, selectedCountry.name);
         // Show success screen and clear fields
         setSignupSuccess(true);
         setEmail('');
         setPassword('');
         setUsername('');
+        setPhoneNumber('');
+        setCountryInput('United States');
+        setSelectedCountry({
+          name: 'United States',
+          code: 'US',
+          callingCode: '1',
+        });
         setShowPassword(false);
       }
     } catch (e: any) {
@@ -203,21 +475,100 @@ const AuthScreen: React.FC = () => {
           </Text>
 
           {mode === 'signup' && (
-            <View style={styles.field}>
-              <Text style={[styles.label, { color: colors.textSecondary }]}>Username</Text>
-              <TextInput
-                value={username}
-                onChangeText={setUsername}
-                autoCapitalize="words"
-                autoCorrect={false}
-                placeholder="Your display name"
-                placeholderTextColor={colors.textMuted}
-                style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-              />
-              {usernameError ? (
-                <Text style={[styles.fieldError, { color: colors.danger }]}>{usernameError}</Text>
-              ) : null}
-            </View>
+            <>
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: colors.textSecondary }]}>Username</Text>
+                <TextInput
+                  value={username}
+                  onChangeText={setUsername}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                  placeholder="Your display name"
+                  placeholderTextColor={colors.textMuted}
+                  style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+                />
+                {usernameError ? (
+                  <Text style={[styles.fieldError, { color: colors.danger }]}>{usernameError}</Text>
+                ) : null}
+              </View>
+
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: colors.textSecondary }]}>Country</Text>
+                <View style={styles.autocompleteContainer}>
+                  <TextInput
+                    value={countryInput}
+                    onChangeText={(text) => {
+                      setCountryInput(text);
+                      
+                      if (text.length > 0) {
+                        const filtered = COUNTRIES.filter(country =>
+                          country.name.toLowerCase().includes(text.toLowerCase())
+                        ).slice(0, 5); // Show max 5 suggestions
+                        
+                        setFilteredCountries(filtered);
+                        setShowSuggestions(true);
+                      } else {
+                        setShowSuggestions(false);
+                        setFilteredCountries([]);
+                      }
+                    }}
+                    onFocus={() => {
+                      if (countryInput.length > 0) {
+                        const filtered = COUNTRIES.filter(country =>
+                          country.name.toLowerCase().includes(countryInput.toLowerCase())
+                        ).slice(0, 5);
+                        setFilteredCountries(filtered);
+                        setShowSuggestions(true);
+                      }
+                    }}
+                    placeholder="Type country name..."
+                    placeholderTextColor={colors.textMuted}
+                    style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+                  />
+                  {showSuggestions && filteredCountries.length > 0 && (
+                    <View style={[styles.suggestionsContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                      <FlatList
+                        data={filteredCountries}
+                        keyExtractor={(item) => item.code}
+                        renderItem={({ item }) => (
+                          <TouchableOpacity
+                            style={styles.suggestionItem}
+                            onPress={() => {
+                              setSelectedCountry(item);
+                              setCountryInput(item.name);
+                              setShowSuggestions(false);
+                            }}
+                          >
+                            <Text style={[styles.suggestionText, { color: colors.text }]}>
+                              {item.name} (+{item.callingCode})
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                        style={styles.suggestionsList}
+                        keyboardShouldPersistTaps="handled"
+                      />
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: colors.textSecondary }]}>Phone Number (with country code)</Text>
+                <TextInput
+                  value={phoneNumber}
+                  onChangeText={setPhoneNumber}
+                  keyboardType="phone-pad"
+                  placeholder={`e.g. +${selectedCountry.callingCode}712345678`}
+                  placeholderTextColor={colors.textMuted}
+                  style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+                />
+                {selectedCountry && (
+                  <Text style={[styles.hintText, { color: colors.textSecondary }]}>
+                    Example: +{selectedCountry.callingCode}712345678
+                  </Text>
+                )}
+              </View>
+            </>
           )}
 
           <View style={styles.field}>
@@ -479,6 +830,39 @@ const styles = StyleSheet.create({
   },
   successSubtitle: {
     fontSize: 14,
+  },
+  autocompleteContainer: {
+    position: 'relative',
+    zIndex: 1000,
+  },
+  suggestionsContainer: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    maxHeight: 200,
+    zIndex: 1001,
+  },
+  suggestionsList: {
+    maxHeight: 200,
+  },
+  suggestionItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  suggestionText: {
+    fontSize: 14,
+  },
+  hintText: {
+    fontSize: 12,
+    marginTop: 4,
+    fontStyle: 'italic',
   },
 });
 

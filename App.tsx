@@ -13,7 +13,6 @@ import * as SplashScreen from 'expo-splash-screen';
 import DashboardScreen from './src/screens/DashboardScreen';
 import TransactionsScreen from './src/screens/TransactionsScreen';
 import ReportsScreen from './src/screens/ReportsScreen';
-import SettingsScreen from './src/screens/SettingsScreen';
 import AIAccountantScreen from './src/screens/AIAccountantScreen';
 import { AuthProvider, useAuth } from './src/services/AuthService';
 // SQLite sync removed: Supabase is the source of truth
@@ -95,8 +94,6 @@ function AppContainer() {
               iconName = 'bar-chart-outline';
             } else if (route.name === 'AI') {
               iconName = 'chatbubbles-outline';
-            } else if (route.name === 'Settings') {
-              iconName = 'settings-outline';
             } else {
               iconName = 'home-outline';
             }
@@ -140,11 +137,6 @@ function AppContainer() {
             headerShown: false,
             tabBarLabel: 'AI',
           }}
-        />
-        <Tab.Screen 
-          name="Settings" 
-          component={SettingsScreen}
-          options={{ headerShown: false }}
         />
       </Tab.Navigator>
     </NavigationContainer>

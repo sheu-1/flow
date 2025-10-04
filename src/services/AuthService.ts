@@ -11,7 +11,7 @@ import { googleAuthService, GoogleAuthResult } from './GoogleAuthService';
 WebBrowser.maybeCompleteAuthSession();
 
 // Internal helpers (avoid name collision with context methods)
-export async function signUpApi(email: string, password: string, username?: string) {
+export async function signUpApi(email: string, password: string, username?: string, phoneNumber?: string, country?: string) {
   if (password.length < 6) {
     throw new Error('Password must be at least 6 characters long');
   }
@@ -24,6 +24,8 @@ export async function signUpApi(email: string, password: string, username?: stri
       data: {
         full_name: username || '',
         username: username || '',
+        phone_number: phoneNumber || '',
+        country: country || '',
       },
     },
   });
@@ -92,7 +94,7 @@ export interface AuthContextValue {
   user: User | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, username?: string) => Promise<void>;
+  signUp: (email: string, password: string, username?: string, phoneNumber?: string, country?: string) => Promise<void>;
   signInWithGoogle: () => Promise<GoogleAuthResult>;
   signOut: () => Promise<void>;
 }
@@ -164,10 +166,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLoading(false);
       }
     },
-    signUp: async (email, password, username) => {
+    signUp: async (email, password, username, phoneNumber, country) => {
       setLoading(true);
       try {
-        await signUpApi(email, password, username);
+        await signUpApi(email, password, username, phoneNumber, country);
         // Ensure the user is NOT logged in after sign up
         await supabase.auth.signOut();
         setSession(null);

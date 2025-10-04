@@ -23,8 +23,6 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const colors = useThemeColors();
   const { user } = useAuth();
-  const { currency, availableCurrencies, setCurrency } = useCurrency();
-  const [currencyOpen, setCurrencyOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -163,28 +161,8 @@ export default function DashboardScreen() {
             </View>
           </View>
           
-          <View style={styles.dateCurrencyRow}>
+          <View style={styles.dateRow}>
             <Text style={[styles.dateText, { color: colors.textSecondary }]}>{new Date().toLocaleDateString()}</Text>
-            <View style={styles.currencyRight}>
-              <TouchableOpacity
-                style={[styles.currencyButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
-                onPress={() => setCurrencyOpen((open) => !open)}
-              >
-                <Text style={[styles.currencyButtonText, { color: colors.text }]} numberOfLines={1}>{currency}</Text>
-                <Ionicons name={currencyOpen ? 'chevron-up' : 'chevron-down'} size={16} color={colors.text} />
-              </TouchableOpacity>
-              {currencyOpen && (
-                <View style={[styles.currencyMenu, { borderColor: colors.border, backgroundColor: colors.card }]}> 
-                  <ScrollView style={{ maxHeight: 160 }}>
-                    {availableCurrencies.map((c) => (
-                      <TouchableOpacity key={c} style={styles.currencyMenuItem} onPress={() => { setCurrency(c); setCurrencyOpen(false); }}>
-                        <Text style={{ color: c === currency ? colors.primary : colors.text, fontWeight: '600' }}>{c}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              )}
-            </View>
           </View>
         </View>
         
@@ -322,40 +300,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 0,
   },
-  dateCurrencyRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  dateRow: {
     paddingHorizontal: spacing.md,
     marginTop: 4,
-  },
-  currencyRight: {
-    flexShrink: 1,
-    maxWidth: '40%',
-  },
-  currencyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderWidth: 1,
-    borderRadius: 8,
-  },
-  currencyButtonText: {
-    fontSize: fontSize.md,
-    fontWeight: '700',
-    marginRight: spacing.xs,
-  },
-  currencyMenu: {
-    marginTop: spacing.xs,
-    borderWidth: 1,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  currencyMenuItem: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
   },
   profileButton: {
     padding: spacing.xs,
@@ -377,19 +324,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginHorizontal: spacing.md,
     marginBottom: spacing.md,
-  },
-  currencySelectorRow: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    marginTop: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  currencyChip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: 16,
-    borderWidth: 1,
   },
   emptyState: {
     alignItems: 'center',
