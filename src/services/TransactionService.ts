@@ -1,5 +1,6 @@
 import { supabase } from './SupabaseClient';
 import { AggregatePeriod, AggregatePoint, Transaction } from '../types';
+import { cacheService } from './CacheService';
 
 export interface GetTransactionsParams {
   limit?: number;
@@ -16,6 +17,17 @@ function toISO(d?: Date | string) {
 
 export async function getTransactions(userId: string, params: GetTransactionsParams = {}): Promise<Transaction[]> {
   const { limit = 50, offset = 0, from, to } = params;
+  
+  // Create cache key based on parameters
+  const cacheKey = `transactions_${userId}_${limit}_${offset}_${from?.toString()}_${to?.toString()}`;
+  
+  // Try cache first for non-real-time queries
+  if (limit <= 100 && offset === 0) {
+    const cached = await cacheService.get<Transaction[]>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+  }
 
   let query = supabase
     .from('transactions')
@@ -32,7 +44,7 @@ export async function getTransactions(userId: string, params: GetTransactionsPar
   if (error) throw error;
   
   // Filter out any null/undefined entries and map to Transaction type
-  return (data || [])
+  const transactions = (data || [])
     .filter((r) => r && r.id) // Ensure valid records
     .map((r) => ({
       id: r.id,
@@ -45,6 +57,13 @@ export async function getTransactions(userId: string, params: GetTransactionsPar
       date: r.date,
       created_at: r.created_at,
     }));
+  
+  // Cache the result for 2 minutes
+  if (limit <= 100 && offset === 0) {
+    await cacheService.set(cacheKey, transactions, 2 * 60 * 1000);
+  }
+  
+  return transactions;
 }
 
 function startOfWeek(d: Date) {
@@ -97,6 +116,12 @@ export async function getAggregatesByPeriod(
   period: AggregatePeriod,
   rangeCount: number
 ): Promise<AggregatePoint[]> {
+  // Cache aggregates for better performance
+  const cacheKey = `aggregates_${userId}_${period}_${rangeCount}`;
+  const cached = await cacheService.get<AggregatePoint[]>(cacheKey);
+  if (cached) {
+    return cached;
+  }
   const now = new Date();
   let start: Date;
   let end: Date;
@@ -203,6 +228,9 @@ export async function getAggregatesByPeriod(
     }
   }
   
+  // Cache the result for 5 minutes
+  await cacheService.set(cacheKey, buckets, 5 * 60 * 1000);
+  
   return buckets;
 }
 
@@ -211,13 +239,23 @@ export async function getCategoryBreakdown(
   from?: Date | string,
   to?: Date | string
 ): Promise<Record<string, number>> {
+  const cacheKey = `category_breakdown_${userId}_${from?.toString()}_${to?.toString()}`;
+  const cached = await cacheService.get<Record<string, number>>(cacheKey);
+  if (cached) {
+    return cached;
+  }
+  
   const txns = await getTransactions(userId, { from, to, limit: 10000, offset: 0 });
   const out = txns.filter((t) => t.type === 'expense');
-  return out.reduce((acc, t) => {
+  const breakdown = out.reduce((acc, t) => {
     const key = t.category || 'Other';
     acc[key] = (acc[key] || 0) + Math.abs(t.amount);
     return acc;
   }, {} as Record<string, number>);
+  
+  // Cache for 3 minutes
+  await cacheService.set(cacheKey, breakdown, 3 * 60 * 1000);
+  return breakdown;
 }
 
 export async function getIncomeCategoryBreakdown(
@@ -225,13 +263,23 @@ export async function getIncomeCategoryBreakdown(
   from?: Date | string,
   to?: Date | string
 ): Promise<Record<string, number>> {
+  const cacheKey = `income_breakdown_${userId}_${from?.toString()}_${to?.toString()}`;
+  const cached = await cacheService.get<Record<string, number>>(cacheKey);
+  if (cached) {
+    return cached;
+  }
+  
   const txns = await getTransactions(userId, { from, to, limit: 10000, offset: 0 });
   const income = txns.filter((t) => t.type === 'income');
-  return income.reduce((acc, t) => {
+  const breakdown = income.reduce((acc, t) => {
     const key = t.category || 'Other';
     acc[key] = (acc[key] || 0) + Math.abs(t.amount);
     return acc;
   }, {} as Record<string, number>);
+  
+  // Cache for 3 minutes
+  await cacheService.set(cacheKey, breakdown, 3 * 60 * 1000);
+  return breakdown;
 }
 
 export async function getCategoriesBreakdown(
@@ -239,6 +287,12 @@ export async function getCategoriesBreakdown(
   from?: Date | string,
   to?: Date | string
 ): Promise<{ income: Record<string, number>; expense: Record<string, number> }> {
+  const cacheKey = `categories_breakdown_${userId}_${from?.toString()}_${to?.toString()}`;
+  const cached = await cacheService.get<{ income: Record<string, number>; expense: Record<string, number> }>(cacheKey);
+  if (cached) {
+    return cached;
+  }
+  
   const txns = await getTransactions(userId, { from, to, limit: 10000, offset: 0 });
   
   const income = txns.filter((t) => t.type === 'income').reduce((acc, t) => {
@@ -253,5 +307,9 @@ export async function getCategoriesBreakdown(
     return acc;
   }, {} as Record<string, number>);
   
-  return { income, expense };
+  const result = { income, expense };
+  
+  // Cache for 3 minutes
+  await cacheService.set(cacheKey, result, 3 * 60 * 1000);
+  return result;
 }

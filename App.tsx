@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar, View } from 'react-native';
 import { colors as DarkColors } from './src/theme/colors';
 import * as SplashScreen from 'expo-splash-screen';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
 
 import DashboardScreen from './src/screens/DashboardScreen';
 import TransactionsScreen from './src/screens/TransactionsScreen';
@@ -145,12 +146,19 @@ function AppContainer() {
 
 export default function App() {
   return (
-    <CurrencyProvider>
-      <ThemeProvider>
-        <AuthProvider>
-          <AppContainer />
-        </AuthProvider>
-      </ThemeProvider>
-    </CurrencyProvider>
+    <ErrorBoundary
+      onError={(error, errorInfo) => {
+        // Log to crash reporting service in production
+        console.error('App Error:', error, errorInfo);
+      }}
+    >
+      <CurrencyProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <AppContainer />
+          </AuthProvider>
+        </ThemeProvider>
+      </CurrencyProvider>
+    </ErrorBoundary>
   );
 }

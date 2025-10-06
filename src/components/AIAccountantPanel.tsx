@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform, SafeAreaView } from 'react-native';
-import Animated, { FadeInUp, FadeIn } from 'react-native-reanimated';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform, SafeAreaView, Alert } from 'react-native';
+import Animated, { FadeInUp, FadeIn, SlideInRight, SlideOutLeft } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeColors } from '../theme/ThemeProvider';
 import { AggregatePeriod } from '../types';
@@ -15,35 +15,66 @@ interface Props {
 export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
   const colors = useThemeColors();
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: 'assistant', content: 'Hi! I\'m your AI accountant. Ask me about your spending trends, budgeting ideas, or how to reach your savings goals.' },
+    { role: 'assistant', content: 'Hi! I\'m your AI accountant. Ask me about your spending trends, budgeting ideas, or how to reach your savings goals. 💰\n\nTry asking:\n• "How did I spend this month?"\n• "What are my biggest expenses?"\n• "Give me budgeting tips"' },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [contextCache, setContextCache] = useState<string | null>(null);
+  const [lastContextTime, setLastContextTime] = useState<number>(0);
   const scrollRef = useRef<ScrollView>(null);
+  const inputRef = useRef<TextInput>(null);
 
-  const contextPromise = useMemo(() => buildFinancialContext(userId, period), [userId, period]);
+  // Cache context for 5 minutes to improve performance
+  const contextPromise = useMemo(() => {
+    const now = Date.now();
+    if (contextCache && (now - lastContextTime) < 300000) { // 5 minutes
+      return Promise.resolve(contextCache);
+    }
+    return buildFinancialContext(userId, period).then(context => {
+      setContextCache(context);
+      setLastContextTime(now);
+      return context;
+    });
+  }, [userId, period, contextCache, lastContextTime]);
 
   useEffect(() => {
     // scroll to bottom when messages change
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
   }, [messages]);
 
-  const send = async () => {
+  const send = useCallback(async () => {
     if (!input.trim() || loading) return;
+    
     const userMsg: ChatMessage = { role: 'user', content: input.trim() };
+    const currentInput = input.trim();
     setMessages((m) => [...m, userMsg]);
     setInput('');
     setLoading(true);
+    
     try {
       const context = await contextPromise;
-      const reply = await llmChat([...messages, userMsg], context);
+      // Limit conversation history to last 10 messages for better performance
+      const recentMessages = messages.slice(-10);
+      const reply = await llmChat([...recentMessages, userMsg], context);
       setMessages((m) => [...m, { role: 'assistant', content: reply }]);
     } catch (e: any) {
-      setMessages((m) => [...m, { role: 'assistant', content: `Sorry, I couldn\'t complete that request: ${e?.message || e}` }]);
+      console.error('AI Chat Error:', e);
+      const errorMsg = e?.message?.includes('API key') 
+        ? 'Please configure your AI API key in Settings to use this feature.'
+        : e?.message?.includes('rate limit')
+        ? 'Too many requests. Please wait a moment and try again.'
+        : `Sorry, I couldn\'t process that request. Please try again.`;
+      
+      setMessages((m) => [...m, { role: 'assistant', content: errorMsg }]);
+      
+      // Show alert for critical errors
+      if (e?.message?.includes('API key')) {
+        Alert.alert('AI Setup Required', 'Configure your OpenRouter API key in Settings to enable AI features.');
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, [input, loading, messages, contextPromise]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -62,8 +93,8 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
         >
           {messages.map((message, index) => (
             <Animated.View
-              key={index}
-              entering={FadeInUp.delay(index * 100).springify()}
+              key={`${index}-${message.content.slice(0, 20)}`}
+              entering={message.role === 'user' ? SlideInRight.springify() : FadeInUp.delay(100).springify()}
               style={[
                 styles.messageWrapper,
                 message.role === 'user' ? styles.userMessageWrapper : styles.assistantMessageWrapper
@@ -78,7 +109,7 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
                 <Text style={[
                   styles.messageText,
                   message.role === 'user' ? 
-                    [styles.userText, { color: colors.background }] : 
+                    [styles.userText, { color: '#FFFFFF' }] : 
                     [styles.assistantText, { color: colors.text }]
                 ]}>
                   {message.content}
@@ -103,21 +134,31 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
         {/* Input Bar */}
         <View style={styles.inputContainer}>
           <View style={[styles.inputBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <TouchableOpacity style={styles.iconButton}>
+            <TouchableOpacity 
+              style={styles.iconButton}
+              onPress={() => Alert.alert('Voice Input', 'Voice input coming soon!')}
+            >
               <Ionicons name="mic" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
             
             <TextInput
+              ref={inputRef}
               placeholder="Ask your accountant anything…"
               placeholderTextColor={colors.textMuted}
               style={[styles.textInput, { color: colors.text }]}
               value={input}
               onChangeText={setInput}
+              onSubmitEditing={send}
+              returnKeyType="send"
               multiline
               maxLength={500}
+              blurOnSubmit={false}
             />
             
-            <TouchableOpacity style={styles.iconButton}>
+            <TouchableOpacity 
+              style={styles.iconButton}
+              onPress={() => Alert.alert('Attachments', 'File attachments coming soon!')}
+            >
               <Ionicons name="attach" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
             
