@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, FlatList } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, FlatList, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../theme/ThemeProvider';
+import { OfflineModePanel } from '../components/OfflineModePanel';
+import { OfflineUser } from '../services/OfflineAuthService';
 
 // Complete country data for autocomplete
 const COUNTRIES = [
@@ -438,6 +440,15 @@ const AuthScreen: React.FC = () => {
     }
   };
 
+  const handleOfflineSignIn = (offlineUser: OfflineUser) => {
+    // For now, just show an alert. In a full implementation, you'd integrate this with your auth context
+    Alert.alert(
+      'Offline Mode',
+      `Signed in as ${offlineUser.name} (${offlineUser.email}) in offline mode. Some features may be limited.`,
+      [{ text: 'OK' }]
+    );
+  };
+
   const isValid = email.includes('@') && password.length >= 6 && (mode === 'login' || username.trim().length >= 2);
 
   if (signupSuccess) {
@@ -527,26 +538,21 @@ const AuthScreen: React.FC = () => {
                   />
                   {showSuggestions && filteredCountries.length > 0 && (
                     <View style={[styles.suggestionsContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                      <FlatList
-                        data={filteredCountries}
-                        keyExtractor={(item) => item.code}
-                        renderItem={({ item }) => (
-                          <TouchableOpacity
-                            style={styles.suggestionItem}
-                            onPress={() => {
-                              setSelectedCountry(item);
-                              setCountryInput(item.name);
-                              setShowSuggestions(false);
-                            }}
-                          >
-                            <Text style={[styles.suggestionText, { color: colors.text }]}>
-                              {item.name} (+{item.callingCode})
-                            </Text>
-                          </TouchableOpacity>
-                        )}
-                        style={styles.suggestionsList}
-                        keyboardShouldPersistTaps="handled"
-                      />
+                      {filteredCountries.map((item) => (
+                        <TouchableOpacity
+                          key={item.code}
+                          style={styles.suggestionItem}
+                          onPress={() => {
+                            setSelectedCountry(item);
+                            setCountryInput(item.name);
+                            setShowSuggestions(false);
+                          }}
+                        >
+                          <Text style={[styles.suggestionText, { color: colors.text }]}>
+                            {item.name} (+{item.callingCode})
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
                     </View>
                   )}
                 </View>
@@ -658,6 +664,7 @@ const AuthScreen: React.FC = () => {
             )}
           </TouchableOpacity>
 
+          {/* OAuth deep linking temporarily disabled
           <View style={styles.divider}>
             <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
             <Text style={[styles.dividerText, { color: colors.textSecondary }]}>or</Text>
@@ -676,6 +683,7 @@ const AuthScreen: React.FC = () => {
               </Text>
             </View>
           </TouchableOpacity>
+          */}
 
           <TouchableOpacity onPress={() => setMode(mode === 'login' ? 'signup' : 'login')}>
             <Text style={[styles.switchText, { color: colors.primary }]}>
@@ -683,6 +691,9 @@ const AuthScreen: React.FC = () => {
             </Text>
           </TouchableOpacity>
         </View>
+
+        {/* Show offline mode option if there are connection issues */}
+        <OfflineModePanel onOfflineSignIn={handleOfflineSignIn} />
 
         <Text style={[styles.helper, { color: colors.textMuted }]}>
           By continuing, you agree to our Terms and acknowledge our Privacy Policy.

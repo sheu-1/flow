@@ -59,22 +59,33 @@ class GoogleAuthService {
   }
 
   private getRedirectUri(): string {
-    if (__DEV__) {
-      // For Expo Go development
-      return makeRedirectUri({
-        scheme: undefined, // Use default Expo scheme
-        path: 'redirect',
-      });
-    } else {
-      // For standalone builds
-      return makeRedirectUri({
-        scheme: 'myapp',
-        path: 'redirect',
-      });
-    }
+    // OAuth deep linking temporarily disabled
+    // if (__DEV__) {
+    //   // For Expo Go development
+    //   return makeRedirectUri({
+    //     scheme: undefined, // Use default Expo scheme
+    //     path: 'redirect',
+    //   });
+    // } else {
+    //   // For standalone builds
+    //   return makeRedirectUri({
+    //     scheme: 'myapp',
+    //     path: 'redirect',
+    //   });
+    // }
+    
+    // Fallback to default Expo scheme for now
+    return makeRedirectUri({
+      scheme: undefined,
+      path: 'redirect',
+    });
   }
 
   async signInWithGoogle(): Promise<GoogleAuthResult> {
+    // OAuth deep linking temporarily disabled
+    throw new Error('Google OAuth is temporarily disabled. Please use email/password authentication.');
+    
+    /* Commented out OAuth flow
     try {
       const redirectUri = this.getRedirectUri();
       const clientId = this.getClientId();
@@ -142,6 +153,7 @@ class GoogleAuthService {
       console.error('Google sign-in error:', error);
       throw error;
     }
+    */
   }
 
   private async fetchUserProfile(accessToken: string): Promise<GoogleUser> {

@@ -2,11 +2,11 @@
   "expo": {
     "name": "Cashflow Tracker",
     "slug": "cashflow-tracker",
+    "owner": "cashflowtracker",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "scheme": "myapp",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -34,13 +34,12 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-sqlite",
       "expo-secure-store",
-      "expo-font"      
+      "expo-font"
     ],
     "extra": {
       "eas": {
-        "projectId": "a47063e7-114d-4c07-969f-49369d9739db"
+        "projectId": "f4131c54-ecdb-410a-824b-3bada9994b38"
       }
     }
   }

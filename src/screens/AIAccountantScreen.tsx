@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../hooks/useAuth';
+import Animated, { FadeInUp } from 'react-native-reanimated';
 import { useThemeColors } from '../theme/ThemeProvider';
 import { AggregatePeriod } from '../types';
+import { spacing } from '../theme/colors';
 import AIAccountantPanel from '../components/AIAccountantPanel';
+import { useAuth } from '../hooks/useAuth';
 
 export default function AIAccountantScreen() {
   const { user } = useAuth();
@@ -12,21 +15,19 @@ export default function AIAccountantScreen() {
   const [period] = useState<AggregatePeriod>('monthly');
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* AI Assistant Header */}
-      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+      {/* Header harmonized with Dashboard */}
+      <Animated.View style={[styles.header, { backgroundColor: colors.background }]} entering={FadeInUp.springify()}> 
         <View style={styles.headerContent}>
           <View style={[styles.iconContainer, { backgroundColor: colors.primary + '20' }]}>
             <Ionicons name="sparkles" size={24} color={colors.primary} />
           </View>
           <View style={styles.headerText}>
             <Text style={[styles.headerTitle, { color: colors.text }]}>AI Assistant</Text>
-            <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-              Your personal financial advisor powered by AI
-            </Text>
+            <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>Your personal financial advisor</Text>
           </View>
         </View>
-      </View>
+      </Animated.View>
 
       {user?.id ? (
         <AIAccountantPanel userId={user.id} period={period} />
@@ -35,7 +36,7 @@ export default function AIAccountantScreen() {
           <Text style={[styles.signInText, { color: colors.textSecondary }]}>Sign in to use the AI accountant.</Text>
         </View>
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -44,9 +45,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
   },
   headerContent: {
     flexDirection: 'row',

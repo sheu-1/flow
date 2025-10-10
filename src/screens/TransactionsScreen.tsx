@@ -3,22 +3,24 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   TouchableOpacity,
   FlatList,
   ActivityIndicator,
   Alert,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, { FadeInUp } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { TransactionCard } from '../components/TransactionCard';
+import CategoryDropdown, { DEFAULT_CATEGORIES } from '../components/CategoryDropdown';
 import { AddTransactionModal } from '../components/AddTransactionModal';
 import { spacing, fontSize } from '../theme/colors';
 import { useThemeColors } from '../theme/ThemeProvider';
 import { Transaction } from '../types';
 import { useAuth } from '../hooks/useAuth';
-import { getTransactions } from '../services/TransactionService';
-import { supabase } from '../services/SupabaseClient';
+import { getTransactions, createTransaction, updateTransaction, invalidateUserCaches } from '../services/TransactionService';
+import { useRealtimeTransactions } from '../hooks/useRealtimeTransactions';
 
 export default function TransactionsScreen() {
   const colors = useThemeColors();
@@ -27,6 +29,8 @@ export default function TransactionsScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
+  const [selectedTxId, setSelectedTxId] = useState<string | null>(null);
 
   const refresh = useCallback(async (showLoading = true) => {
     if (!user?.id) return;
@@ -53,6 +57,13 @@ export default function TransactionsScreen() {
     refresh();
   }, [refresh]);
 
+  // Realtime updates
+  useRealtimeTransactions(user?.id, async () => {
+    if (!user?.id) return;
+    await invalidateUserCaches(user.id);
+    refresh(false);
+  });
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     refresh(false);
@@ -69,17 +80,20 @@ export default function TransactionsScreen() {
       return;
     }
     try {
-      const payload = {
-        user_id: user.id,
-        type: newTransaction.type, // Use 'income' or 'expense' directly
+      const result = await createTransaction(user.id, {
+        type: newTransaction.type,
         amount: newTransaction.amount,
         category: newTransaction.category,
-        sender: newTransaction.description,
+        description: newTransaction.description,
         date: new Date().toISOString(),
-      } as const;
-      const { error } = await supabase.from('transactions').insert(payload);
-      if (error) throw error;
+      });
+      
+      if (!result.success) {
+        throw new Error(result.error?.message || 'Failed to create transaction');
+      }
+      
       await refresh();
+      setModalVisible(false);
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Failed to add transaction');
     }
@@ -89,10 +103,34 @@ export default function TransactionsScreen() {
     (a, b) => new Date(b.date as any).getTime() - new Date(a.date as any).getTime()
   );
 
-  const renderTransaction = ({ item }: { item: Transaction }) => <TransactionCard transaction={item} />;
+  const onEditCategory = (tx: Transaction) => {
+    setSelectedTxId(tx.id);
+    setCategoryPickerVisible(true);
+  };
+
+  const handleSelectCategory = async (category: string) => {
+    if (!user?.id || !selectedTxId) return;
+    try {
+      const result = await updateTransaction(user.id, selectedTxId, { category });
+      if (!result.success) throw new Error(result.error?.message || 'Update failed');
+      await invalidateUserCaches(user.id);
+      await refresh(false);
+    } catch (e: any) {
+      Alert.alert('Update Failed', e?.message || 'Could not update category');
+    } finally {
+      setSelectedTxId(null);
+      setCategoryPickerVisible(false);
+    }
+  };
+
+  const renderTransaction = ({ item, index }: { item: Transaction; index: number }) => (
+    <Animated.View entering={FadeInUp.delay(Math.min(index, 20) * 20).springify()}>
+      <TransactionCard transaction={item} onEditCategory={() => onEditCategory(item)} />
+    </Animated.View>
+  );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: colors.text }]}>Transactions</Text>
         <TouchableOpacity
@@ -133,6 +171,16 @@ export default function TransactionsScreen() {
         onClose={() => setModalVisible(false)}
         onAdd={handleAddTransaction}
       />
+
+      {/* Category Picker */}
+      <CategoryDropdown
+        visible={categoryPickerVisible}
+        categories={DEFAULT_CATEGORIES}
+        selected={transactions.find(t => t.id === selectedTxId)?.category || undefined}
+        onSelect={handleSelectCategory}
+        onClose={() => { setCategoryPickerVisible(false); setSelectedTxId(null); }}
+        title="Edit Category"
+      />
     </SafeAreaView>
   );
 }
@@ -144,8 +192,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
   },
   title: { fontSize: fontSize.xl, fontWeight: 'bold' },
   addButton: {

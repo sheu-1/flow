@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -14,24 +14,42 @@ import { PeriodSelector } from '../components/PeriodSelector';
 import { ProfileMenu } from '../components/ProfileMenu';
 import NotificationPanel from '../components/NotificationPanel';
 import { TransactionCard } from '../components/TransactionCard';
+import { FinancialHealthScore } from '../components/FinancialHealthScore';
+import { SmartInsights } from '../components/SmartInsights';
+import { SavingsGoals } from '../components/SavingsGoals';
 import { spacing, fontSize } from '../theme/colors';
-import { useCurrency } from '../services/CurrencyProvider';
+import { useRealtimeTransactions } from '../hooks/useRealtimeTransactions';
+import { invalidateUserCaches } from '../services/TransactionService';
+
+// Enable detailed logging
+console.log('🚀 DashboardScreen loading...');
 
 export default function DashboardScreen() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [aggregates, setAggregates] = useState<any[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('daily');
   const [refreshing, setRefreshing] = useState(false);
   const colors = useThemeColors();
   const { user } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  // Removed Quick Actions floating button per request
 
-  const refresh = useCallback(async (showRefreshing = false) => {
+  const refresh = useCallback(async () => {
     if (!user?.id) return;
-    if (showRefreshing) setRefreshing(true);
+    setRefreshing(true);
     try {
-      const rows = await getTransactions(user.id, { limit: 500 });
-      const mapped: Transaction[] = rows.map((r) => ({
+      const [txns, aggregates] = await Promise.all([
+        getTransactions(user.id, { limit: 100 }).catch(err => {
+          console.warn('Failed to load transactions:', err);
+          return [];
+        }),
+        getAggregatesByPeriod(user.id, selectedPeriod, 30).catch(err => {
+          console.warn('Failed to load aggregates:', err);
+          return [];
+        }),
+      ]);
+      const mapped: Transaction[] = txns.map(r => ({
         ...r,
         date: new Date(r.date),
         description: (r as any).description || (r as any).sender || r.category || '',
@@ -40,15 +58,22 @@ export default function DashboardScreen() {
       }));
       mapped.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       setTransactions(mapped);
-      
-      // Check for spending notifications
-      await notificationService.checkWeeklySpending(user.id);
-    } catch (e) {
-      // ignore
+      setAggregates(aggregates);
+    } catch (error) {
+      console.error('Dashboard refresh error:', error);
+      // Set empty data to prevent crashes
+      setTransactions([]);
+      setAggregates([]);
+      try {
+        // Check for spending notifications
+        await notificationService.checkWeeklySpending(user.id);
+      } catch (e) {
+        // ignore notification errors
+      }
     } finally {
-      if (showRefreshing) setRefreshing(false);
+      setRefreshing(false);
     }
-  }, [user]);
+  }, [user?.id, selectedPeriod]);
 
   // Listen for notification updates
   useEffect(() => {
@@ -64,6 +89,14 @@ export default function DashboardScreen() {
     refresh();
   }, [refresh]);
 
+  // Realtime updates
+  useRealtimeTransactions(user?.id, async () => {
+    if (!user?.id) return;
+    await invalidateUserCaches(user.id);
+    // Refresh without spinner for snappy UX
+    refresh();
+  });
+
   useFocusEffect(
     useCallback(() => {
       refresh();
@@ -71,7 +104,8 @@ export default function DashboardScreen() {
   );
 
   const onRefresh = useCallback(() => {
-    refresh(true);
+    setRefreshing(true);
+    refresh();
   }, [refresh]);
 
   const calculatePeriodStats = () => {
@@ -171,6 +205,7 @@ export default function DashboardScreen() {
           <PeriodSelector
             selectedPeriod={selectedPeriod}
             onPeriodChange={setSelectedPeriod}
+            removeMargin
           />
         </View>
         
@@ -204,6 +239,29 @@ export default function DashboardScreen() {
         </View>
 
         <PieChart moneyIn={moneyIn} moneyOut={moneyOut} />
+
+        {/* Financial Health Score */}
+        <FinancialHealthScore
+          totalIncome={moneyIn}
+          totalExpense={moneyOut}
+          savingsRate={moneyIn > 0 ? ((moneyIn - moneyOut) / moneyIn) * 100 : 0}
+          transactionCount={transactions.length}
+          onPress={() => console.log('Health score pressed')}
+        />
+
+        {/* Smart Insights */}
+        <SmartInsights
+          transactions={transactions}
+          userId={user?.id || ''}
+        />
+
+        {/* Savings Goals */}
+        <SavingsGoals
+          userId={user?.id || ''}
+          totalSavings={netBalance}
+        />
+
+        {/* Debug panels removed for production */}
 
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Transactions</Text>
@@ -245,7 +303,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 3,
-    elevation: 2,
+    elevation: 6,
+    // Ensure sticky header remains above content and interactive on Android
+    zIndex: 1000,
   },
   iconsRow: {
     flexDirection: 'row',

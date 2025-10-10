@@ -3,10 +3,10 @@ import 'react-native-gesture-handler';
 import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 import React, { useEffect } from 'react';
-import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, RouteProp } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { StatusBar, View } from 'react-native';
+import { StatusBar, View, Text } from 'react-native';
 import { colors as DarkColors } from './src/theme/colors';
 import * as SplashScreen from 'expo-splash-screen';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
@@ -22,14 +22,22 @@ import { AuthProvider, useAuth } from './src/services/AuthService';
 import { CurrencyProvider } from './src/services/CurrencyProvider';
 import { ThemeProvider, useTheme } from './src/theme/ThemeProvider';
 import AuthScreen from './src/screens/AuthScreen';
-import { SplashScreen as CustomSplashScreen } from './src/components/SplashScreen';
+// import { SplashScreen as CustomSplashScreen } from './src/components/SplashScreen'; // Commented out
+// Debug panel removed from production UI
 
 // Keep the native splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync().catch(() => {
   // ignore if it's already prevented
 });
 
-const Tab = createBottomTabNavigator();
+type RootTabParamList = {
+  Dashboard: undefined;
+  Transactions: undefined;
+  Reports: undefined;
+  AI: undefined;
+};
+
+const Tab = createBottomTabNavigator<RootTabParamList>();
 
 function makeNavTheme(pal: typeof DarkColors) {
   return {
@@ -49,9 +57,8 @@ function makeNavTheme(pal: typeof DarkColors) {
 function AppContainer() {
   const { user, loading } = useAuth();
   const { colors } = useTheme();
-  const [showSplash, setShowSplash] = React.useState(true);
-
-  // Removed local SQLite init and network-based sync; Supabase is the source of truth
+  // Commented out splash screen - directly show auth or main app
+  // const [showSplash, setShowSplash] = React.useState(true);
 
   // Hide the native splash as soon as our auth loading completes
   useEffect(() => {
@@ -60,13 +67,32 @@ function AppContainer() {
     }
   }, [loading]);
 
-  const handleSplashComplete = () => {
-    setShowSplash(false);
-  };
+  // Fallback: hide native splash after timeout to avoid being stuck
+  useEffect(() => {
+    const t = setTimeout(() => {
+      SplashScreen.hideAsync().catch(() => {});
+    }, 1000); // Quick timeout just for native splash
+    return () => clearTimeout(t);
+  }, []);
 
-  if (loading || showSplash) {
-    // Show custom splash screen during loading or splash animation
-    return loading ? null : <CustomSplashScreen onAnimationComplete={handleSplashComplete} />;
+  // Skip custom splash screen entirely - go straight to auth or main app
+  // if (showSplash) {
+  //   return (
+  //     <View style={{ flex: 1 }}>
+  //       <CustomSplashScreen onAnimationComplete={handleSplashComplete} />
+  //       <AuthDebugPanel />
+  //     </View>
+  //   );
+  // }
+  
+  // If still loading and we don't yet know the user, show a simple loading indicator
+  if (loading && !user) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }}>
+        <StatusBar barStyle={colors.background === '#FFFFFF' ? 'dark-content' : 'light-content'} backgroundColor={colors.background} />
+        <Text style={{ color: colors.text, fontSize: 18 }}>Loading...</Text>
+      </View>
+    );
   }
 
   if (!user) {
@@ -83,8 +109,10 @@ function AppContainer() {
       <StatusBar barStyle={colors.background === '#FFFFFF' ? 'dark-content' : 'light-content'} backgroundColor={colors.background} />
       <Tab.Navigator
         initialRouteName="Dashboard"
-        screenOptions={({ route }) => ({
-          tabBarIcon: ({ focused, color, size }) => {
+        screenOptions={({ route }: { route: RouteProp<RootTabParamList, keyof RootTabParamList> }) => ({
+          tabBarIcon: (
+            { focused, color, size }: { focused: boolean; color: string; size: number }
+          ) => {
             let iconName: keyof typeof Ionicons.glyphMap;
 
             if (route.name === 'Dashboard') {

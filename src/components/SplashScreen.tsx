@@ -35,8 +35,8 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onAnimationComplete 
         duration: 600,
         useNativeDriver: true,
       }),
-      // Hold for a moment (extended for development)
-      Animated.delay(1500),
+      // Hold for a brief moment
+      Animated.delay(500),
     ]);
 
     animationSequence.start(() => {

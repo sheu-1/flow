@@ -35,12 +35,29 @@ A React Native (Expo + TypeScript) finance tracking app with a modern dark theme
    npm install
    ```
 
-2. Start the development server:
+2. Set up environment variables:
    ```bash
-   npx expo start
+   # Option 1: Interactive setup (recommended)
+   node setup-env.js
+   
+   # Option 2: Manual setup
+   cp .env.example .env
+   # Edit .env with your Supabase credentials
    ```
 
-3. Use the Expo Go app on your device or run on an emulator
+3. Start the development server:
+   ```bash
+   npx expo start --clear
+   ```
+
+4. Use the Expo Go app on your device or run on an emulator
+
+### Troubleshooting Connection Issues
+
+If you see "health check reachable = false":
+1. Go to Settings in the app
+2. Use the "Supabase Connection Test" panel
+3. Follow the troubleshooting steps in `docs/SUPABASE_SETUP.md`
 
 ## SMS Import Setup (Android Only)
 

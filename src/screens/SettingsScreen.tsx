@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/useAuth';
 // Removed delete functionality for now
 import { readRecentSms, startSmsListener, stopSmsListener, processSmsAndSave } from '../services/SmsService';
 import { PermissionService } from '../services/PermissionService';
+import { SupabaseTestPanel } from '../components/SupabaseTestPanel';
 
 const SettingsScreen: React.FC = () => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
@@ -165,6 +166,9 @@ const SettingsScreen: React.FC = () => {
         </View>
         {/* Clear imported transactions button removed for now */}
       </View>
+
+      {/* Supabase Connection Test */}
+      <SupabaseTestPanel />
 
       <View style={[styles.section, { borderColor: colors.border }]}> 
         <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Account</Text>

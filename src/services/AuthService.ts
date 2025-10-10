@@ -2,13 +2,18 @@ import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User, AuthChangeEvent } from '@supabase/supabase-js';
-import { makeRedirectUri } from 'expo-auth-session';
-import * as WebBrowser from 'expo-web-browser';
-import { supabase } from './SupabaseClient';
+// OAuth deep linking temporarily disabled
+// import { makeRedirectUri } from 'expo-auth-session';
+// import * as WebBrowser from 'expo-web-browser';
+import { supabase, pingSupabase } from './SupabaseClient';
 import { PermissionService } from './PermissionService';
-import { googleAuthService, GoogleAuthResult } from './GoogleAuthService';
+import { startSmsListener, stopSmsListener } from './SmsService';
+// OAuth deep linking temporarily disabled
+// import { googleAuthService, GoogleAuthResult } from './GoogleAuthService';
+import { GoogleAuthResult } from './GoogleAuthService';
 
-WebBrowser.maybeCompleteAuthSession();
+// OAuth deep linking temporarily disabled
+// WebBrowser.maybeCompleteAuthSession();
 
 // Internal helpers (avoid name collision with context methods)
 export async function signUpApi(email: string, password: string, username?: string, phoneNumber?: string, country?: string) {
@@ -20,7 +25,8 @@ export async function signUpApi(email: string, password: string, username?: stri
     email,
     password,
     options: {
-      emailRedirectTo: makeRedirectUri({ scheme: 'cashflowtracker' }),
+      // OAuth deep linking temporarily disabled
+      // emailRedirectTo: makeRedirectUri({ scheme: 'cashflowtracker' }),
       data: {
         full_name: username || '',
         username: username || '',
@@ -63,6 +69,10 @@ export async function signOut() {
 }
 
 export async function signInWithGoogle(): Promise<GoogleAuthResult> {
+  // OAuth deep linking temporarily disabled
+  throw new Error('Google OAuth is temporarily disabled. Please use email/password authentication.');
+  
+  /* Commented out OAuth flow
   try {
     // Use the new PKCE-based Google OAuth service
     const googleResult = await googleAuthService.signInWithGoogle();
@@ -81,6 +91,7 @@ export async function signInWithGoogle(): Promise<GoogleAuthResult> {
     console.error('Google sign-in error:', error);
     throw error;
   }
+  */
 }
 
 export async function getCurrentUser(): Promise<User | null> {
@@ -108,33 +119,98 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     let isMounted = true;
+    let subscription: any;
+    let smsStarted = false;
+    
+    // Set a timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      if (isMounted) {
+        console.warn('[Auth] Timeout reached, stopping loading state');
+        setLoading(false);
+      }
+    }, 3000); // 3 second timeout - faster response
+    
     (async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!isMounted) return;
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
+      try {
+        console.log('[Auth] init: starting auth bootstrap');
+        const reachable = await pingSupabase(2000); // Reduced timeout
+        console.log('[Auth] health check reachable =', reachable);
+
+        if (!isMounted) return;
+        if (!reachable) {
+          console.warn('[Auth] Supabase unreachable. Starting offline (no user).');
+          setSession(null);
+          setUser(null);
+          setLoading(false);
+          clearTimeout(timeoutId);
+          return;
+        }
+
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!isMounted) return;
+        setSession(session);
+        setUser(session?.user ?? null);
+        setLoading(false);
+        clearTimeout(timeoutId);
+
+        // Start persistent SMS listener when already authenticated
+        if (session?.user && !smsStarted) {
+          try {
+            startSmsListener();
+            smsStarted = true;
+          } catch (e) {
+            console.warn('[Auth] Failed to start SMS listener:', e);
+          }
+        }
+      } catch (e) {
+        console.error('[Auth] init error:', e);
+        if (!isMounted) return;
+        setSession(null);
+        setUser(null);
+        setLoading(false);
+        clearTimeout(timeoutId);
+      }
     })();
 
-    const { data: subscription } = supabase.auth.onAuthStateChange(
+    // Set up auth state change listener
+    const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event: AuthChangeEvent, newSession: Session | null) => {
+        console.log('[Auth] onAuthStateChange:', event);
         setSession(newSession);
         setUser(newSession?.user ?? null);
+        
+        // Any auth event means we have a definitive state; stop loading
+        // This prevents the UI from being stuck on the loading screen when the initial
+        // session arrives via the auth listener before the bootstrap getSession resolves.
+        setLoading(false);
+        try { clearTimeout(timeoutId); } catch {}
         
         // Initialize SMS permissions on first login
         if (event === 'SIGNED_IN' && newSession?.user) {
           try {
             await PermissionService.initializeSmsPermissions();
+            // Start persistent SMS ingestion
+            try { startSmsListener(); smsStarted = true; } catch {}
           } catch (error) {
             console.warn('Failed to initialize SMS permissions:', error);
           }
         }
+
+        if (event === 'SIGNED_OUT') {
+          try { stopSmsListener(); smsStarted = false; } catch {}
+        }
       }
     );
-
-    return () => subscription.subscription.unsubscribe();
+    subscription = authListener;
+    
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+      subscription?.subscription.unsubscribe();
+      try { stopSmsListener(); } catch {}
+    };
   }, []);
 
   const value: AuthContextValue = {

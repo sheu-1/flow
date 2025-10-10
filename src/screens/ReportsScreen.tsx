@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import Animated, { FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { spacing, fontSize, borderRadius } from '../theme/colors';
@@ -11,6 +12,8 @@ import { Dimensions } from 'react-native';
 import { MoneyCard } from '../components/MoneyCard';
 import { SimplePieChart } from '../components/SimplePieChart';
 import { useCurrency } from '../services/CurrencyProvider';
+import { useRealtimeTransactions } from '../hooks/useRealtimeTransactions';
+import { invalidateUserCaches } from '../services/TransactionService';
 
 export default function ReportsScreen() {
   const colors = useThemeColors();
@@ -21,7 +24,7 @@ export default function ReportsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [series, setSeries] = useState<{ labels: string[]; income: number[]; expense: number[] }>({ labels: [], income: [], expense: [] });
   const [categories, setCategories] = useState<{ income: Record<string, number>; expense: Record<string, number> }>({ income: {}, expense: {} });
-  const [categoryView, setCategoryView] = useState<'income' | 'expense'>('expense');
+  const [categoryView, setCategoryView] = useState<'income' | 'expense'>('income');
   const [statsView, setStatsView] = useState<'income' | 'expense'>('income');
   const [currentWeek, setCurrentWeek] = useState(0); // 0 = current week, 1 = previous week, etc.
 
@@ -65,6 +68,13 @@ export default function ReportsScreen() {
     loadData();
   }, [loadData]);
 
+  // Realtime refresh
+  useRealtimeTransactions(user?.id, async () => {
+    if (!user?.id) return;
+    await invalidateUserCaches(user.id);
+    loadData(false);
+  });
+
   // Reset current week when period changes
   useEffect(() => {
     setCurrentWeek(0);
@@ -80,23 +90,21 @@ export default function ReportsScreen() {
   // Compute summary stats from the current series over the selected range
   const incomeStats = useMemo(() => {
     const arr = series.income || [];
-    const filtered = arr.filter((n) => Number.isFinite(n) && n > 0); // Exclude zero values for min calculation
-    const allFiltered = arr.filter((n) => Number.isFinite(n)); // Include zeros for sum/avg
-    const sum = allFiltered.reduce((a, b) => a + b, 0);
-    const avg = allFiltered.length ? sum / allFiltered.length : 0;
-    const min = filtered.length ? Math.min(...filtered) : 0; // Only non-zero values
-    const max = allFiltered.length ? Math.max(...allFiltered) : 0;
+    const valid = arr.filter((n) => Number.isFinite(n)); // include zeros for accurate DB-derived stats
+    const sum = valid.reduce((a, b) => a + b, 0);
+    const avg = valid.length ? sum / valid.length : 0;
+    const min = valid.length ? Math.min(...valid) : 0;
+    const max = valid.length ? Math.max(...valid) : 0;
     return { sum, avg, min, max };
   }, [series.income]);
 
   const expenseStats = useMemo(() => {
     const arr = series.expense || [];
-    const filtered = arr.filter((n) => Number.isFinite(n) && n > 0); // Exclude zero values for min calculation
-    const allFiltered = arr.filter((n) => Number.isFinite(n)); // Include zeros for sum/avg
-    const sum = allFiltered.reduce((a, b) => a + b, 0);
-    const avg = allFiltered.length ? sum / allFiltered.length : 0;
-    const min = filtered.length ? Math.min(...filtered) : 0; // Only non-zero values
-    const max = allFiltered.length ? Math.max(...allFiltered) : 0;
+    const valid = arr.filter((n) => Number.isFinite(n));
+    const sum = valid.reduce((a, b) => a + b, 0);
+    const avg = valid.length ? sum / valid.length : 0;
+    const min = valid.length ? Math.min(...valid) : 0;
+    const max = valid.length ? Math.max(...valid) : 0;
     return { sum, avg, min, max };
   }, [series.expense]);
 
@@ -294,7 +302,7 @@ export default function ReportsScreen() {
                     }
                     
                     return (
-                      <View key={index} style={styles.barGroup}>
+                      <Animated.View key={index} style={styles.barGroup} entering={FadeInUp.delay(index * 30).springify()}>
                         <View style={styles.barContainer}>
                           <View style={[styles.bar, { height: incomeHeight, backgroundColor: colors.success }]} />
                           <View style={[styles.bar, { height: expenseHeight, backgroundColor: colors.danger, marginLeft: 4 }]} />
@@ -302,7 +310,7 @@ export default function ReportsScreen() {
                         <Text style={[styles.barLabel, { color: colors.textSecondary }]} numberOfLines={1}>
                           {displayLabel}
                         </Text>
-                      </View>
+                      </Animated.View>
                     );
                   })}
                 </View>
@@ -314,9 +322,9 @@ export default function ReportsScreen() {
               <View style={styles.weekSelectorContainer}>
                 <View style={styles.weekSelectorHeader}>
                   <TouchableOpacity 
-                    onPress={() => setCurrentWeek(Math.min(currentWeek + 1, totalWeeks - 1))}
-                    disabled={currentWeek >= totalWeeks - 1}
-                    style={[styles.navButton, { opacity: currentWeek >= totalWeeks - 1 ? 0.3 : 1 }]}
+                    onPress={() => setCurrentWeek(Math.max(currentWeek - 1, 0))}
+                    disabled={currentWeek <= 0}
+                    style={[styles.navButton, { opacity: currentWeek <= 0 ? 0.3 : 1 }]}
                   >
                     <Ionicons name="chevron-back" size={24} color={colors.text} />
                   </TouchableOpacity>
@@ -339,9 +347,9 @@ export default function ReportsScreen() {
                   </View>
                   
                   <TouchableOpacity 
-                    onPress={() => setCurrentWeek(Math.max(currentWeek - 1, 0))}
-                    disabled={currentWeek <= 0}
-                    style={[styles.navButton, { opacity: currentWeek <= 0 ? 0.3 : 1 }]}
+                    onPress={() => setCurrentWeek(Math.min(currentWeek + 1, totalWeeks - 1))}
+                    disabled={currentWeek >= totalWeeks - 1}
+                    style={[styles.navButton, { opacity: currentWeek >= totalWeeks - 1 ? 0.3 : 1 }]}
                   >
                     <Ionicons name="chevron-forward" size={24} color={colors.text} />
                   </TouchableOpacity>
@@ -366,71 +374,63 @@ export default function ReportsScreen() {
               </View>
             )}
 
-            {/* Category breakdown with horizontal scrolling */}
+            {/* Category breakdown - show Income and Expense groups */}
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Categories by Type</Text>
-              
-              <View style={[styles.categoryToggle, { backgroundColor: colors.surface }]}>
-                <TouchableOpacity
-                  style={[
-                    styles.categoryToggleButton,
-                    categoryView === 'income' && { backgroundColor: colors.success }
-                  ]}
-                  onPress={() => setCategoryView('income')}
-                >
-                  <Text style={[
-                    styles.categoryToggleText,
-                    { color: categoryView === 'income' ? colors.text : colors.textSecondary }
-                  ]}>
-                    Income
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.categoryToggleButton,
-                    categoryView === 'expense' && { backgroundColor: colors.danger }
-                  ]}
-                  onPress={() => setCategoryView('expense')}
-                >
-                  <Text style={[
-                    styles.categoryToggleText,
-                    { color: categoryView === 'expense' ? colors.text : colors.textSecondary }
-                  ]}>
-                    Expenses
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              
-              {categoriesSorted.length > 0 ? (
-                categoriesSorted.map(([cat, amount]) => (
-                  <View key={cat} style={[styles.categoryItem, { backgroundColor: colors.card }]}> 
-                    <View style={styles.categoryInfo}>
-                      <Text style={[styles.categoryName, { color: colors.text }]}>{cat}</Text>
-                      <Text style={[
-                        styles.categoryAmount, 
-                        { color: categoryView === 'income' ? colors.success : colors.danger }
-                      ]}>
-                        {formatCurrency(amount as number)}
-                      </Text>
-                    </View>
-                    <View style={[styles.categoryBar, { backgroundColor: colors.surface }]}>
-                      <View
-                        style={[
-                          styles.categoryBarFill,
-                          {
-                            width: `${((amount as number) / Math.max(...categoriesSorted.map(([, v]) => v as number))) * 100}%`,
-                            backgroundColor: categoryView === 'income' ? colors.success : colors.danger,
-                          },
-                        ]}
-                      />
-                    </View>
-                  </View>
-                ))
+
+              {/* Income Categories */}
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                Income Categories
+              </Text>
+              {Object.keys(categories.income).length > 0 ? (
+                (() => {
+                  const incomeSorted = Object.entries(categories.income).sort((a, b) => (b[1] as number) - (a[1] as number));
+                  const maxIncome = Math.max(...incomeSorted.map(([, v]) => v as number), 1);
+                  return incomeSorted.map(([cat, amount], idx) => (
+                    <Animated.View key={`inc-${cat}`} style={[styles.categoryItem, { backgroundColor: colors.card }]} entering={FadeInUp.delay(idx * 25).springify()}> 
+                      <View style={styles.categoryInfo}>
+                        <Text style={[styles.categoryName, { color: colors.text }]}>{cat}</Text>
+                        <Text style={[styles.categoryAmount, { color: colors.success }]}>
+                          {formatCurrency(amount as number)}
+                        </Text>
+                      </View>
+                      <View style={[styles.categoryBar, { backgroundColor: colors.surface }]}> 
+                        <View style={[styles.categoryBarFill, { width: `${((amount as number) / maxIncome) * 100}%`, backgroundColor: colors.success }]} />
+                      </View>
+                    </Animated.View>
+                  ));
+                })()
               ) : (
                 <View style={styles.emptyState}>
-                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                    No {categoryView === 'income' ? 'income' : 'expenses'} in this period
-                  </Text>
+                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No income in this period</Text>
+                </View>
+              )}
+
+              {/* Expense Categories */}
+              <Text style={[styles.sectionTitle, { color: colors.text, marginTop: spacing.md }]}> 
+                Expense Categories
+              </Text>
+              {Object.keys(categories.expense).length > 0 ? (
+                (() => {
+                  const expenseSorted = Object.entries(categories.expense).sort((a, b) => (b[1] as number) - (a[1] as number));
+                  const maxExpense = Math.max(...expenseSorted.map(([, v]) => v as number), 1);
+                  return expenseSorted.map(([cat, amount], idx) => (
+                    <Animated.View key={`exp-${cat}`} style={[styles.categoryItem, { backgroundColor: colors.card }]} entering={FadeInUp.delay(idx * 25).springify()}> 
+                      <View style={styles.categoryInfo}>
+                        <Text style={[styles.categoryName, { color: colors.text }]}>{cat}</Text>
+                        <Text style={[styles.categoryAmount, { color: colors.danger }]}>
+                          {formatCurrency(amount as number)}
+                        </Text>
+                      </View>
+                      <View style={[styles.categoryBar, { backgroundColor: colors.surface }]}> 
+                        <View style={[styles.categoryBarFill, { width: `${((amount as number) / maxExpense) * 100}%`, backgroundColor: colors.danger }]} />
+                      </View>
+                    </Animated.View>
+                  ));
+                })()
+              ) : (
+                <View style={styles.emptyState}>
+                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No expenses in this period</Text>
                 </View>
               )}
             </View>
@@ -462,7 +462,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 3,
-    elevation: 2,
+    elevation: 6,
+    // Ensure the sticky header stays above content and remains tappable
+    zIndex: 1000,
   },
   periodSelector: {
     flexDirection: 'row',

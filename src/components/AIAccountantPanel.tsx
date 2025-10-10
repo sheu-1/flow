@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform, SafeAreaView, Alert } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInUp, FadeIn, SlideInRight, SlideOutLeft } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeColors } from '../theme/ThemeProvider';
@@ -12,8 +13,40 @@ interface Props {
   period: AggregatePeriod;
 }
 
+// Remove common Markdown tokens from AI responses for plain text display
+function sanitizeMarkdown(text: string): string {
+  if (!text) return '';
+  // Normalize line endings
+  let t = text.replace(/\r\n/g, '\n');
+  // Remove triple backtick code fences
+  t = t.replace(/```[\s\S]*?```/g, (m) => m.replace(/```/g, ''));
+  // Remove leading markdown list/heading/blockquote markers per line
+  t = t
+    .split('\n')
+    .map((line) =>
+      line
+        .replace(/^\s{0,3}(#{1,6})\s+/g, '') // #, ##, ### headings
+        .replace(/^\s{0,3}[-*+]\s+/g, '') // bullet lists - * +
+        .replace(/^\s{0,3}>\s+/g, '') // blockquote
+        .replace(/^\s{0,3}[0-9]+\.\s+/g, '') // ordered lists
+    )
+    .join('\n');
+  // Emphasis/bold/inline code
+  t = t.replace(/\*\*([^*]+)\*\*/g, '$1');
+  t = t.replace(/\*([^*]+)\*/g, '$1');
+  t = t.replace(/__([^_]+)__/g, '$1');
+  t = t.replace(/_([^_]+)_/g, '$1');
+  t = t.replace(/`([^`]+)`/g, '$1');
+  // Links: [text](url) -> text
+  t = t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1');
+  // Residual stray hashes/asterisks surrounded by spaces
+  t = t.replace(/\s[#*]+\s/g, ' ');
+  return t.trim();
+}
+
 export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
   const colors = useThemeColors();
+  const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: 'assistant', content: 'Hi! I\'m your AI accountant. Ask me about your spending trends, budgeting ideas, or how to reach your savings goals. 💰\n\nTry asking:\n• "How did I spend this month?"\n• "What are my biggest expenses?"\n• "Give me budgeting tips"' },
   ]);
@@ -78,15 +111,16 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.select({ ios: insets.top + 8, android: 0 })}
         style={styles.keyboardView}
       >
         {/* Chat Messages */}
         <ScrollView
           ref={scrollRef}
           style={styles.messagesContainer}
-          contentContainerStyle={styles.messagesContent}
+          contentContainerStyle={[styles.messagesContent, { paddingBottom: Math.max(20, insets.bottom + 20) }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
@@ -112,17 +146,13 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
                     [styles.userText, { color: '#FFFFFF' }] : 
                     [styles.assistantText, { color: colors.text }]
                 ]}>
-                  {message.content}
+                  {message.role === 'assistant' ? sanitizeMarkdown(message.content) : message.content}
                 </Text>
               </View>
             </Animated.View>
           ))}
-          
           {loading && (
-            <Animated.View 
-              entering={FadeIn}
-              style={styles.loadingWrapper}
-            >
+            <Animated.View entering={FadeIn} style={styles.loadingWrapper}>
               <View style={[styles.loadingBubble, { backgroundColor: colors.surface }]}>
                 <ActivityIndicator color={colors.primary} size="small" />
                 <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Thinking…</Text>
@@ -132,7 +162,7 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
         </ScrollView>
 
         {/* Input Bar */}
-        <View style={styles.inputContainer}>
+        <View style={[styles.inputContainer, { paddingBottom: Math.max(34, insets.bottom + 10) }]}>
           <View style={[styles.inputBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <TouchableOpacity 
               style={styles.iconButton}

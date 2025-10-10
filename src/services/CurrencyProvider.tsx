@@ -7,7 +7,10 @@ export interface CurrencyContextValue {
   currency: CurrencyCode;
   availableCurrencies: CurrencyCode[];
   setCurrency: (c: CurrencyCode) => Promise<void>;
-  formatCurrency: (amount: number, opts?: { maximumFractionDigits?: number }) => string;
+  formatCurrency: (
+    amount: number,
+    opts?: { maximumFractionDigits?: number; showSymbol?: boolean; showCode?: boolean }
+  ) => string;
 }
 
 const STORAGE_KEY = 'app_currency_v1';
@@ -33,16 +36,41 @@ export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     await AsyncStorage.setItem(STORAGE_KEY, c);
   };
 
-  const formatCurrency = (amount: number, opts?: { maximumFractionDigits?: number }) => {
+  const formatCurrency = (
+    amount: number,
+    opts?: { maximumFractionDigits?: number; showSymbol?: boolean; showCode?: boolean }
+  ) => {
     try {
-      return new Intl.NumberFormat('en-US', {
+      // Default: neutral numeric formatting with group separators, no currency symbol
+      if (!opts?.showSymbol && !opts?.showCode) {
+        return new Intl.NumberFormat(undefined, {
+          style: 'decimal',
+          maximumFractionDigits: opts?.maximumFractionDigits ?? 2,
+        }).format(amount ?? 0);
+      }
+
+      // If showCode is requested, render with currency code (e.g., USD 1,234.56)
+      if (opts?.showCode) {
+        const num = new Intl.NumberFormat(undefined, {
+          style: 'currency',
+          currency,
+          currencyDisplay: 'code',
+          maximumFractionDigits: opts?.maximumFractionDigits,
+        }).format(amount ?? 0);
+        return num;
+      }
+
+      // Else show the local symbol
+      return new Intl.NumberFormat(undefined, {
         style: 'currency',
         currency,
         maximumFractionDigits: opts?.maximumFractionDigits,
       }).format(amount ?? 0);
     } catch {
       // Fallback if Intl doesn't support currency
-      return `${currency} ${Number(amount ?? 0).toFixed(opts?.maximumFractionDigits ?? 2)}`;
+      const n = Number(amount ?? 0).toFixed(opts?.maximumFractionDigits ?? 2);
+      if (opts?.showSymbol || opts?.showCode) return `${currency} ${n}`;
+      return `${n}`;
     }
   };
 

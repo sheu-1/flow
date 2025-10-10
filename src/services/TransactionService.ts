@@ -1,6 +1,26 @@
 import { supabase } from './SupabaseClient';
 import { AggregatePeriod, AggregatePoint, Transaction } from '../types';
 import { cacheService } from './CacheService';
+import { Logger } from '../utils/Logger';
+
+export interface CreateTransactionParams {
+  type: 'income' | 'expense';
+  amount: number;
+  category?: string;
+  description?: string;
+  sender?: string;
+  date?: string; // ISO string
+}
+
+// Exported wrapper so other modules (e.g., realtime hooks) can invalidate
+// cached aggregates and lists when external changes occur (another device).
+export async function invalidateUserCaches(userId: string): Promise<void> {
+  try {
+    await clearUserCaches(userId);
+  } catch (e) {
+    console.warn('invalidateUserCaches failed:', e);
+  }
+}
 
 export interface GetTransactionsParams {
   limit?: number;
@@ -18,6 +38,8 @@ function toISO(d?: Date | string) {
 export async function getTransactions(userId: string, params: GetTransactionsParams = {}): Promise<Transaction[]> {
   const { limit = 50, offset = 0, from, to } = params;
   
+  Logger.info('TransactionService', `Getting transactions for user ${userId}`, { limit, offset, from, to });
+  
   // Create cache key based on parameters
   const cacheKey = `transactions_${userId}_${limit}_${offset}_${from?.toString()}_${to?.toString()}`;
   
@@ -25,6 +47,7 @@ export async function getTransactions(userId: string, params: GetTransactionsPar
   if (limit <= 100 && offset === 0) {
     const cached = await cacheService.get<Transaction[]>(cacheKey);
     if (cached) {
+      Logger.info('TransactionService', `Returning ${cached.length} cached transactions`);
       return cached;
     }
   }
@@ -41,7 +64,14 @@ export async function getTransactions(userId: string, params: GetTransactionsPar
   if (to) query = query.lte('date', toISO(to)!);
 
   const { data, error } = await query;
-  if (error) throw error;
+  if (error) {
+    Logger.database('TransactionService', 'SELECT', 'transactions', false, error);
+    // Return empty array instead of throwing to prevent app crashes
+    return [];
+  }
+  
+  Logger.database('TransactionService', 'SELECT', 'transactions', true);
+  Logger.success('TransactionService', `Retrieved ${data?.length || 0} transactions`);
   
   // Filter out any null/undefined entries and map to Transaction type
   const transactions = (data || [])
@@ -64,6 +94,153 @@ export async function getTransactions(userId: string, params: GetTransactionsPar
   }
   
   return transactions;
+}
+
+/**
+ * Create a new transaction
+ */
+export async function createTransaction(
+  userId: string, 
+  params: CreateTransactionParams
+): Promise<{ success: boolean; transaction?: Transaction; error?: any }> {
+  try {
+    const payload = {
+      user_id: userId,
+      type: params.type,
+      amount: params.amount,
+      category: params.category || null,
+      description: params.description || null,
+      sender: params.sender || null,
+      date: params.date || new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from('transactions')
+      .insert([payload])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Clear relevant caches
+    await clearUserCaches(userId);
+
+    const transaction: Transaction = {
+      id: data.id,
+      user_id: data.user_id,
+      type: data.type,
+      amount: Number(data.amount),
+      category: data.category,
+      sender: data.sender,
+      metadata: data.metadata,
+      date: data.date,
+      created_at: data.created_at,
+    };
+
+    return { success: true, transaction };
+  } catch (error) {
+    console.error('Failed to create transaction:', error);
+    return { success: false, error };
+  }
+}
+
+/**
+ * Update an existing transaction
+ */
+export async function updateTransaction(
+  userId: string,
+  transactionId: string,
+  updates: Partial<CreateTransactionParams>
+): Promise<{ success: boolean; transaction?: Transaction; error?: any }> {
+  try {
+    const payload: any = {};
+    if (updates.type !== undefined) payload.type = updates.type;
+    if (updates.amount !== undefined) payload.amount = updates.amount;
+    if (updates.category !== undefined) payload.category = updates.category;
+    if (updates.description !== undefined) payload.description = updates.description;
+    if (updates.sender !== undefined) payload.sender = updates.sender;
+    if (updates.date !== undefined) payload.date = updates.date;
+    payload.updated_at = new Date().toISOString();
+
+    const { data, error } = await supabase
+      .from('transactions')
+      .update(payload)
+      .eq('id', transactionId)
+      .eq('user_id', userId) // Ensure user can only update their own transactions
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Clear relevant caches
+    await clearUserCaches(userId);
+
+    const transaction: Transaction = {
+      id: data.id,
+      user_id: data.user_id,
+      type: data.type,
+      amount: Number(data.amount),
+      category: data.category,
+      sender: data.sender,
+      metadata: data.metadata,
+      date: data.date,
+      created_at: data.created_at,
+    };
+
+    return { success: true, transaction };
+  } catch (error) {
+    console.error('Failed to update transaction:', error);
+    return { success: false, error };
+  }
+}
+
+/**
+ * Delete a transaction
+ */
+export async function deleteTransaction(
+  userId: string,
+  transactionId: string
+): Promise<{ success: boolean; error?: any }> {
+  try {
+    const { error } = await supabase
+      .from('transactions')
+      .delete()
+      .eq('id', transactionId)
+      .eq('user_id', userId); // Ensure user can only delete their own transactions
+
+    if (error) throw error;
+
+    // Clear relevant caches
+    await clearUserCaches(userId);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to delete transaction:', error);
+    return { success: false, error };
+  }
+}
+
+/**
+ * Clear all cached data for a user (call after mutations)
+ */
+async function clearUserCaches(userId: string): Promise<void> {
+  try {
+    // Clear transaction caches
+    const patterns = [
+      `transactions_${userId}_*`,
+      `aggregates_${userId}_*`,
+      `category_breakdown_${userId}_*`,
+      `income_breakdown_${userId}_*`,
+      `categories_breakdown_${userId}_*`
+    ];
+    
+    for (const pattern of patterns) {
+      await cacheService.invalidatePattern(pattern);
+    }
+  } catch (error) {
+    console.warn('Failed to clear caches:', error);
+  }
 }
 
 function startOfWeek(d: Date) {

@@ -1,7 +1,8 @@
 import { Platform, PermissionsAndroid } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { requestSmsPermission as requestPerm } from './SmsPermissions';
 import { parseTransactionFromSms, RawSms } from '../utils/SMSParser';
-import { insertTransactionSupabase } from './SupabaseService';
+import { insertTransactionEnhanced } from './EnhancedSupabaseService';
 import { supabase } from './SupabaseClient';
 import { PermissionService } from './PermissionService';
 
@@ -22,6 +23,22 @@ type SmsAndroidModule = {
 
 let subscription: { remove: () => void } | null = null;
 let lastSeenTimestamp = 0;
+const LAST_SEEN_KEY = 'sms_last_seen_ts_v1';
+
+async function loadLastSeen() {
+  try {
+    const raw = await AsyncStorage.getItem(LAST_SEEN_KEY);
+    const n = raw ? Number(raw) : 0;
+    if (Number.isFinite(n) && n > 0) lastSeenTimestamp = n;
+  } catch {}
+}
+
+async function saveLastSeen(ts: number) {
+  try {
+    lastSeenTimestamp = Math.max(lastSeenTimestamp, ts);
+    await AsyncStorage.setItem(LAST_SEEN_KEY, String(lastSeenTimestamp));
+  } catch {}
+}
 
 export async function requestSmsPermission(): Promise<boolean> {
   return requestPerm();
@@ -90,6 +107,9 @@ export async function startSmsListener(onMessage?: (raw: RawSms) => void): Promi
     return;
   }
 
+  // Ensure we resume from last persisted timestamp
+  await loadLastSeen();
+
   // Try broadcast listener
   try {
     const SmsListener: SmsListenerModule | undefined = loadSmsListenerModule();
@@ -100,11 +120,28 @@ export async function startSmsListener(onMessage?: (raw: RawSms) => void): Promi
         try {
           onMessage?.(raw);
           await processSmsAndSave(raw);
+          const ts = Number(raw.date) || Date.now();
+          await saveLastSeen(ts);
         } catch (e) {
           console.warn('[SMS] process failed', e);
         }
       });
       console.log('[SMS] Listening for incoming SMS via broadcast');
+      // Initial catch-up: read recent messages newer than last seen
+      try {
+        const recent = await readRecentSms(50);
+        const sorted = recent
+          .filter((s) => typeof s.date === 'number' && (s.date as number) > lastSeenTimestamp)
+          .sort((a, b) => (Number(a.date) || 0) - (Number(b.date) || 0));
+        for (const sms of sorted) {
+          try {
+            onMessage?.(sms);
+            await processSmsAndSave(sms);
+            const ts = Number(sms.date) || Date.now();
+            await saveLastSeen(ts);
+          } catch (e) { console.warn('[SMS] catch-up failed', e); }
+        }
+      } catch {}
       return subscription;
     }
   } catch (e) {
@@ -121,15 +158,15 @@ export async function startSmsListener(onMessage?: (raw: RawSms) => void): Promi
     const intervalId = setInterval(async () => {
       try {
         const list = await readRecentSms(20);
-        list
+        const newer = list
           .filter((s) => typeof s.date === 'number' && (s.date as number) > lastSeenTimestamp)
           .sort((a, b) => (Number(a.date) || 0) - (Number(b.date) || 0));
-        for (const sms of list) {
+        for (const sms of newer) {
           const ts = Number(sms.date) || 0;
           if (ts <= lastSeenTimestamp) continue;
           onMessage?.(sms);
           await processSmsAndSave(sms);
-          lastSeenTimestamp = Math.max(lastSeenTimestamp, ts);
+          await saveLastSeen(ts);
         }
       } catch (e) {
         console.warn('[SMS] polling failed', e);
@@ -160,7 +197,7 @@ export async function processSmsAndSave(raw: RawSms): Promise<void> {
       console.warn('[SMS] No authenticated user; skipping insert');
       return;
     }
-    const res = await insertTransactionSupabase(parsed, userId);
+    const res = await insertTransactionEnhanced(parsed, userId);
     if (!res.success) {
       console.warn('[SMS] Supabase insert failed', res.error);
     }

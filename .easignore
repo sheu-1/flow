@@ -1,0 +1,14 @@
+# EAS Build ignore patterns
+.expo/
+.expo-shared/
+node_modules/.cache/
+.vscode/
+.idea/
+docs/
+*.log
+*.md
+.DS_Store
+Thumbs.db
+.git/
+.gitignore
+.easignore

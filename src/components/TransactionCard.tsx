@@ -9,9 +9,10 @@ import { useCurrency } from '../services/CurrencyProvider';
 interface TransactionCardProps {
   transaction: Transaction;
   onPress?: () => void;
+  onEditCategory?: () => void;
 }
 
-export const TransactionCard: React.FC<TransactionCardProps> = ({ transaction, onPress }) => {
+export const TransactionCard: React.FC<TransactionCardProps> = ({ transaction, onPress, onEditCategory }) => {
   const colors = useThemeColors();
   const { formatCurrency } = useCurrency();
 
@@ -49,7 +50,14 @@ export const TransactionCard: React.FC<TransactionCardProps> = ({ transaction, o
       <View style={styles.contentContainer}>
         <View style={styles.leftSection}>
           <Text style={[styles.description, { color: colors.text }]}>{transaction.description}</Text>
-          <Text style={[styles.category, { color: colors.textSecondary }]}>{transaction.category}</Text>
+          {onEditCategory ? (
+            <TouchableOpacity style={styles.categoryRow} onPress={onEditCategory}>
+              <Text style={[styles.category, { color: colors.textSecondary }]}>{transaction.category}</Text>
+              <Ionicons name="chevron-down" size={14} color={colors.textSecondary} style={{ marginLeft: 4 }} />
+            </TouchableOpacity>
+          ) : (
+            <Text style={[styles.category, { color: colors.textSecondary }]}>{transaction.category}</Text>
+          )}
         </View>
         
         <View style={styles.rightSection}>
@@ -108,6 +116,10 @@ const styles = StyleSheet.create({
   },
   category: {
     fontSize: fontSize.sm,
+  },
+  categoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   amount: {
     fontSize: fontSize.md,
