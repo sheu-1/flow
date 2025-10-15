@@ -37,35 +37,53 @@ export async function processMpesaMessage(
   try {
     console.log('[MpesaIntegration] Processing M-Pesa message...');
 
-    // Step 1: Parse message using Vertex AI
+    // Step 1: Check if message contains Fuliza
+    const isFulizaMessage = /fuliza/i.test(messageText);
+    console.log('[MpesaIntegration] Fuliza detected:', isFulizaMessage);
+
+    // Step 2: Parse message using Vertex AI
     const parsed = await analyzeMpesaMessage(messageText);
 
-    // Step 2: Skip if parsing failed
-    if (parsed.type === 'fee_only' && parsed.amount === 0) {
+    // Step 3: Skip if parsing failed
+    if (parsed.type === 'fee_only' && parsed.amount === 0 && !parsed.fee) {
       console.warn('[MpesaIntegration] Failed to parse message, skipping insertion');
       return null;
     }
 
-    // Step 3: Map to Supabase transaction format
+    // Step 4: For Fuliza messages, only log the fee
+    if (isFulizaMessage) {
+      console.log('[MpesaIntegration] Fuliza transaction - logging fee only');
+      // Override parsed data to ensure only fee is logged
+      parsed.amount = parsed.fee || 0;
+      parsed.type = 'fee_only';
+      parsed.category = 'Fuliza Fee';
+      // Clear recipient and other details
+      delete parsed.recipient;
+    }
+
+    // Step 5: Map to Supabase transaction format
     const transaction = {
       user_id: userId,
       type: parsed.type === 'money_in' ? 'income' : 'expense',
       amount: Math.abs(parsed.amount),
       category: parsed.category,
-      description: parsed.recipient
-        ? `${parsed.category} - ${parsed.recipient}`
-        : parsed.category,
+      description: isFulizaMessage 
+        ? 'Fuliza Fee'
+        : (parsed.recipient
+          ? `${parsed.category} - ${parsed.recipient}`
+          : parsed.category),
       date: parsed.timestamp || new Date().toISOString(),
       source: 'mpesa_sms',
       metadata: {
         fee: parsed.fee,
-        recipient: parsed.recipient,
+        recipient: isFulizaMessage ? undefined : parsed.recipient,
         raw_message: parsed.raw_message,
         parsed_by: 'vertex_ai',
+        is_fuliza: isFulizaMessage,
       },
     };
 
-    // Step 4: Insert into Supabase
+    // Step 6: Insert into Supabase
     const { data, error } = await supabase
       .from('transactions')
       .insert(transaction)

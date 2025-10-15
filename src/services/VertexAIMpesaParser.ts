@@ -64,7 +64,7 @@ function buildParsingPrompt(messageText: string): string {
   return `You are an expert M-Pesa transaction parser. Analyze the following M-Pesa SMS message and extract financial details.
 
 IMPORTANT RULES:
-1. If the message contains "Fuliza" (overdraft/loan fee), ONLY return the transaction cost as a "fee_only" entry. Do NOT include the main transaction amount.
+1. If the message contains "Fuliza" (overdraft/loan fee), ONLY return the transaction cost/fee as a "fee_only" entry with the fee amount. Set the main amount to 0 and DO NOT include any other transaction details like recipient or main transaction amount.
 2. For regular transactions, extract both the transaction amount and any fees.
 3. Always return valid JSON matching the exact schema below.
 4. If you cannot parse the message, return a fee_only entry with amount 0.
@@ -109,21 +109,38 @@ export async function analyzeMpesaMessage(
   messageText: string
 ): Promise<ParsedMpesaTransaction> {
   try {
+    console.log('='.repeat(60));
+    console.log('[VertexAI] 🚀 Starting M-Pesa message analysis');
+    console.log('[VertexAI] Configuration:', getVertexAIConfig());
+    console.log('[VertexAI] Message:', messageText.substring(0, 100) + '...');
+    console.log('[VertexAI] Timestamp:', new Date().toISOString());
+    
     // Initialize Vertex AI
     const vertexAI = initializeVertexAI();
+    console.log('[VertexAI] ✓ Vertex AI client initialized');
+    
     const generativeModel = vertexAI.getGenerativeModel({
       model: MODEL_NAME,
     });
+    console.log('[VertexAI] ✓ Generative model loaded:', MODEL_NAME);
 
     // Build prompt
     const prompt = buildParsingPrompt(messageText);
+    console.log('[VertexAI] ✓ Prompt built, length:', prompt.length);
 
     // Generate content
-    console.log('[VertexAI] Analyzing M-Pesa message...');
+    console.log('[VertexAI] 📡 Sending request to Vertex AI API...');
+    console.log('[VertexAI] Endpoint: aiplatform.googleapis.com');
+    const requestStartTime = Date.now();
+    
     const result = await generativeModel.generateContent(prompt);
+    const requestDuration = Date.now() - requestStartTime;
+    
+    console.log('[VertexAI] ✓ Response received in', requestDuration, 'ms');
     const response = result.response;
     const text = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
+    console.log('[VertexAI] Raw response length:', text.length);
     console.log('[VertexAI] Raw response:', text);
 
     // Parse JSON response
@@ -133,19 +150,27 @@ export async function analyzeMpesaMessage(
     }
 
     const parsed: ParsedMpesaTransaction = JSON.parse(jsonMatch[0]);
+    console.log('[VertexAI] ✓ JSON parsed successfully');
 
     // Validate required fields
     if (!parsed.type || typeof parsed.amount !== 'number') {
+      console.error('[VertexAI] ✗ Validation failed: Invalid response structure');
       throw new Error('Invalid response structure from model');
     }
+    console.log('[VertexAI] ✓ Validation passed');
 
     // Add raw message for debugging
     parsed.raw_message = messageText;
 
-    console.log('[VertexAI] Successfully parsed transaction:', parsed);
+    console.log('[VertexAI] ✅ Successfully parsed transaction:', JSON.stringify(parsed, null, 2));
+    console.log('='.repeat(60));
     return parsed;
   } catch (error) {
-    console.error('[VertexAI] Error parsing M-Pesa message:', error);
+    console.error('[VertexAI] ❌ ERROR parsing M-Pesa message');
+    console.error('[VertexAI] Error type:', error instanceof Error ? error.constructor.name : typeof error);
+    console.error('[VertexAI] Error message:', error instanceof Error ? error.message : String(error));
+    console.error('[VertexAI] Error stack:', error instanceof Error ? error.stack : 'N/A');
+    console.log('='.repeat(60));
     
     // Return a safe fallback
     return {

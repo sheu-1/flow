@@ -11,9 +11,14 @@ import { getAggregatesByPeriod, getCategoriesBreakdown } from '../services/Trans
 import { Dimensions } from 'react-native';
 import { MoneyCard } from '../components/MoneyCard';
 import { SimplePieChart } from '../components/SimplePieChart';
+import { UnifiedPeriodSelector } from '../components/UnifiedPeriodSelector';
+import { DetailedPeriodSelector } from '../components/DetailedPeriodSelector';
 import { useCurrency } from '../services/CurrencyProvider';
 import { useRealtimeTransactions } from '../hooks/useRealtimeTransactions';
 import { invalidateUserCaches } from '../services/TransactionService';
+import { getTransactions } from '../services/TransactionService';
+import { useDateFilter } from '../hooks/useDateFilter';
+import { Transaction } from '../types';
 
 export default function ReportsScreen() {
   const colors = useThemeColors();
@@ -27,6 +32,19 @@ export default function ReportsScreen() {
   const [categoryView, setCategoryView] = useState<'income' | 'expense'>('income');
   const [statsView, setStatsView] = useState<'income' | 'expense'>('income');
   const [currentWeek, setCurrentWeek] = useState(0); // 0 = current week, 1 = previous week, etc.
+  const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
+  const [showDetailedPeriodSelector, setShowDetailedPeriodSelector] = useState(false);
+  
+  // Date filtering
+  const {
+    filteredTransactions,
+    selectedPreset,
+    formattedRange,
+    setPreset,
+    setCustomRange,
+    resetFilter,
+    dateRange,
+  } = useDateFilter(allTransactions);
 
   const rangeCount = useMemo(() => {
     if (period === 'daily') return 24; // 24 hours
@@ -39,14 +57,26 @@ export default function ReportsScreen() {
     if (!user?.id) return;
     if (showLoading) setLoading(true);
     try {
+      // Load all transactions for date filtering
+      const txns = await getTransactions(user.id, { limit: 1000 }).catch(() => []);
+      const mapped: Transaction[] = txns.map(r => ({
+        ...r,
+        date: new Date(r.date),
+        description: (r as any).description || (r as any).sender || r.category || '',
+        category: r.category || 'Other',
+        type: (r.type === 'income' || r.type === 'expense') ? r.type : (r.amount >= 0 ? 'income' : 'expense'),
+      }));
+      setAllTransactions(mapped);
+      
       const buckets = await getAggregatesByPeriod(user.id, period, rangeCount);
       const labels = buckets.map((b) => b.periodLabel);
       const income = buckets.map((b) => b.income);
       const expense = buckets.map((b) => b.expense);
       setSeries({ labels, income, expense });
 
-      const start = buckets[0]?.start;
-      const end = buckets[buckets.length - 1]?.end;
+      // Use date range for category breakdown
+      const start = dateRange.startDate.toISOString();
+      const end = dateRange.endDate.toISOString();
       const cat = await getCategoriesBreakdown(user.id, start, end);
       setCategories(cat);
     } catch (e) {
@@ -57,7 +87,7 @@ export default function ReportsScreen() {
       if (showLoading) setLoading(false);
       setRefreshing(false);
     }
-  }, [user?.id, period, rangeCount]);
+  }, [user?.id, period, rangeCount, dateRange]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -88,12 +118,14 @@ export default function ReportsScreen() {
   }, [categories, categoryView]);
 
   // Compute summary stats from the current series over the selected range
+  // Min = lowest positive transaction (x > 0), Max = highest transaction
   const incomeStats = useMemo(() => {
     const arr = series.income || [];
     const valid = arr.filter((n) => Number.isFinite(n)); // include zeros for accurate DB-derived stats
     const sum = valid.reduce((a, b) => a + b, 0);
     const avg = valid.length ? sum / valid.length : 0;
-    const min = valid.length ? Math.min(...valid) : 0;
+    const positiveValues = valid.filter((n) => n > 0);
+    const min = positiveValues.length ? Math.min(...positiveValues) : 0;
     const max = valid.length ? Math.max(...valid) : 0;
     return { sum, avg, min, max };
   }, [series.income]);
@@ -103,7 +135,8 @@ export default function ReportsScreen() {
     const valid = arr.filter((n) => Number.isFinite(n));
     const sum = valid.reduce((a, b) => a + b, 0);
     const avg = valid.length ? sum / valid.length : 0;
-    const min = valid.length ? Math.min(...valid) : 0;
+    const positiveValues = valid.filter((n) => n > 0);
+    const min = positiveValues.length ? Math.min(...positiveValues) : 0;
     const max = valid.length ? Math.max(...valid) : 0;
     return { sum, avg, min, max };
   }, [series.expense]);
@@ -148,27 +181,14 @@ export default function ReportsScreen() {
           <Text style={[styles.title, { color: colors.text }]}>Reports</Text>
         </View>
         
-        {/* Sticky Period Selector */}
+        {/* Sticky Unified Period Selector */}
         <View style={[styles.stickyPeriodSelector, { backgroundColor: colors.background }]}>
-          <View style={[styles.periodSelector, { backgroundColor: colors.surface }]}> 
-            {(['daily', 'weekly', 'monthly', 'yearly'] as const).map((p) => (
-              <TouchableOpacity
-                key={p}
-                style={[styles.periodButton, period === p && { backgroundColor: colors.primary }]}
-                onPress={() => setPeriod(p)}
-              >
-                <Text
-                  style={[
-                    styles.periodButtonText,
-                    { color: colors.textSecondary },
-                    period === p && { color: colors.text },
-                  ]}
-                >
-                  {p === 'daily' ? 'Daily' : p === 'weekly' ? 'Weekly' : p === 'monthly' ? 'Monthly' : 'Yearly'}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <UnifiedPeriodSelector
+            selectedPeriod={period}
+            onPeriodChange={setPeriod}
+            onOpenDetailedSelector={() => setShowDetailedPeriodSelector(true)}
+            removeMargin={false}
+          />
         </View>
         
         {/* Main Content */}
@@ -191,7 +211,7 @@ export default function ReportsScreen() {
                   styles.categoryToggleText,
                   { color: statsView === 'income' ? colors.text : colors.textSecondary }
                 ]}>
-                  Income
+                  Money In
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -205,7 +225,7 @@ export default function ReportsScreen() {
                   styles.categoryToggleText,
                   { color: statsView === 'expense' ? colors.text : colors.textSecondary }
                 ]}>
-                  Expenses
+                  Money Out
                 </Text>
               </TouchableOpacity>
             </View>
@@ -213,14 +233,14 @@ export default function ReportsScreen() {
             {/* Min & Max side-by-side */}
             <View style={styles.cardRow}>
               <MoneyCard 
-                title={`${statsView === 'income' ? 'Income' : 'Expense'} • Min`} 
+                title={`${statsView === 'income' ? 'Money In' : 'Money Out'} • Min`} 
                 amount={currentStats.min} 
                 type={statsView === 'income' ? 'in' : 'out'} 
                 period={period} 
                 icon="trending-down-outline" 
               />
               <MoneyCard 
-                title={`${statsView === 'income' ? 'Income' : 'Expense'} • Max`} 
+                title={`${statsView === 'income' ? 'Money In' : 'Money Out'} • Max`} 
                 amount={currentStats.max} 
                 type={statsView === 'income' ? 'in' : 'out'} 
                 period={period} 
@@ -230,7 +250,7 @@ export default function ReportsScreen() {
             {/* Avg full-width */}
             <View style={styles.cardRowSingle}>
               <MoneyCard 
-                title={`${statsView === 'income' ? 'Income' : 'Expense'} • Avg`} 
+                title={`${statsView === 'income' ? 'Money In' : 'Money Out'} • Avg`} 
                 amount={currentStats.avg} 
                 type={statsView === 'income' ? 'in' : 'out'} 
                 period={period} 
@@ -265,11 +285,11 @@ export default function ReportsScreen() {
               <View style={styles.chartLegend}>
                 <View style={styles.legendItem}>
                   <View style={[styles.legendColor, { backgroundColor: colors.success }]} />
-                  <Text style={[styles.legendText, { color: colors.text }]}>Income</Text>
+                  <Text style={[styles.legendText, { color: colors.text }]}>Money In</Text>
                 </View>
                 <View style={styles.legendItem}>
                   <View style={[styles.legendColor, { backgroundColor: colors.danger }]} />
-                  <Text style={[styles.legendText, { color: colors.text }]}>Expense</Text>
+                  <Text style={[styles.legendText, { color: colors.text }]}>Money Out</Text>
                 </View>
               </View>
               
@@ -378,9 +398,9 @@ export default function ReportsScreen() {
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Categories by Type</Text>
 
-              {/* Income Categories */}
+              {/* Money In Categories */}
               <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                Income Categories
+                Money In Categories
               </Text>
               {Object.keys(categories.income).length > 0 ? (
                 (() => {
@@ -402,13 +422,13 @@ export default function ReportsScreen() {
                 })()
               ) : (
                 <View style={styles.emptyState}>
-                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No income in this period</Text>
+                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No money in for this period</Text>
                 </View>
               )}
 
-              {/* Expense Categories */}
+              {/* Money Out Categories */}
               <Text style={[styles.sectionTitle, { color: colors.text, marginTop: spacing.md }]}> 
-                Expense Categories
+                Money Out Categories
               </Text>
               {Object.keys(categories.expense).length > 0 ? (
                 (() => {
@@ -430,7 +450,7 @@ export default function ReportsScreen() {
                 })()
               ) : (
                 <View style={styles.emptyState}>
-                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No expenses in this period</Text>
+                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No money out for this period</Text>
                 </View>
               )}
             </View>
@@ -438,6 +458,16 @@ export default function ReportsScreen() {
         )}
         </View>
       </ScrollView>
+      
+      {/* Detailed Period Selector */}
+      <DetailedPeriodSelector
+        visible={showDetailedPeriodSelector}
+        onClose={() => setShowDetailedPeriodSelector(false)}
+        selectedPreset={selectedPreset}
+        onPresetSelect={setPreset}
+        onCustomRangeSelect={setCustomRange}
+        onReset={resetFilter}
+      />
     </SafeAreaView>
   );
 }

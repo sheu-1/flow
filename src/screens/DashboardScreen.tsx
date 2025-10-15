@@ -10,7 +10,8 @@ import { notificationService } from '../services/NotificationService';
 import { Transaction, AggregatePeriod } from '../types';
 import { MoneyCard } from '../components/MoneyCard';
 import { PieChart } from '../components/PieChart';
-import { PeriodSelector } from '../components/PeriodSelector';
+import { UnifiedPeriodSelector } from '../components/UnifiedPeriodSelector';
+import { DetailedPeriodSelector } from '../components/DetailedPeriodSelector';
 import { ProfileMenu } from '../components/ProfileMenu';
 import NotificationPanel from '../components/NotificationPanel';
 import { TransactionCard } from '../components/TransactionCard';
@@ -20,6 +21,7 @@ import { SavingsGoals } from '../components/SavingsGoals';
 import { spacing, fontSize } from '../theme/colors';
 import { useRealtimeTransactions } from '../hooks/useRealtimeTransactions';
 import { invalidateUserCaches } from '../services/TransactionService';
+import { useDateFilter } from '../hooks/useDateFilter';
 
 // Enable detailed logging
 console.log('🚀 DashboardScreen loading...');
@@ -33,7 +35,17 @@ export default function DashboardScreen() {
   const { user } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  // Removed Quick Actions floating button per request
+  const [showDetailedPeriodSelector, setShowDetailedPeriodSelector] = useState(false);
+  
+  // Date filtering
+  const {
+    filteredTransactions,
+    selectedPreset,
+    formattedRange,
+    setPreset,
+    setCustomRange,
+    resetFilter,
+  } = useDateFilter(transactions);
 
   const refresh = useCallback(async () => {
     if (!user?.id) return;
@@ -144,16 +156,17 @@ export default function DashboardScreen() {
     // Fallback for typescript narrowing (endDate is always set in switch above)
     endDate = endDate || now;
 
-    const filteredTransactions = transactions.filter(t => {
+    // Use date-filtered transactions instead of all transactions
+    const periodFilteredTransactions = filteredTransactions.filter(t => {
       const transactionDate = new Date(t.date);
       return transactionDate >= startDate && transactionDate < endDate;
     });
 
-    const moneyIn = filteredTransactions
+    const moneyIn = periodFilteredTransactions
       .filter(t => t.type === 'income')
       .reduce((sum, t) => sum + t.amount, 0);
 
-    const moneyOut = filteredTransactions
+    const moneyOut = periodFilteredTransactions
       .filter(t => t.type === 'expense')
       .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
@@ -163,7 +176,7 @@ export default function DashboardScreen() {
   };
 
   const { moneyIn, moneyOut, netBalance, periodLabel } = calculatePeriodStats();
-  const recentTransactions = transactions.slice(0, 5);
+  const recentTransactions = filteredTransactions.slice(0, 5);
 
   const displayName = user?.user_metadata?.username || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User';
 
@@ -200,11 +213,12 @@ export default function DashboardScreen() {
           </View>
         </View>
         
-        {/* Sticky Period Selector */}
+        {/* Sticky Unified Period Selector */}
         <View style={[styles.stickyPeriodSelector, { backgroundColor: colors.background }]}>
-          <PeriodSelector
+          <UnifiedPeriodSelector
             selectedPeriod={selectedPeriod}
             onPeriodChange={setSelectedPeriod}
+            onOpenDetailedSelector={() => setShowDetailedPeriodSelector(true)}
             removeMargin
           />
         </View>
@@ -251,7 +265,7 @@ export default function DashboardScreen() {
 
         {/* Smart Insights */}
         <SmartInsights
-          transactions={transactions}
+          transactions={filteredTransactions}
           userId={user?.id || ''}
         />
 
@@ -283,6 +297,16 @@ export default function DashboardScreen() {
       <NotificationPanel 
         visible={showNotifications} 
         onClose={() => setShowNotifications(false)} 
+      />
+      
+      {/* Detailed Period Selector */}
+      <DetailedPeriodSelector
+        visible={showDetailedPeriodSelector}
+        onClose={() => setShowDetailedPeriodSelector(false)}
+        selectedPreset={selectedPreset}
+        onPresetSelect={setPreset}
+        onCustomRangeSelect={setCustomRange}
+        onReset={resetFilter}
       />
     </SafeAreaView>
   );

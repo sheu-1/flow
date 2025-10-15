@@ -1,26 +1,21 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { useThemeColors } from '../theme/ThemeProvider';
 import { Ionicons } from '@expo/vector-icons';
-import { ProfileDrawer } from './ProfileDrawer';
+import { useNavigation } from '@react-navigation/native';
 
 export const ProfileMenu: React.FC = () => {
-  const [isOpen, setIsOpen] = useState(false);
   const colors = useThemeColors();
+  const navigation = useNavigation();
 
   return (
     <View style={styles.container}>
       <TouchableOpacity 
-        onPress={() => setIsOpen(true)}
+        onPress={() => (navigation as any).navigate('Profile')}
         style={styles.profileButton}
       >
         <Ionicons name="person-circle" size={32} color={colors.primary} />
       </TouchableOpacity>
-
-      <ProfileDrawer 
-        visible={isOpen} 
-        onClose={() => setIsOpen(false)} 
-      />
     </View>
   );
 };

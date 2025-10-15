@@ -250,9 +250,9 @@ export const SavingsGoals: React.FC<Props> = ({ userId, totalSavings }) => {
       {goals.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyEmoji}>🎯</Text>
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>No Goals Yet</Text>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>Coming Soon</Text>
           <Text style={[styles.emptyDescription, { color: colors.textMuted }]}>
-            Set your first savings goal and start building your future!
+            Goal setting feature will be available soon!
           </Text>
         </View>
       ) : (

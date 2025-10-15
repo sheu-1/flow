@@ -80,6 +80,8 @@ export const FinancialHealthScore: React.FC<Props> = ({
   };
 
   const getScoreLabel = (score: number) => {
+    // Don't show label if no transactions
+    if (transactionCount === 0) return '';
     if (score >= 80) return 'Excellent';
     if (score >= 60) return 'Good';
     if (score >= 40) return 'Fair';
@@ -120,7 +122,7 @@ export const FinancialHealthScore: React.FC<Props> = ({
       activeOpacity={0.8}
     >
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text }]}>Financial Health</Text>
+        <Text style={[styles.title, { color: colors.text }]}>Cash Flow Health</Text>
         <Ionicons 
           name={showDetails ? 'chevron-up' : 'chevron-down'} 
           size={20} 
@@ -143,12 +145,18 @@ export const FinancialHealthScore: React.FC<Props> = ({
           />
           
           <View style={styles.scoreContent}>
-            <Text style={[styles.scoreNumber, { color: getScoreColor(overallScore) }]}>
-              {Math.round(overallScore)}
-            </Text>
-            <Text style={[styles.scoreLabel, { color: colors.textSecondary }]}>
-              {getScoreLabel(overallScore)}
-            </Text>
+            {transactionCount === 0 ? (
+              <Text style={[styles.noDataText, { color: colors.textMuted }]}>No data yet</Text>
+            ) : (
+              <>
+                <Text style={[styles.scoreNumber, { color: getScoreColor(overallScore) }]}>
+                  {Math.round(overallScore)}
+                </Text>
+                <Text style={[styles.scoreLabel, { color: colors.textSecondary }]}>
+                  {getScoreLabel(overallScore)}
+                </Text>
+              </>
+            )}
           </View>
         </Animated.View>
 
@@ -285,6 +293,10 @@ const styles = StyleSheet.create({
   scoreLabel: {
     fontSize: 12,
     marginTop: 2,
+  },
+  noDataText: {
+    fontSize: 14,
+    textAlign: 'center',
   },
   quickStats: {
     flex: 1,

@@ -5,7 +5,7 @@ import 'react-native-url-polyfill/auto';
 import React, { useEffect } from 'react';
 import { NavigationContainer, DefaultTheme, RouteProp } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar, View, Text } from 'react-native';
 import { colors as DarkColors } from './src/theme/colors';
@@ -38,16 +38,16 @@ type RootTabParamList = {
   Transactions: undefined;
   Reports: undefined;
   AI: undefined;
-  ProfileStack: undefined;
 };
 
-type ProfileStackParamList = {
+type RootStackParamList = {
+  MainTabs: undefined;
   Profile: undefined;
   Subscription: undefined;
 };
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
-const ProfileStack = createStackNavigator<ProfileStackParamList>();
+const RootStack = createNativeStackNavigator<RootStackParamList>();
 
 function makeNavTheme(pal: typeof DarkColors) {
   return {
@@ -64,12 +64,38 @@ function makeNavTheme(pal: typeof DarkColors) {
   } as const;
 }
 
-function ProfileStackNavigator() {
+function MainTabNavigator() {
   const { colors } = useTheme();
   
   return (
-    <ProfileStack.Navigator
-      screenOptions={{
+    <Tab.Navigator
+      initialRouteName="Dashboard"
+      screenOptions={({ route }: { route: RouteProp<RootTabParamList, keyof RootTabParamList> }) => ({
+        tabBarIcon: (
+          { focused, color, size }: { focused: boolean; color: string; size: number }
+        ) => {
+          let iconName: keyof typeof Ionicons.glyphMap;
+
+          if (route.name === 'Dashboard') {
+            iconName = 'home-outline';
+          } else if (route.name === 'Transactions') {
+            iconName = 'list-outline';
+          } else if (route.name === 'Reports') {
+            iconName = 'bar-chart-outline';
+          } else if (route.name === 'AI') {
+            iconName = 'chatbubbles-outline';
+          } else {
+            iconName = 'home-outline';
+          }
+
+          return <Ionicons name={iconName} size={size} color={color} />;
+        },
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.inactive,
+        tabBarStyle: {
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
+        },
         headerStyle: {
           backgroundColor: colors.surface,
         },
@@ -77,19 +103,32 @@ function ProfileStackNavigator() {
         headerTitleStyle: {
           fontWeight: 'bold',
         },
-      }}
+      })}
     >
-      <ProfileStack.Screen 
-        name="Profile" 
-        component={ProfileScreen}
+      <Tab.Screen 
+        name="Dashboard" 
+        component={DashboardScreen}
         options={{ headerShown: false }}
       />
-      <ProfileStack.Screen 
-        name="Subscription" 
-        component={SubscriptionScreen}
+      <Tab.Screen 
+        name="Transactions" 
+        component={TransactionsScreen}
         options={{ headerShown: false }}
       />
-    </ProfileStack.Navigator>
+      <Tab.Screen 
+        name="Reports" 
+        component={ReportsScreen}
+        options={{ headerShown: false }}
+      />
+      <Tab.Screen 
+        name="AI" 
+        component={AIAccountantScreen}
+        options={{ 
+          headerShown: false,
+          tabBarLabel: 'AI',
+        }}
+      />
+    </Tab.Navigator>
   );
 }
 
@@ -102,7 +141,10 @@ function AppContainer() {
   // Hide the native splash as soon as our auth loading completes
   useEffect(() => {
     if (!loading) {
-      SplashScreen.hideAsync().catch(() => {});
+      // Add a small delay to ensure splash is visible
+      setTimeout(() => {
+        SplashScreen.hideAsync().catch(() => {});
+      }, 500);
     }
   }, [loading]);
 
@@ -110,7 +152,7 @@ function AppContainer() {
   useEffect(() => {
     const t = setTimeout(() => {
       SplashScreen.hideAsync().catch(() => {});
-    }, 1000); // Quick timeout just for native splash
+    }, 3000); // Increased timeout to ensure splash shows
     return () => clearTimeout(t);
   }, []);
 
@@ -146,77 +188,29 @@ function AppContainer() {
   return (
     <NavigationContainer theme={makeNavTheme(colors)}>
       <StatusBar barStyle={colors.background === '#FFFFFF' ? 'dark-content' : 'light-content'} backgroundColor={colors.background} />
-      <Tab.Navigator
-        initialRouteName="Dashboard"
-        screenOptions={({ route }: { route: RouteProp<RootTabParamList, keyof RootTabParamList> }) => ({
-          tabBarIcon: (
-            { focused, color, size }: { focused: boolean; color: string; size: number }
-          ) => {
-            let iconName: keyof typeof Ionicons.glyphMap;
-
-            if (route.name === 'Dashboard') {
-              iconName = 'home-outline';
-            } else if (route.name === 'Transactions') {
-              iconName = 'list-outline';
-            } else if (route.name === 'Reports') {
-              iconName = 'bar-chart-outline';
-            } else if (route.name === 'AI') {
-              iconName = 'chatbubbles-outline';
-            } else if (route.name === 'ProfileStack') {
-              iconName = 'person-outline';
-            } else {
-              iconName = 'home-outline';
-            }
-
-            return <Ionicons name={iconName} size={size} color={color} />;
-          },
-          tabBarActiveTintColor: colors.primary,
-          tabBarInactiveTintColor: colors.inactive,
-          tabBarStyle: {
-            backgroundColor: colors.surface,
-            borderTopColor: colors.border,
-          },
-          headerStyle: {
-            backgroundColor: colors.surface,
-          },
-          headerTintColor: colors.text,
-          headerTitleStyle: {
-            fontWeight: 'bold',
-          },
-        })}
+      <RootStack.Navigator
+        screenOptions={{
+          headerShown: false,
+        }}
       >
-        <Tab.Screen 
-          name="Dashboard" 
-          component={DashboardScreen}
-          options={{ headerShown: false }}
-        />
-        <Tab.Screen 
-          name="Transactions" 
-          component={TransactionsScreen}
-          options={{ headerShown: false }}
-        />
-        <Tab.Screen 
-          name="Reports" 
-          component={ReportsScreen}
-          options={{ headerShown: false }}
-        />
-        <Tab.Screen 
-          name="AI" 
-          component={AIAccountantScreen}
-          options={{ 
-            headerShown: false,
-            tabBarLabel: 'AI',
+        <RootStack.Screen name="MainTabs" component={MainTabNavigator} />
+        <RootStack.Screen 
+          name="Profile" 
+          component={ProfileScreen}
+          options={{
+            presentation: 'card',
+            animation: 'slide_from_right',
           }}
         />
-        <Tab.Screen 
-          name="ProfileStack" 
-          component={ProfileStackNavigator}
-          options={{ 
-            headerShown: false,
-            tabBarLabel: 'Profile',
+        <RootStack.Screen 
+          name="Subscription" 
+          component={SubscriptionScreen}
+          options={{
+            presentation: 'card',
+            animation: 'slide_from_right',
           }}
         />
-      </Tab.Navigator>
+      </RootStack.Navigator>
     </NavigationContainer>
   );
 }
