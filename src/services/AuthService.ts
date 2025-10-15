@@ -104,7 +104,7 @@ export interface AuthContextValue {
   session: Session | null;
   user: User | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<{ success: boolean }>;
   signUp: (email: string, password: string, username?: string, phoneNumber?: string, country?: string) => Promise<void>;
   signInWithGoogle: () => Promise<GoogleAuthResult>;
   signOut: () => Promise<void>;
@@ -235,6 +235,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.warn('Failed to initialize SMS permissions:', error);
           }
         }
+        
+        return { success: true };
       } catch (error) {
         const message = (error as any)?.message || 'Authentication failed';
         throw new Error(message);

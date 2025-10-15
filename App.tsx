@@ -5,6 +5,7 @@ import 'react-native-url-polyfill/auto';
 import React, { useEffect } from 'react';
 import { NavigationContainer, DefaultTheme, RouteProp } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar, View, Text } from 'react-native';
 import { colors as DarkColors } from './src/theme/colors';
@@ -15,6 +16,8 @@ import DashboardScreen from './src/screens/DashboardScreen';
 import TransactionsScreen from './src/screens/TransactionsScreen';
 import ReportsScreen from './src/screens/ReportsScreen';
 import AIAccountantScreen from './src/screens/AIAccountantScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
+import SubscriptionScreen from './src/screens/SubscriptionScreen';
 import { AuthProvider, useAuth } from './src/services/AuthService';
 // SQLite sync removed: Supabase is the source of truth
 // import { initDB } from './src/services/Database';
@@ -35,9 +38,16 @@ type RootTabParamList = {
   Transactions: undefined;
   Reports: undefined;
   AI: undefined;
+  ProfileStack: undefined;
+};
+
+type ProfileStackParamList = {
+  Profile: undefined;
+  Subscription: undefined;
 };
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
+const ProfileStack = createStackNavigator<ProfileStackParamList>();
 
 function makeNavTheme(pal: typeof DarkColors) {
   return {
@@ -52,6 +62,35 @@ function makeNavTheme(pal: typeof DarkColors) {
       notification: pal.primary,
     },
   } as const;
+}
+
+function ProfileStackNavigator() {
+  const { colors } = useTheme();
+  
+  return (
+    <ProfileStack.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: colors.surface,
+        },
+        headerTintColor: colors.text,
+        headerTitleStyle: {
+          fontWeight: 'bold',
+        },
+      }}
+    >
+      <ProfileStack.Screen 
+        name="Profile" 
+        component={ProfileScreen}
+        options={{ headerShown: false }}
+      />
+      <ProfileStack.Screen 
+        name="Subscription" 
+        component={SubscriptionScreen}
+        options={{ headerShown: false }}
+      />
+    </ProfileStack.Navigator>
+  );
 }
 
 function AppContainer() {
@@ -123,6 +162,8 @@ function AppContainer() {
               iconName = 'bar-chart-outline';
             } else if (route.name === 'AI') {
               iconName = 'chatbubbles-outline';
+            } else if (route.name === 'ProfileStack') {
+              iconName = 'person-outline';
             } else {
               iconName = 'home-outline';
             }
@@ -165,6 +206,14 @@ function AppContainer() {
           options={{ 
             headerShown: false,
             tabBarLabel: 'AI',
+          }}
+        />
+        <Tab.Screen 
+          name="ProfileStack" 
+          component={ProfileStackNavigator}
+          options={{ 
+            headerShown: false,
+            tabBarLabel: 'Profile',
           }}
         />
       </Tab.Navigator>

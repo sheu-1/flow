@@ -4,10 +4,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { spacing, fontSize, borderRadius } from '../theme/colors';
 import { useThemeColors } from '../theme/ThemeProvider';
 import { useAuth } from '../hooks/useAuth';
+import { useNavigation } from '@react-navigation/native';
 
 export default function ProfileScreen() {
   const colors = useThemeColors();
   const { user, signOut } = useAuth();
+  const navigation = useNavigation();
 
   const handleSignOut = () => {
     Alert.alert(
@@ -68,6 +70,15 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Account Actions</Text>
           
+          <TouchableOpacity 
+            style={[styles.actionItem, { backgroundColor: colors.surface }]}
+            onPress={() => (navigation as any).navigate('Subscription')}
+          >
+            <Ionicons name="card-outline" size={20} color={colors.primary} style={styles.actionIcon} />
+            <Text style={[styles.actionText, { color: colors.text }]}>Subscription Plans</Text>
+            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+
           <TouchableOpacity 
             style={[styles.actionItem, { backgroundColor: colors.surface }]}
             onPress={() => Alert.alert('Coming Soon', 'Profile editing will be available in a future update.')}
