@@ -199,7 +199,7 @@ export default function ReportsScreen() {
             selectedPeriod={period}
             onPeriodChange={setPeriod}
             onOpenDetailedSelector={() => setShowDetailedPeriodSelector(true)}
-            removeMargin={false}
+            removeMargin
           />
         </View>
         

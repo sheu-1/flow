@@ -322,6 +322,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
   },
   stickyPeriodSelector: {
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
