@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { spacing, fontSize, borderRadius } from '../theme/colors';
 import { useThemeColors } from '../theme/ThemeProvider';
 import { useNavigation } from '@react-navigation/native';
+import { useAuth } from '../hooks/useAuth';
+import { initializePaystackPayment } from '../services/PaystackService';
 
-type SubscriptionPlan = 'free' | 'monthly' | 'yearly';
+type SubscriptionPlan = 'free' | 'daily' | 'monthly' | 'yearly';
 
 interface PlanCardProps {
   title: string;
@@ -94,25 +96,69 @@ const PlanCard: React.FC<PlanCardProps> = ({
 export default function SubscriptionScreen() {
   const colors = useThemeColors();
   const navigation = useNavigation();
+  const { user } = useAuth();
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>('free');
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const handleClose = () => {
     navigation.goBack();
   };
 
-  const handleSubscribe = () => {
+  const handleSubscribe = async () => {
     if (selectedPlan === 'free') {
       Alert.alert(
         'Free Trial',
         'You are already on the free trial. Enjoy all basic features!',
         [{ text: 'OK' }]
       );
-    } else {
+      return;
+    }
+
+    if (!user?.email) {
+      Alert.alert('Error', 'Please log in to subscribe');
+      return;
+    }
+
+    setIsProcessing(true);
+
+    try {
+      // Get plan details
+      const plan = plans.find(p => p.id === selectedPlan);
+      if (!plan) throw new Error('Plan not found');
+
+      // Convert price to kobo (Paystack uses smallest currency unit)
+      const amountInKobo = parseFloat(plan.price.replace('$', '')) * 100;
+
+      // Initialize Paystack payment
+      const result = await initializePaystackPayment({
+        email: user.email,
+        amount: amountInKobo,
+        plan: selectedPlan,
+        userId: user.id,
+      });
+
+      if (result.success) {
+        Alert.alert(
+          'Payment Successful!',
+          `You have successfully subscribed to the ${plan.title}.`,
+          [
+            {
+              text: 'OK',
+              onPress: () => navigation.goBack(),
+            },
+          ]
+        );
+      } else {
+        Alert.alert('Payment Failed', result.message || 'Please try again.');
+      }
+    } catch (error: any) {
+      console.error('Subscription error:', error);
       Alert.alert(
-        'Coming Soon',
-        `Payment integration for the ${selectedPlan === 'monthly' ? 'Monthly' : 'Yearly'} plan will be available soon. Stay tuned!`,
-        [{ text: 'OK' }]
+        'Error',
+        error.message || 'Failed to process payment. Please try again.'
       );
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -132,32 +178,47 @@ export default function SubscriptionScreen() {
       isPopular: false,
     },
     {
+      id: 'daily' as SubscriptionPlan,
+      title: 'Daily Plan',
+      price: '$0.50',
+      period: 'day',
+      features: [
+        'Everything in Free Trial',
+        'SMS auto-import',
+        'Real-time updates',
+        'Advanced analytics',
+        'Priority support',
+        'Perfect for testing premium features',
+      ],
+      isPopular: true,
+    },
+    {
       id: 'monthly' as SubscriptionPlan,
       title: 'Monthly Plan',
       price: '$1',
       period: 'month',
       features: [
-        'Everything in Free Trial',
-        'SMS auto-import',
-        'Advanced analytics',
+        'Everything in Daily Plan',
         'AI-powered insights',
         'Export data',
-        'Priority support',
+        'Custom categories',
+        'Save 33% vs daily',
+        'Best value for regular users',
       ],
-      isPopular: true,
+      isPopular: false,
     },
     {
       id: 'yearly' as SubscriptionPlan,
       title: 'Yearly Plan',
-      price: '$12',
+      price: '$10',
       period: 'year',
       features: [
         'Everything in Monthly Plan',
-        'Save $0 per year',
+        'Save 17% per year',
         'Early access to new features',
-        'Custom categories',
         'Data backup & sync',
         'Premium support',
+        'Lifetime updates',
       ],
       isPopular: false,
     },
@@ -200,12 +261,21 @@ export default function SubscriptionScreen() {
 
         <View style={styles.footer}>
           <TouchableOpacity
-            style={[styles.subscribeButton, { backgroundColor: colors.primary }]}
+            style={[
+              styles.subscribeButton, 
+              { backgroundColor: colors.primary },
+              isProcessing && { opacity: 0.6 }
+            ]}
             onPress={handleSubscribe}
+            disabled={isProcessing}
           >
-            <Text style={styles.subscribeButtonText}>
-              {selectedPlan === 'free' ? 'Continue with Free Trial' : 'Subscribe Now'}
-            </Text>
+            {isProcessing ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.subscribeButtonText}>
+                {selectedPlan === 'free' ? 'Continue with Free Trial' : 'Subscribe Now'}
+              </Text>
+            )}
           </TouchableOpacity>
 
           <Text style={[styles.footerNote, { color: colors.textMuted }]}>

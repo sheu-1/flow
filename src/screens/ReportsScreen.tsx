@@ -118,26 +118,38 @@ export default function ReportsScreen() {
   }, [categories, categoryView]);
 
   // Compute summary stats from the current series over the selected range
-  // Min = lowest positive transaction (x > 0), Max = highest transaction
+  // Min = lowest positive transaction (x > 0), Max = highest positive transaction
   const incomeStats = useMemo(() => {
     const arr = series.income || [];
-    const valid = arr.filter((n) => Number.isFinite(n)); // include zeros for accurate DB-derived stats
-    const sum = valid.reduce((a, b) => a + b, 0);
-    const avg = valid.length ? sum / valid.length : 0;
-    const positiveValues = valid.filter((n) => n > 0);
+    // Filter out non-finite values, zeros, and nulls
+    const positiveValues = arr.filter((n) => Number.isFinite(n) && n > 0);
+    
+    // For sum and avg, include all valid values (including zeros)
+    const validForSum = arr.filter((n) => Number.isFinite(n));
+    const sum = validForSum.reduce((a, b) => a + b, 0);
+    const avg = validForSum.length ? sum / validForSum.length : 0;
+    
+    // Min and Max only consider actual positive transactions
     const min = positiveValues.length ? Math.min(...positiveValues) : 0;
-    const max = valid.length ? Math.max(...valid) : 0;
+    const max = positiveValues.length ? Math.max(...positiveValues) : 0;
+    
     return { sum, avg, min, max };
   }, [series.income]);
 
   const expenseStats = useMemo(() => {
     const arr = series.expense || [];
-    const valid = arr.filter((n) => Number.isFinite(n));
-    const sum = valid.reduce((a, b) => a + b, 0);
-    const avg = valid.length ? sum / valid.length : 0;
-    const positiveValues = valid.filter((n) => n > 0);
+    // Filter out non-finite values, zeros, and nulls
+    const positiveValues = arr.filter((n) => Number.isFinite(n) && n > 0);
+    
+    // For sum and avg, include all valid values (including zeros)
+    const validForSum = arr.filter((n) => Number.isFinite(n));
+    const sum = validForSum.reduce((a, b) => a + b, 0);
+    const avg = validForSum.length ? sum / validForSum.length : 0;
+    
+    // Min and Max only consider actual positive transactions
     const min = positiveValues.length ? Math.min(...positiveValues) : 0;
-    const max = valid.length ? Math.max(...valid) : 0;
+    const max = positiveValues.length ? Math.max(...positiveValues) : 0;
+    
     return { sum, avg, min, max };
   }, [series.expense]);
 

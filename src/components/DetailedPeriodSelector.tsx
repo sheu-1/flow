@@ -1,8 +1,8 @@
 /**
  * DetailedPeriodSelector Component
  * 
- * Full-screen modal with all period options including custom date ranges.
- * This is the detailed period selection page that opens when the caret is tapped.
+ * Compact dropdown with month-based period options and custom date range picker.
+ * Opens as a small dropdown when the caret is tapped.
  */
 
 import React, { useState } from 'react';
@@ -12,13 +12,13 @@ import {
   StyleSheet,
   TouchableOpacity,
   Modal,
-  ScrollView,
-  TextInput,
+  Platform,
+  Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useThemeColors } from '../theme/ThemeProvider';
 import { PresetRange } from '../hooks/useDateFilter';
-import { parseDateString } from '../utils/dateFilter';
 import { spacing, fontSize, borderRadius } from '../theme/colors';
 
 interface DetailedPeriodSelectorProps {
@@ -30,21 +30,24 @@ interface DetailedPeriodSelectorProps {
   onReset: () => void;
 }
 
-const presetOptions: { key: PresetRange; label: string }[] = [
-  { key: 'today', label: 'Today' },
-  { key: 'yesterday', label: 'Yesterday' },
-  { key: 'last7Days', label: 'Last 7 Days' },
-  { key: 'thisWeek', label: 'This Week' },
-  { key: 'lastWeek', label: 'Last Week' },
-  { key: 'last30Days', label: 'Last 30 Days' },
-  { key: 'thisMonth', label: 'This Month' },
-  { key: 'lastMonth', label: 'Last Month' },
-  { key: 'last90Days', label: 'Last 90 Days' },
-  { key: 'thisYear', label: 'This Year' },
-  { key: 'lastYear', label: 'Last Year' },
-  { key: 'allTime', label: 'All Time' },
-  { key: 'custom', label: 'Custom Range' },
+// New simplified month-based options
+type MonthOption = '3months' | '6months' | '9months' | '12months' | 'custom';
+
+const monthOptions: { key: MonthOption; label: string; preset?: PresetRange }[] = [
+  { key: '3months', label: '3 Months', preset: 'last90Days' },
+  { key: '6months', label: '6 Months', preset: 'last90Days' }, // Will calculate 6 months
+  { key: '9months', label: '9 Months', preset: 'last90Days' }, // Will calculate 9 months
+  { key: '12months', label: '12 Months', preset: 'thisYear' },
+  { key: 'custom', label: 'Custom' },
 ];
+
+// Helper to calculate date range for months
+const getMonthsRange = (months: number): { start: Date; end: Date } => {
+  const end = new Date();
+  const start = new Date();
+  start.setMonth(start.getMonth() - months);
+  return { start, end };
+};
 
 export const DetailedPeriodSelector: React.FC<DetailedPeriodSelectorProps> = ({
   visible,
@@ -55,256 +58,275 @@ export const DetailedPeriodSelector: React.FC<DetailedPeriodSelectorProps> = ({
   onReset,
 }) => {
   const colors = useThemeColors();
-  const [showCustomInput, setShowCustomInput] = useState(false);
-  const [startDateInput, setStartDateInput] = useState('');
-  const [endDateInput, setEndDateInput] = useState('');
-  const [error, setError] = useState('');
+  const [showCustomPicker, setShowCustomPicker] = useState(false);
+  const [selectedOption, setSelectedOption] = useState<MonthOption>('3months');
+  const [customStartDate, setCustomStartDate] = useState(new Date());
+  const [customEndDate, setCustomEndDate] = useState(new Date());
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
 
-  const handlePresetSelect = (preset: PresetRange) => {
-    if (preset === 'custom') {
-      setShowCustomInput(true);
-      setError('');
+  const handleOptionSelect = (option: MonthOption) => {
+    setSelectedOption(option);
+    
+    if (option === 'custom') {
+      setShowCustomPicker(true);
     } else {
-      onPresetSelect(preset);
+      // Calculate date range based on months
+      let months = 3;
+      if (option === '6months') months = 6;
+      else if (option === '9months') months = 9;
+      else if (option === '12months') months = 12;
+      
+      const { start, end } = getMonthsRange(months);
+      onCustomRangeSelect(start, end);
       onClose();
-      setShowCustomInput(false);
     }
   };
 
-  const handleCustomSubmit = () => {
-    const startDate = parseDateString(startDateInput);
-    const endDate = parseDateString(endDateInput);
-
-    if (!startDate || !endDate) {
-      setError('Invalid date format. Use YYYY-MM-DD');
-      return;
+  const handleCustomApply = () => {
+    if (customStartDate > customEndDate) {
+      // Swap dates if start is after end
+      onCustomRangeSelect(customEndDate, customStartDate);
+    } else {
+      onCustomRangeSelect(customStartDate, customEndDate);
     }
-
-    if (startDate > endDate) {
-      setError('Start date must be before end date');
-      return;
-    }
-
-    onCustomRangeSelect(startDate, endDate);
+    setShowCustomPicker(false);
     onClose();
-    setShowCustomInput(false);
-    setStartDateInput('');
-    setEndDateInput('');
-    setError('');
   };
 
   const handleClose = () => {
-    setShowCustomInput(false);
-    setError('');
+    setShowCustomPicker(false);
     onClose();
   };
 
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={handleClose}
-    >
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <Text style={[styles.title, { color: colors.text }]}>
-            {showCustomInput ? 'Custom Date Range' : 'Select Period'}
-          </Text>
-          <TouchableOpacity onPress={handleClose}>
-            <Ionicons name="close" size={24} color={colors.text} />
-          </TouchableOpacity>
-        </View>
+  // Custom date picker modal
+  if (showCustomPicker) {
+    return (
+      <Modal
+        visible={visible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleClose}
+      >
+        <Pressable style={styles.overlay} onPress={handleClose}>
+          <Pressable style={[styles.customPickerContainer, { backgroundColor: colors.surface }]} onPress={(e) => e.stopPropagation()}>
+            <View style={[styles.pickerHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.pickerTitle, { color: colors.text }]}>Select Date Range</Text>
+              <TouchableOpacity onPress={handleClose}>
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
 
-        <ScrollView style={styles.content}>
-          {!showCustomInput ? (
-            <>
-              {presetOptions.map((option) => (
+            <View style={styles.datePickerContent}>
+              {/* Start Date */}
+              <View style={styles.dateSection}>
+                <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>Start Date</Text>
                 <TouchableOpacity
-                  key={option.key}
-                  style={[
-                    styles.option,
-                    {
-                      backgroundColor:
-                        selectedPreset === option.key ? colors.primary + '15' : 'transparent',
-                      borderBottomColor: colors.border,
-                    },
-                  ]}
-                  onPress={() => handlePresetSelect(option.key)}
+                  style={[styles.dateButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+                  onPress={() => setShowStartPicker(true)}
                 >
-                  <Text
-                    style={[
-                      styles.optionLabel,
-                      {
-                        color: selectedPreset === option.key ? colors.primary : colors.text,
-                        fontWeight: selectedPreset === option.key ? '600' : '400',
-                      },
-                    ]}
-                  >
-                    {option.label}
-                  </Text>
-                  {selectedPreset === option.key && (
-                    <Ionicons name="checkmark" size={20} color={colors.primary} />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </>
-          ) : (
-            <View style={styles.customInputContainer}>
-              <Text style={[styles.inputLabel, { color: colors.text }]}>Start Date</Text>
-              <TextInput
-                style={[
-                  styles.dateInput,
-                  { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border },
-                ]}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={colors.textMuted}
-                value={startDateInput}
-                onChangeText={setStartDateInput}
-              />
-
-              <Text style={[styles.inputLabel, { color: colors.text }]}>End Date</Text>
-              <TextInput
-                style={[
-                  styles.dateInput,
-                  { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border },
-                ]}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={colors.textMuted}
-                value={endDateInput}
-                onChangeText={setEndDateInput}
-              />
-
-              {error ? (
-                <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>
-              ) : null}
-
-              <View style={styles.customButtonsContainer}>
-                <TouchableOpacity
-                  style={[styles.customButton, { backgroundColor: colors.surface }]}
-                  onPress={() => {
-                    setShowCustomInput(false);
-                    setError('');
-                  }}
-                >
-                  <Text style={[styles.customButtonText, { color: colors.text }]}>
-                    Back
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.customButton, styles.customButtonPrimary, { backgroundColor: colors.primary }]}
-                  onPress={handleCustomSubmit}
-                >
-                  <Text style={[styles.customButtonText, { color: colors.background }]}>
-                    Apply
+                  <Ionicons name="calendar-outline" size={20} color={colors.primary} />
+                  <Text style={[styles.dateButtonText, { color: colors.text }]}>
+                    {customStartDate.toLocaleDateString()}
                   </Text>
                 </TouchableOpacity>
               </View>
-            </View>
-          )}
-        </ScrollView>
 
-        {!showCustomInput && selectedPreset !== 'allTime' && (
-          <View style={[styles.footer, { borderTopColor: colors.border }]}>
-            <TouchableOpacity
-              style={[styles.resetButton, { backgroundColor: colors.surface }]}
-              onPress={() => {
-                onReset();
-                onClose();
-              }}
-            >
-              <Ionicons name="refresh" size={18} color={colors.text} />
-              <Text style={[styles.resetButtonText, { color: colors.text }]}>
-                Reset to All Time
-              </Text>
-            </TouchableOpacity>
+              {/* End Date */}
+              <View style={styles.dateSection}>
+                <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>End Date</Text>
+                <TouchableOpacity
+                  style={[styles.dateButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+                  onPress={() => setShowEndPicker(true)}
+                >
+                  <Ionicons name="calendar-outline" size={20} color={colors.primary} />
+                  <Text style={[styles.dateButtonText, { color: colors.text }]}>
+                    {customEndDate.toLocaleDateString()}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Apply Button */}
+              <TouchableOpacity
+                style={[styles.applyButton, { backgroundColor: colors.primary }]}
+                onPress={handleCustomApply}
+              >
+                <Text style={styles.applyButtonText}>Apply Date Range</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Date Pickers */}
+            {showStartPicker && (
+              <DateTimePicker
+                value={customStartDate}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={(event, date) => {
+                  setShowStartPicker(Platform.OS === 'ios');
+                  if (date) setCustomStartDate(date);
+                }}
+                maximumDate={new Date()}
+              />
+            )}
+            {showEndPicker && (
+              <DateTimePicker
+                value={customEndDate}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={(event, date) => {
+                  setShowEndPicker(Platform.OS === 'ios');
+                  if (date) setCustomEndDate(date);
+                }}
+                maximumDate={new Date()}
+              />
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+    );
+  }
+
+  // Main dropdown
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={handleClose}
+    >
+      <Pressable style={styles.overlay} onPress={handleClose}>
+        <Pressable style={[styles.dropdownContainer, { backgroundColor: colors.surface }]} onPress={(e) => e.stopPropagation()}>
+          <View style={[styles.dropdownHeader, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.dropdownTitle, { color: colors.text }]}>Select Period</Text>
           </View>
-        )}
-      </View>
+          
+          {monthOptions.map((option) => (
+            <TouchableOpacity
+              key={option.key}
+              style={[
+                styles.dropdownOption,
+                {
+                  backgroundColor: selectedOption === option.key ? colors.primary + '15' : 'transparent',
+                  borderBottomColor: colors.border,
+                },
+              ]}
+              onPress={() => handleOptionSelect(option.key)}
+            >
+              <Text
+                style={[
+                  styles.dropdownOptionText,
+                  {
+                    color: selectedOption === option.key ? colors.primary : colors.text,
+                    fontWeight: selectedOption === option.key ? '600' : '400',
+                  },
+                ]}
+              >
+                {option.label}
+              </Text>
+              {selectedOption === option.key && (
+                <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+              )}
+            </TouchableOpacity>
+          ))}
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  overlay: {
     flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: spacing.lg,
-    borderBottomWidth: 1,
-  },
-  title: {
-    fontSize: fontSize.xl,
-    fontWeight: 'bold',
-  },
-  content: {
-    flex: 1,
-  },
-  option: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-  },
-  optionLabel: {
-    fontSize: fontSize.md,
-  },
-  customInputContainer: {
-    padding: spacing.lg,
-  },
-  inputLabel: {
-    fontSize: fontSize.md,
-    fontWeight: '600',
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  dateInput: {
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    fontSize: fontSize.md,
-    borderWidth: 1,
-  },
-  errorText: {
-    fontSize: fontSize.sm,
-    marginTop: spacing.sm,
-  },
-  customButtonsContainer: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    marginTop: spacing.xl,
-  },
-  customButton: {
-    flex: 1,
-    paddingVertical: spacing.md,
-    borderRadius: borderRadius.md,
-    alignItems: 'center',
-  },
-  customButtonPrimary: {
-    flex: 2,
-  },
-  customButtonText: {
-    fontSize: fontSize.md,
-    fontWeight: '600',
-  },
-  footer: {
-    padding: spacing.lg,
-    borderTopWidth: 1,
-  },
-  resetButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dropdownContainer: {
+    width: 240,
+    borderRadius: borderRadius.lg,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  dropdownHeader: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+  },
+  dropdownTitle: {
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  dropdownOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
+    borderBottomWidth: 0.5,
+  },
+  dropdownOptionText: {
+    fontSize: fontSize.md,
+  },
+  customPickerContainer: {
+    width: '85%',
+    maxWidth: 400,
+    borderRadius: borderRadius.lg,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: spacing.lg,
+    borderBottomWidth: 1,
+  },
+  pickerTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: '700',
+  },
+  datePickerContent: {
+    padding: spacing.lg,
+  },
+  dateSection: {
+    marginBottom: spacing.lg,
+  },
+  dateLabel: {
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    marginBottom: spacing.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  dateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
     borderRadius: borderRadius.md,
+    borderWidth: 1,
     gap: spacing.sm,
   },
-  resetButtonText: {
+  dateButtonText: {
     fontSize: fontSize.md,
-    fontWeight: '600',
+    fontWeight: '500',
+  },
+  applyButton: {
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    marginTop: spacing.md,
+  },
+  applyButtonText: {
+    color: '#FFFFFF',
+    fontSize: fontSize.md,
+    fontWeight: '700',
   },
 });
