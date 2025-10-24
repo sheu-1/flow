@@ -168,10 +168,45 @@ export default function ReportsScreen() {
     return statsView === 'income' ? incomeStats : expenseStats;
   }, [statsView, incomeStats, expenseStats]);
 
-  // Calculate transaction count for the current period
-  const transactionCount = useMemo(() => {
-    return filteredTransactions.length;
-  }, [filteredTransactions]);
+  // Calculate transaction count based on selected period
+  const calculatePeriodTransactionCount = useCallback(() => {
+    const now = new Date();
+    let startDate: Date;
+    let endDate: Date;
+
+    switch (period) {
+      case 'daily':
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        endDate = new Date(startDate);
+        endDate.setDate(endDate.getDate() + 1);
+        break;
+      case 'weekly':
+        const offset = now.getDay();
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset, 0, 0, 0, 0);
+        endDate = new Date(startDate);
+        endDate.setDate(endDate.getDate() + 7);
+        break;
+      case 'monthly':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        break;
+      case 'yearly':
+        startDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+        endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+        break;
+      default:
+        startDate = new Date(0);
+        endDate = now;
+    }
+
+    return filteredTransactions.filter(t => {
+      const txDate = new Date(t.date);
+      return txDate >= startDate && txDate <= endDate;
+    }).length;
+  }, [period, filteredTransactions]);
+
+  // Replace the existing transactionCount calculation with:
+  const transactionCount = calculatePeriodTransactionCount();
 
   // Calculate dynamic period total based on selected view
   const periodTotal = useMemo(() => {

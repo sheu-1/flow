@@ -190,8 +190,49 @@ export default function DashboardScreen() {
   const recentTransactions = filteredTransactions.slice(0, 5);
   
   // Calculate additional metrics for animated circles
-  const transactionCount = filteredTransactions.length;
-  const avgTransaction = transactionCount > 0 ? (moneyIn + moneyOut) / transactionCount : 0;
+  // Compute start/end for the selected period (relative to "now")
+  const computePeriodBounds = (period: 'daily' | 'weekly' | 'monthly' | 'yearly') => {
+    const now = new Date();
+    let startDate: Date;
+    let endDate: Date;
+    switch (period) {
+      case 'daily':
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        endDate = new Date(startDate);
+        endDate.setDate(endDate.getDate() + 1);
+        break;
+      case 'weekly': {
+        const offset = now.getDay(); // week starts Sunday
+        const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        weekStart.setDate(weekStart.getDate() - offset);
+        startDate = weekStart;
+        endDate = new Date(startDate);
+        endDate.setDate(endDate.getDate() + 7);
+        break;
+      }
+      case 'monthly':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0);
+        break;
+      case 'yearly':
+        startDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+        endDate = new Date(now.getFullYear() + 1, 0, 1, 0, 0, 0, 0);
+        break;
+      default:
+        startDate = new Date(0);
+        endDate = new Date();
+    }
+    return { startDate, endDate };
+  };
+
+  const { startDate, endDate } = computePeriodBounds(selectedPeriod);
+  // Count transactions that fall within the selected period bounds
+  const transactionCount = filteredTransactions.filter(t => {
+    const d = new Date(t.date);
+    return d >= startDate && d < endDate;
+  }).length;
+
+  const avgTransaction = transactionCount > 0 ? (Math.abs(moneyIn) + Math.abs(moneyOut)) / transactionCount : 0;
   const maxAmount = Math.max(moneyIn, moneyOut);
 
   const displayName = user?.user_metadata?.username || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User';
