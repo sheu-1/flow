@@ -9,7 +9,6 @@ import { useAuth } from '../hooks/useAuth';
 import { AggregatePeriod } from '../types';
 import { getAggregatesByPeriod, getCategoriesBreakdown } from '../services/TransactionService';
 import { Dimensions } from 'react-native';
-import { MoneyCard } from '../components/MoneyCard';
 import { SimplePieChart } from '../components/SimplePieChart';
 import { UnifiedPeriodSelector } from '../components/UnifiedPeriodSelector';
 import { DetailedPeriodSelector } from '../components/DetailedPeriodSelector';
@@ -258,32 +257,61 @@ export default function ReportsScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Min & Max side-by-side */}
-            <View style={styles.cardRow}>
-              <MoneyCard 
-                title={`${statsView === 'income' ? 'Money In' : 'Money Out'} • Min`} 
-                amount={currentStats.min} 
-                type={statsView === 'income' ? 'in' : 'out'} 
-                period={period} 
-                icon="trending-down-outline" 
-              />
-              <MoneyCard 
-                title={`${statsView === 'income' ? 'Money In' : 'Money Out'} • Max`} 
-                amount={currentStats.max} 
-                type={statsView === 'income' ? 'in' : 'out'} 
-                period={period} 
-                icon="trending-up-outline" 
-              />
-            </View>
-            {/* Avg full-width */}
-            <View style={styles.cardRowSingle}>
-              <MoneyCard 
-                title={`${statsView === 'income' ? 'Money In' : 'Money Out'} • Avg`} 
-                amount={currentStats.avg} 
-                type={statsView === 'income' ? 'in' : 'out'} 
-                period={period} 
-                icon="speedometer-outline" 
-              />
+            {/* Circular Stats Cards */}
+            <View style={styles.circularStatsContainer}>
+              {/* Min */}
+              <Animated.View 
+                entering={FadeInUp.delay(50).springify()}
+                style={[styles.circularCard, { backgroundColor: colors.surface }]}
+              >
+                <View style={[styles.circularCardInner, { borderColor: statsView === 'income' ? colors.success : colors.danger }]}>
+                  <Ionicons 
+                    name="trending-down-outline" 
+                    size={28} 
+                    color={statsView === 'income' ? colors.success : colors.danger} 
+                  />
+                  <Text style={[styles.circularCardLabel, { color: colors.textSecondary }]}>Min</Text>
+                  <Text style={[styles.circularCardAmount, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>
+                    {formatCurrency(currentStats.min)}
+                  </Text>
+                </View>
+              </Animated.View>
+
+              {/* Avg */}
+              <Animated.View 
+                entering={FadeInUp.delay(100).springify()}
+                style={[styles.circularCard, { backgroundColor: colors.surface }]}
+              >
+                <View style={[styles.circularCardInner, { borderColor: statsView === 'income' ? colors.success : colors.danger }]}>
+                  <Ionicons 
+                    name="speedometer-outline" 
+                    size={28} 
+                    color={statsView === 'income' ? colors.success : colors.danger} 
+                  />
+                  <Text style={[styles.circularCardLabel, { color: colors.textSecondary }]}>Avg</Text>
+                  <Text style={[styles.circularCardAmount, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>
+                    {formatCurrency(currentStats.avg)}
+                  </Text>
+                </View>
+              </Animated.View>
+
+              {/* Max */}
+              <Animated.View 
+                entering={FadeInUp.delay(150).springify()}
+                style={[styles.circularCard, { backgroundColor: colors.surface }]}
+              >
+                <View style={[styles.circularCardInner, { borderColor: statsView === 'income' ? colors.success : colors.danger }]}>
+                  <Ionicons 
+                    name="trending-up-outline" 
+                    size={28} 
+                    color={statsView === 'income' ? colors.success : colors.danger} 
+                  />
+                  <Text style={[styles.circularCardLabel, { color: colors.textSecondary }]}>Max</Text>
+                  <Text style={[styles.circularCardAmount, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>
+                    {formatCurrency(currentStats.max)}
+                  </Text>
+                </View>
+              </Animated.View>
             </View>
           </View>
         ) : null}
@@ -724,5 +752,44 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 6,
     borderWidth: 1,
+  },
+  circularStatsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+    gap: spacing.sm,
+  },
+  circularCard: {
+    flex: 1,
+    aspectRatio: 1,
+    borderRadius: 1000,
+    padding: spacing.xs,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  circularCardInner: {
+    flex: 1,
+    borderRadius: 1000,
+    borderWidth: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.sm,
+  },
+  circularCardLabel: {
+    fontSize: fontSize.xs,
+    fontWeight: '600',
+    marginTop: spacing.xs,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  circularCardAmount: {
+    fontSize: fontSize.sm,
+    fontWeight: 'bold',
+    marginTop: spacing.xs / 2,
+    textAlign: 'center',
   },
 });

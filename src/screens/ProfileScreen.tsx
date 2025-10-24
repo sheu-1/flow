@@ -2,12 +2,13 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { spacing, fontSize, borderRadius } from '../theme/colors';
-import { useThemeColors } from '../theme/ThemeProvider';
+import { useThemeColors, useTheme } from '../theme/ThemeProvider';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigation } from '@react-navigation/native';
 
 export default function ProfileScreen() {
   const colors = useThemeColors();
+  const { theme, toggleTheme } = useTheme();
   const { user, signOut } = useAuth();
   const navigation = useNavigation();
 
@@ -76,6 +77,22 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Account Actions</Text>
           
+          <TouchableOpacity 
+            style={[styles.actionItem, { backgroundColor: colors.surface }]}
+            onPress={toggleTheme}
+          >
+            <Ionicons 
+              name={theme === 'dark' ? 'sunny-outline' : 'moon-outline'} 
+              size={20} 
+              color={colors.primary} 
+              style={styles.actionIcon} 
+            />
+            <Text style={[styles.actionText, { color: colors.text }]}>
+              {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+            </Text>
+            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+
           <TouchableOpacity 
             style={[styles.actionItem, { backgroundColor: colors.surface }]}
             onPress={() => (navigation as any).navigate('Subscription')}
