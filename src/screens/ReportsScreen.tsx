@@ -9,7 +9,7 @@ import { useAuth } from '../hooks/useAuth';
 import { AggregatePeriod } from '../types';
 import { getAggregatesByPeriod, getCategoriesBreakdown } from '../services/TransactionService';
 import { Dimensions } from 'react-native';
-import { SimplePieChart } from '../components/SimplePieChart';
+import { AnimatedSimplePieChart } from '../components/AnimatedSimplePieChart';
 import { AnimatedCircleMetric } from '../components/AnimatedCircleMetric';
 import { UnifiedPeriodSelector } from '../components/UnifiedPeriodSelector';
 import { DetailedPeriodSelector } from '../components/DetailedPeriodSelector';
@@ -418,7 +418,7 @@ export default function ReportsScreen() {
           <View style={{ paddingHorizontal: spacing.md }}>
             {/* Pie Chart Summary */}
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Period Overview</Text>
-            <SimplePieChart 
+            <AnimatedSimplePieChart 
               income={incomeStats.sum} 
               expense={expenseStats.sum} 
             />

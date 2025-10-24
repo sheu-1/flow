@@ -9,7 +9,7 @@ import { getTransactions, getAggregatesByPeriod } from '../services/TransactionS
 import { notificationService } from '../services/NotificationService';
 import { Transaction, AggregatePeriod } from '../types';
 import { AnimatedCircleMetric } from '../components/AnimatedCircleMetric';
-import { PieChart } from '../components/PieChart';
+import { AnimatedPieChart } from '../components/AnimatedPieChart';
 import { UnifiedPeriodSelector } from '../components/UnifiedPeriodSelector';
 import { DetailedPeriodSelector } from '../components/DetailedPeriodSelector';
 import { ProfileMenu } from '../components/ProfileMenu';
@@ -308,7 +308,7 @@ export default function DashboardScreen() {
           </View>
         </Animated.View>
 
-        <PieChart moneyIn={moneyIn} moneyOut={moneyOut} />
+        <AnimatedPieChart moneyIn={moneyIn} moneyOut={moneyOut} />
 
         {/* Financial Health Score */}
         <FinancialHealthScore
