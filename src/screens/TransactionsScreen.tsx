@@ -22,7 +22,9 @@ import { useAuth } from '../hooks/useAuth';
 import { getTransactions, createTransaction, updateTransaction, invalidateUserCaches } from '../services/TransactionService';
 import { useRealtimeTransactions } from '../hooks/useRealtimeTransactions';
 
-export default function TransactionsScreen() {
+const ITEMS_PER_PAGE = 100;
+
+function TransactionsScreen() {
   const colors = useThemeColors();
   const { user } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -31,12 +33,15 @@ export default function TransactionsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
   const [selectedTxId, setSelectedTxId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalTransactions, setTotalTransactions] = useState(0);
 
-  const refresh = useCallback(async (showLoading = true) => {
+  const refresh = useCallback(async (showLoading = true, page = currentPage) => {
     if (!user?.id) return;
     if (showLoading) setLoading(true);
     try {
-      const rows = await getTransactions(user.id, { limit: 200 });
+      const offset = (page - 1) * ITEMS_PER_PAGE;
+      const rows = await getTransactions(user.id, { limit: ITEMS_PER_PAGE, offset });
       const mapped: Transaction[] = rows.map((r) => ({
         ...r,
         date: new Date(r.date),
@@ -45,16 +50,29 @@ export default function TransactionsScreen() {
         sender: r.sender || undefined,
       }));
       setTransactions(mapped);
+      
+      // Get total count for pagination (approximate)
+      if (page === 1) {
+        // Fetch a larger set to estimate total
+        const allRows = await getTransactions(user.id, { limit: 1000 });
+        setTotalTransactions(allRows.length);
+      }
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Failed to load transactions');
     } finally {
       if (showLoading) setLoading(false);
       setRefreshing(false);
     }
-  }, [user?.id]);
+  }, [user?.id, currentPage]);
 
   React.useEffect(() => {
-    refresh();
+    refresh(true, currentPage);
+  }, [currentPage]);
+
+  React.useEffect(() => {
+    if (currentPage === 1) {
+      refresh();
+    }
   }, [refresh]);
 
   // Realtime updates
@@ -103,6 +121,22 @@ export default function TransactionsScreen() {
     (a, b) => new Date(b.date as any).getTime() - new Date(a.date as any).getTime()
   );
 
+  const totalPages = Math.ceil(totalTransactions / ITEMS_PER_PAGE);
+  const hasNextPage = currentPage < totalPages;
+  const hasPrevPage = currentPage > 1;
+
+  const handleNextPage = () => {
+    if (hasNextPage) {
+      setCurrentPage(prev => prev + 1);
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (hasPrevPage) {
+      setCurrentPage(prev => prev - 1);
+    }
+  };
+
   const onEditCategory = (tx: Transaction) => {
     setSelectedTxId(tx.id);
     setCategoryPickerVisible(true);
@@ -146,16 +180,56 @@ export default function TransactionsScreen() {
           <ActivityIndicator color={colors.primary} />
         </View>
       ) : sortedTransactions.length > 0 ? (
-        <FlatList
-          data={sortedTransactions}
-          renderItem={renderTransaction}
-          keyExtractor={(item) => item.id}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.listContainer}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
-          }
-        />
+        <>
+          <FlatList
+            data={sortedTransactions}
+            renderItem={renderTransaction}
+            keyExtractor={(item) => item.id}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.listContainer}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
+            }
+          />
+          
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <View style={[styles.paginationContainer, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
+              <TouchableOpacity
+                style={[styles.paginationButton, !hasPrevPage && styles.paginationButtonDisabled]}
+                onPress={handlePrevPage}
+                disabled={!hasPrevPage}
+              >
+                <Ionicons 
+                  name="chevron-back" 
+                  size={24} 
+                  color={hasPrevPage ? colors.primary : colors.textMuted} 
+                />
+              </TouchableOpacity>
+              
+              <View style={styles.paginationInfo}>
+                <Text style={[styles.paginationText, { color: colors.text }]}>
+                  Page {currentPage} of {totalPages}
+                </Text>
+                <Text style={[styles.paginationSubtext, { color: colors.textSecondary }]}>
+                  {(currentPage - 1) * ITEMS_PER_PAGE + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, totalTransactions)} of {totalTransactions}
+                </Text>
+              </View>
+              
+              <TouchableOpacity
+                style={[styles.paginationButton, !hasNextPage && styles.paginationButtonDisabled]}
+                onPress={handleNextPage}
+                disabled={!hasNextPage}
+              >
+                <Ionicons 
+                  name="chevron-forward" 
+                  size={24} 
+                  color={hasNextPage ? colors.primary : colors.textMuted} 
+                />
+              </TouchableOpacity>
+            </View>
+          )}
+        </>
       ) : (
         <View style={styles.emptyState}>
           <Ionicons name="receipt-outline" size={64} color={colors.textMuted} />
@@ -186,7 +260,9 @@ export default function TransactionsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: {
+    flex: 1,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -195,7 +271,10 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
   },
-  title: { fontSize: fontSize.xl, fontWeight: 'bold' },
+  title: {
+    fontSize: fontSize.xl,
+    fontWeight: 'bold',
+  },
   addButton: {
     width: 40,
     height: 40,
@@ -203,13 +282,52 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  listContainer: { paddingBottom: spacing.lg, paddingTop: spacing.sm },
+  listContainer: {
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.xs,
+  },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
   },
-  emptyTitle: { fontSize: fontSize.lg, fontWeight: '600', marginTop: spacing.md, marginBottom: spacing.sm },
-  emptySubtitle: { fontSize: fontSize.md, textAlign: 'center', lineHeight: 22 },
+  emptyTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: '600',
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  emptySubtitle: {
+    fontSize: fontSize.sm,
+    textAlign: 'center',
+  },
+  paginationContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    borderTopWidth: 1,
+  },
+  paginationButton: {
+    padding: spacing.sm,
+    borderRadius: 8,
+  },
+  paginationButtonDisabled: {
+    opacity: 0.3,
+  },
+  paginationInfo: {
+    alignItems: 'center',
+  },
+  paginationText: {
+    fontSize: fontSize.md,
+    fontWeight: '600',
+  },
+  paginationSubtext: {
+    fontSize: fontSize.xs,
+    marginTop: 2,
+  },
 });
+
+export default TransactionsScreen;

@@ -55,10 +55,7 @@ export async function signInApi(email: string, password: string) {
 
   if (error) {
     if (error.message.includes('Invalid login credentials')) {
-      throw new Error('Incorrect email or password. If you just signed up, please verify your email first.');
-    }
-    if (error.message.includes('Email not confirmed')) {
-      throw new Error('Please verify your email address before signing in. Check your inbox for the confirmation link.');
+      throw new Error('Incorrect email or password');
     }
     throw new Error(error.message);
   }

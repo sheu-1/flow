@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -36,6 +36,7 @@ export default function DashboardScreen() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showDetailedPeriodSelector, setShowDetailedPeriodSelector] = useState(false);
+  const [filterLoading, setFilterLoading] = useState(false);
   
   // Date filtering
   const {
@@ -45,6 +46,7 @@ export default function DashboardScreen() {
     setPreset,
     setCustomRange,
     resetFilter,
+    dateRange,
   } = useDateFilter(transactions);
 
   const refresh = useCallback(async () => {
@@ -105,9 +107,17 @@ export default function DashboardScreen() {
   useRealtimeTransactions(user?.id, async () => {
     if (!user?.id) return;
     await invalidateUserCaches(user.id);
-    // Refresh without spinner for snappy UX
     refresh();
   });
+
+  // Show loading indicator when filters change
+  useEffect(() => {
+    if (dateRange || selectedPeriod) {
+      setFilterLoading(true);
+      const timer = setTimeout(() => setFilterLoading(false), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [dateRange, selectedPeriod]);
 
   useFocusEffect(
     useCallback(() => {
@@ -221,6 +231,12 @@ export default function DashboardScreen() {
             onOpenDetailedSelector={() => setShowDetailedPeriodSelector(true)}
             removeMargin
           />
+          {filterLoading && (
+            <View style={styles.filterLoadingIndicator}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={[styles.filterLoadingText, { color: colors.textSecondary }]}>Applying filters...</Text>
+            </View>
+          )}
         </View>
         
         {/* Main Content */}
@@ -331,6 +347,16 @@ const styles = StyleSheet.create({
     elevation: 6,
     // Ensure sticky header remains above content and interactive on Android
     zIndex: 1000,
+  },
+  filterLoadingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.xs,
+    gap: spacing.xs,
+  },
+  filterLoadingText: {
+    fontSize: fontSize.sm,
   },
   iconsRow: {
     flexDirection: 'row',

@@ -63,11 +63,36 @@ function initializeVertexAI(): VertexAI {
 function buildParsingPrompt(messageText: string): string {
   return `You are an expert M-Pesa transaction parser. Analyze the following M-Pesa SMS message and extract financial details.
 
-IMPORTANT RULES:
-1. If the message contains "Fuliza" (overdraft/loan fee), ONLY return the transaction cost/fee as a "fee_only" entry with the fee amount. Set the main amount to 0 and DO NOT include any other transaction details like recipient or main transaction amount.
-2. For regular transactions, extract both the transaction amount and any fees.
-3. Always return valid JSON matching the exact schema below.
-4. If you cannot parse the message, return a fee_only entry with amount 0.
+IMPORTANT CATEGORIZATION RULES:
+
+1. AIRTIME & DATA PURCHASES (Always Money Out):
+   - Keywords: "airtime", "minutes", "data", "bundles", "MB", "GB"
+   - These are ALWAYS expenses (money_out)
+   - Category: "Airtime" or "Data"
+   - Example: "You bought Ksh 50.00 of airtime" → money_out, amount: 50, category: "Airtime"
+
+2. FULIZA REPAYMENTS (Money Out):
+   - Keywords: "pay" + "Fuliza", "repay Fuliza", "used to pay your outstanding Fuliza"
+   - These are loan repayments, so money_out
+   - Category: "Fuliza Repayment"
+   - Example: "Ksh 95.33 has been used to fully pay your outstanding Fuliza" → money_out, amount: 95.33
+
+3. FULIZA OVERDRAFT ISSUANCE (Fee Only):
+   - Keywords: "Fuliza M-PESA amount is", "Access Fee charged"
+   - This is credit issuance, NOT an expense
+   - ONLY log the Access Fee as money_out
+   - Ignore the borrowed amount to prevent double entries
+   - Category: "Fuliza Fee"
+   - Example: "Fuliza M-PESA amount is Ksh 30.00. Access Fee charged Ksh 0.30" → money_out, amount: 0.30, category: "Fuliza Fee"
+
+4. CHECK CHARGES & FEES:
+   - Keywords: "transaction cost", "withdrawal fee", "check charges"
+   - These are fees, not main transactions
+   - Include as "fee" field, not main amount
+
+5. REGULAR TRANSACTIONS:
+   - Transfers, payments, withdrawals, deposits
+   - Extract both amount and any fees separately
 
 OUTPUT SCHEMA:
 {
@@ -75,7 +100,7 @@ OUTPUT SCHEMA:
   "amount": <number>,
   "fee": <number or omit if none>,
   "recipient": "<name or omit if none>",
-  "category": "<Transfer|Payment|Withdrawal|Deposit|Fuliza fee|Other>",
+  "category": "<Transfer|Payment|Withdrawal|Deposit|Airtime|Data|Fuliza Repayment|Fuliza Fee|Other>",
   "timestamp": "<ISO 8601 format or omit if not available>"
 }
 

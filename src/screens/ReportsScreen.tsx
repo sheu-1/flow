@@ -34,6 +34,7 @@ export default function ReportsScreen() {
   const [currentWeek, setCurrentWeek] = useState(0); // 0 = current week, 1 = previous week, etc.
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [showDetailedPeriodSelector, setShowDetailedPeriodSelector] = useState(false);
+  const [filterLoading, setFilterLoading] = useState(false);
   
   // Date filtering
   const {
@@ -97,6 +98,15 @@ export default function ReportsScreen() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Show loading indicator when date range changes
+  useEffect(() => {
+    if (dateRange) {
+      setFilterLoading(true);
+      const timer = setTimeout(() => setFilterLoading(false), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [dateRange]);
 
   // Realtime refresh
   useRealtimeTransactions(user?.id, async () => {
@@ -201,6 +211,12 @@ export default function ReportsScreen() {
             onOpenDetailedSelector={() => setShowDetailedPeriodSelector(true)}
             removeMargin
           />
+          {filterLoading && (
+            <View style={styles.filterLoadingIndicator}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={[styles.filterLoadingText, { color: colors.textSecondary }]}>Applying filters...</Text>
+            </View>
+          )}
         </View>
         
         {/* Main Content */}
@@ -507,6 +523,16 @@ const styles = StyleSheet.create({
     elevation: 6,
     // Ensure the sticky header stays above content and remains tappable
     zIndex: 1000,
+  },
+  filterLoadingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.xs,
+    gap: spacing.xs,
+  },
+  filterLoadingText: {
+    fontSize: fontSize.sm,
   },
   periodSelector: {
     flexDirection: 'row',

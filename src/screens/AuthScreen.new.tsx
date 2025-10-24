@@ -14,9 +14,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../theme/ThemeProvider';
-import { supabase } from '../services/SupabaseClient';
 
-type AuthMode = 'signin' | 'signup' | 'success';
+type AuthMode = 'signin' | 'signup';
 
 const AuthScreen: React.FC = () => {
   const { signIn, signUp, loading } = useAuth();
@@ -30,8 +29,6 @@ const AuthScreen: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [signupEmail, setSignupEmail] = useState<string>('');
-  const [resendingEmail, setResendingEmail] = useState(false);
 
   const validateEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -74,168 +71,28 @@ const AuthScreen: React.FC = () => {
         await signIn(email.trim(), password);
       } else {
         await signUp(email.trim(), password, username.trim());
-        // Store email for success screen
-        setSignupEmail(email.trim());
-        // Switch to success screen
-        setMode('success');
-        // Clear sensitive data
+        Alert.alert(
+          'Success!',
+          'Account created successfully. Please check your email to verify your account.',
+          [{ text: 'OK', onPress: () => setMode('signin') }]
+        );
+        // Clear form
+        setEmail('');
         setPassword('');
         setConfirmPassword('');
+        setUsername('');
       }
     } catch (e: any) {
-      // Provide more specific error messages
-      let errorMessage = e?.message || 'An error occurred. Please try again.';
-      
-      if (errorMessage.includes('already registered') || errorMessage.includes('already exists')) {
-        errorMessage = 'This email is already registered. Please sign in instead.';
-      } else if (errorMessage.includes('Invalid email')) {
-        errorMessage = 'Please enter a valid email address.';
-      } else if (errorMessage.includes('Password')) {
-        errorMessage = 'Password must be at least 6 characters long.';
-      }
-      
-      setError(errorMessage);
+      setError(e?.message || 'An error occurred. Please try again.');
     }
   };
 
   const toggleMode = () => {
-    if (mode === 'success') {
-      setMode('signin');
-    } else {
-      setMode(mode === 'signin' ? 'signup' : 'signin');
-    }
+    setMode(mode === 'signin' ? 'signup' : 'signin');
     setError(null);
     setPassword('');
     setConfirmPassword('');
   };
-
-  const handleResendEmail = async () => {
-    if (!signupEmail) return;
-    
-    setResendingEmail(true);
-    setError(null);
-    
-    try {
-      const { error } = await supabase.auth.resend({
-        type: 'signup',
-        email: signupEmail,
-      });
-      
-      if (error) throw error;
-      
-      Alert.alert(
-        'Email Sent!',
-        'A new confirmation email has been sent to your inbox.',
-        [{ text: 'OK' }]
-      );
-    } catch (e: any) {
-      setError(e?.message || 'Failed to resend email. Please try again.');
-    } finally {
-      setResendingEmail(false);
-    }
-  };
-
-  // Success screen after signup
-  if (mode === 'success') {
-    return (
-      <KeyboardAvoidingView
-        style={[styles.container, { backgroundColor: colors.background }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.successContainer}>
-            {/* Success Icon */}
-            <View style={[styles.successIconContainer, { backgroundColor: colors.success + '20' }]}>
-              <Ionicons name="checkmark-circle" size={80} color={colors.success} />
-            </View>
-
-            {/* Success Message */}
-            <Text style={[styles.successTitle, { color: colors.text }]}>
-              Account Created!
-            </Text>
-            <Text style={[styles.successSubtitle, { color: colors.textSecondary }]}>
-              We've sent a confirmation email to:
-            </Text>
-            <Text style={[styles.emailText, { color: colors.primary }]}>
-              {signupEmail}
-            </Text>
-
-            {/* Instructions */}
-            <View style={[styles.instructionsCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <View style={styles.instructionItem}>
-                <View style={[styles.stepNumber, { backgroundColor: colors.primary }]}>
-                  <Text style={styles.stepNumberText}>1</Text>
-                </View>
-                <Text style={[styles.instructionText, { color: colors.text }]}>
-                  Check your email inbox (and spam folder)
-                </Text>
-              </View>
-              
-              <View style={styles.instructionItem}>
-                <View style={[styles.stepNumber, { backgroundColor: colors.primary }]}>
-                  <Text style={styles.stepNumberText}>2</Text>
-                </View>
-                <Text style={[styles.instructionText, { color: colors.text }]}>
-                  Click the confirmation link in the email
-                </Text>
-              </View>
-              
-              <View style={styles.instructionItem}>
-                <View style={[styles.stepNumber, { backgroundColor: colors.primary }]}>
-                  <Text style={styles.stepNumberText}>3</Text>
-                </View>
-                <Text style={[styles.instructionText, { color: colors.text }]}>
-                  Return here and sign in with your credentials
-                </Text>
-              </View>
-            </View>
-
-            {/* Error Message */}
-            {error && (
-              <View style={[styles.errorContainer, { backgroundColor: colors.danger + '15', borderColor: colors.danger }]}>
-                <Ionicons name="alert-circle" size={20} color={colors.danger} />
-                <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>
-              </View>
-            )}
-
-            {/* Resend Email Button */}
-            <TouchableOpacity
-              style={[styles.resendButton, { borderColor: colors.border }]}
-              onPress={handleResendEmail}
-              disabled={resendingEmail}
-            >
-              {resendingEmail ? (
-                <ActivityIndicator color={colors.primary} size="small" />
-              ) : (
-                <>
-                  <Ionicons name="mail-outline" size={20} color={colors.primary} />
-                  <Text style={[styles.resendButtonText, { color: colors.primary }]}>
-                    Resend Confirmation Email
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-
-            {/* Go to Sign In Button */}
-            <TouchableOpacity
-              style={[styles.submitButton, { backgroundColor: colors.primary }]}
-              onPress={toggleMode}
-            >
-              <Text style={styles.submitButtonText}>Go to Sign In</Text>
-            </TouchableOpacity>
-
-            {/* Help Text */}
-            <Text style={[styles.helpText, { color: colors.textMuted }]}>
-              Having trouble? Make sure to check your spam folder or contact support.
-            </Text>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    );
-  }
 
   return (
     <KeyboardAvoidingView
@@ -508,90 +365,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
     marginTop: 24,
-  },
-  successContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  successIconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
-  },
-  successTitle: {
-    fontSize: 32,
-    fontWeight: '700',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  successSubtitle: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  emailText: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 32,
-    textAlign: 'center',
-  },
-  instructionsCard: {
-    width: '100%',
-    borderRadius: 16,
-    padding: 24,
-    borderWidth: 1,
-    marginBottom: 24,
-  },
-  instructionItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 20,
-  },
-  stepNumber: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
-  },
-  stepNumberText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  instructionText: {
-    flex: 1,
-    fontSize: 15,
-    lineHeight: 22,
-    paddingTop: 4,
-  },
-  resendButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 16,
-    gap: 8,
-    width: '100%',
-  },
-  resendButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  helpText: {
-    fontSize: 13,
-    textAlign: 'center',
-    marginTop: 16,
-    paddingHorizontal: 24,
   },
 });
 

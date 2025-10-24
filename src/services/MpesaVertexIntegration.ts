@@ -37,9 +37,16 @@ export async function processMpesaMessage(
   try {
     console.log('[MpesaIntegration] Processing M-Pesa message...');
 
-    // Step 1: Check if message contains Fuliza
-    const isFulizaMessage = /fuliza/i.test(messageText);
-    console.log('[MpesaIntegration] Fuliza detected:', isFulizaMessage);
+    // Step 1: Detect message type
+    const isFulizaRepayment = /pay.*fuliza|repay.*fuliza|used to.*pay.*outstanding.*fuliza/i.test(messageText);
+    const isFulizaIssuance = /fuliza.*amount is|access fee charged/i.test(messageText);
+    const isAirtimeOrData = /airtime|minutes|data|bundles|MB|GB/i.test(messageText);
+    
+    console.log('[MpesaIntegration] Message type:', {
+      fulizaRepayment: isFulizaRepayment,
+      fulizaIssuance: isFulizaIssuance,
+      airtimeOrData: isAirtimeOrData
+    });
 
     // Step 2: Parse message using Vertex AI
     const parsed = await analyzeMpesaMessage(messageText);
@@ -50,36 +57,59 @@ export async function processMpesaMessage(
       return null;
     }
 
-    // Step 4: For Fuliza messages, only log the fee
-    if (isFulizaMessage) {
-      console.log('[MpesaIntegration] Fuliza transaction - logging fee only');
-      // Override parsed data to ensure only fee is logged
-      parsed.amount = parsed.fee || 0;
-      parsed.type = 'fee_only';
-      parsed.category = 'Fuliza Fee';
-      // Clear recipient and other details
+    // Step 4: Handle special cases
+    let finalAmount = parsed.amount;
+    let finalType = parsed.type;
+    let finalCategory = parsed.category;
+    let finalDescription = parsed.recipient ? `${parsed.category} - ${parsed.recipient}` : parsed.category;
+
+    // Fuliza Repayment: User is paying back the loan (money out)
+    if (isFulizaRepayment) {
+      console.log('[MpesaIntegration] Fuliza repayment detected');
+      finalType = 'money_out';
+      finalCategory = 'Fuliza Repayment';
+      finalDescription = 'Fuliza Loan Repayment';
+      // Amount should already be correct from AI parsing
+    }
+    // Fuliza Issuance: Only log the access fee, not the borrowed amount
+    else if (isFulizaIssuance) {
+      console.log('[MpesaIntegration] Fuliza issuance detected - logging fee only');
+      finalAmount = parsed.fee || 0;
+      finalType = 'money_out';
+      finalCategory = 'Fuliza Fee';
+      finalDescription = 'Fuliza Access Fee';
       delete parsed.recipient;
+    }
+    // Airtime/Data: Always money out
+    else if (isAirtimeOrData) {
+      console.log('[MpesaIntegration] Airtime/Data purchase detected');
+      finalType = 'money_out';
+      if (/data|bundles|MB|GB/i.test(messageText)) {
+        finalCategory = 'Data';
+        finalDescription = 'Data Bundle Purchase';
+      } else {
+        finalCategory = 'Airtime';
+        finalDescription = 'Airtime Purchase';
+      }
     }
 
     // Step 5: Map to Supabase transaction format
     const transaction = {
       user_id: userId,
-      type: parsed.type === 'money_in' ? 'income' : 'expense',
-      amount: Math.abs(parsed.amount),
-      category: parsed.category,
-      description: isFulizaMessage 
-        ? 'Fuliza Fee'
-        : (parsed.recipient
-          ? `${parsed.category} - ${parsed.recipient}`
-          : parsed.category),
+      type: finalType === 'money_in' ? 'income' : 'expense',
+      amount: Math.abs(finalAmount),
+      category: finalCategory,
+      description: finalDescription,
       date: parsed.timestamp || new Date().toISOString(),
       source: 'mpesa_sms',
       metadata: {
         fee: parsed.fee,
-        recipient: isFulizaMessage ? undefined : parsed.recipient,
+        recipient: parsed.recipient,
         raw_message: parsed.raw_message,
         parsed_by: 'vertex_ai',
-        is_fuliza: isFulizaMessage,
+        is_fuliza_repayment: isFulizaRepayment,
+        is_fuliza_issuance: isFulizaIssuance,
+        is_airtime_or_data: isAirtimeOrData,
       },
     };
 
