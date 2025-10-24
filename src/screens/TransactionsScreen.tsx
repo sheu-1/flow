@@ -10,7 +10,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Animated, { FadeInUp } from 'react-native-reanimated';
+import Animated, { FadeInUp, FadeIn, FadeOut, useAnimatedStyle, withTiming, useSharedValue } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { TransactionCard } from '../components/TransactionCard';
 import CategoryDropdown, { DEFAULT_CATEGORIES } from '../components/CategoryDropdown';
@@ -35,6 +35,8 @@ function TransactionsScreen() {
   const [selectedTxId, setSelectedTxId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalTransactions, setTotalTransactions] = useState(0);
+  const [showPagination, setShowPagination] = useState(true);
+  const paginationOpacity = useSharedValue(1);
 
   const refresh = useCallback(async (showLoading = true, page = currentPage) => {
     if (!user?.id) return;
@@ -255,6 +257,55 @@ function TransactionsScreen() {
         onClose={() => { setCategoryPickerVisible(false); setSelectedTxId(null); }}
         title="Edit Category"
       />
+      
+      {/* Floating Pagination Controls */}
+      {totalPages > 1 && (
+        <Animated.View 
+          entering={FadeIn.duration(300)}
+          exiting={FadeOut.duration(300)}
+          style={[styles.floatingPagination, { backgroundColor: colors.surface }]}
+        >
+          <TouchableOpacity
+            onPress={handlePrevPage}
+            disabled={!hasPrevPage}
+            style={[
+              styles.floatingArrow,
+              !hasPrevPage && styles.floatingArrowDisabled,
+            ]}
+          >
+            <Ionicons 
+              name="chevron-back" 
+              size={24} 
+              color={hasPrevPage ? colors.primary : colors.textMuted} 
+            />
+          </TouchableOpacity>
+          
+          <View style={styles.floatingPageInfo}>
+            <Text style={[styles.floatingPageText, { color: colors.text }]}>
+              {currentPage}
+            </Text>
+            <Text style={[styles.floatingPageDivider, { color: colors.textSecondary }]}>/</Text>
+            <Text style={[styles.floatingPageText, { color: colors.textSecondary }]}>
+              {totalPages}
+            </Text>
+          </View>
+          
+          <TouchableOpacity
+            onPress={handleNextPage}
+            disabled={!hasNextPage}
+            style={[
+              styles.floatingArrow,
+              !hasNextPage && styles.floatingArrowDisabled,
+            ]}
+          >
+            <Ionicons 
+              name="chevron-forward" 
+              size={24} 
+              color={hasNextPage ? colors.primary : colors.textMuted} 
+            />
+          </TouchableOpacity>
+        </Animated.View>
+      )}
     </SafeAreaView>
   );
 }
@@ -302,31 +353,42 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     textAlign: 'center',
   },
-  paginationContainer: {
+  floatingPagination: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    borderRadius: 30,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    borderTopWidth: 1,
+    paddingVertical: spacing.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    gap: spacing.sm,
   },
-  paginationButton: {
-    padding: spacing.sm,
-    borderRadius: 8,
+  floatingArrow: {
+    padding: spacing.xs,
+    borderRadius: 20,
   },
-  paginationButtonDisabled: {
+  floatingArrowDisabled: {
     opacity: 0.3,
   },
-  paginationInfo: {
+  floatingPageInfo: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.xs,
   },
-  paginationText: {
+  floatingPageText: {
     fontSize: fontSize.md,
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
-  paginationSubtext: {
-    fontSize: fontSize.xs,
-    marginTop: 2,
+  floatingPageDivider: {
+    fontSize: fontSize.md,
+    fontWeight: '400',
   },
 });
 

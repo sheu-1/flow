@@ -8,7 +8,7 @@ import { useThemeColors } from '../theme/ThemeProvider';
 import { getTransactions, getAggregatesByPeriod } from '../services/TransactionService';
 import { notificationService } from '../services/NotificationService';
 import { Transaction, AggregatePeriod } from '../types';
-import { MoneyCard } from '../components/MoneyCard';
+import { AnimatedCircleMetric } from '../components/AnimatedCircleMetric';
 import { PieChart } from '../components/PieChart';
 import { UnifiedPeriodSelector } from '../components/UnifiedPeriodSelector';
 import { DetailedPeriodSelector } from '../components/DetailedPeriodSelector';
@@ -18,10 +18,11 @@ import { TransactionCard } from '../components/TransactionCard';
 import { FinancialHealthScore } from '../components/FinancialHealthScore';
 import { SmartInsights } from '../components/SmartInsights';
 import { SavingsGoals } from '../components/SavingsGoals';
-import { spacing, fontSize } from '../theme/colors';
+import { spacing, fontSize, borderRadius } from '../theme/colors';
 import { useRealtimeTransactions } from '../hooks/useRealtimeTransactions';
 import { invalidateUserCaches } from '../services/TransactionService';
 import { useDateFilter } from '../hooks/useDateFilter';
+import Animated, { FadeInUp } from 'react-native-reanimated';
 
 // Enable detailed logging
 console.log('🚀 DashboardScreen loading...');
@@ -187,6 +188,11 @@ export default function DashboardScreen() {
 
   const { moneyIn, moneyOut, netBalance, periodLabel } = calculatePeriodStats();
   const recentTransactions = filteredTransactions.slice(0, 5);
+  
+  // Calculate additional metrics for animated circles
+  const transactionCount = filteredTransactions.length;
+  const avgTransaction = transactionCount > 0 ? (moneyIn + moneyOut) / transactionCount : 0;
+  const maxAmount = Math.max(moneyIn, moneyOut);
 
   const displayName = user?.user_metadata?.username || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User';
 
@@ -241,32 +247,63 @@ export default function DashboardScreen() {
         
         {/* Main Content */}
         <View>
-        <View style={styles.cardsRow}>
-          <MoneyCard
-            title="Money In"
-            amount={moneyIn}
-            type="in"
-            period={periodLabel}
-            icon="trending-up-outline"
-          />
-          <MoneyCard
-            title="Money Out"
-            amount={moneyOut}
-            type="out"
-            period={periodLabel}
-            icon="trending-down-outline"
-          />
+        {/* Animated Circular Metrics */}
+        <View style={styles.circularMetricsContainer}>
+          <Animated.View entering={FadeInUp.delay(50).springify()} style={styles.circleWrapper}>
+            <AnimatedCircleMetric
+              value={moneyIn}
+              label="Money In"
+              type="total"
+              period={selectedPeriod}
+              maxValue={maxAmount}
+              size={110}
+            />
+          </Animated.View>
+          
+          <Animated.View entering={FadeInUp.delay(100).springify()} style={styles.circleWrapper}>
+            <AnimatedCircleMetric
+              value={transactionCount}
+              label="Count"
+              type="count"
+              period={selectedPeriod}
+              showCurrency={false}
+              size={110}
+            />
+          </Animated.View>
+          
+          <Animated.View entering={FadeInUp.delay(150).springify()} style={styles.circleWrapper}>
+            <AnimatedCircleMetric
+              value={moneyOut}
+              label="Money Out"
+              type="max"
+              period={selectedPeriod}
+              maxValue={maxAmount}
+              size={110}
+            />
+          </Animated.View>
         </View>
-
-        <View style={styles.netBalanceContainer}>
-          <MoneyCard
-            title="Net Balance"
-            amount={netBalance}
-            type="net"
-            period={periodLabel}
-            icon="analytics-outline"
-          />
-        </View>
+        
+        {/* Net Balance Card */}
+        <Animated.View 
+          entering={FadeInUp.delay(200).springify()}
+          style={[styles.netBalanceCard, { backgroundColor: colors.surface }]}
+        >
+          <View style={styles.netBalanceContent}>
+            <Ionicons 
+              name="analytics-outline" 
+              size={32} 
+              color={netBalance >= 0 ? colors.success : colors.danger} 
+            />
+            <View style={styles.netBalanceText}>
+              <Text style={[styles.netBalanceLabel, { color: colors.textSecondary }]}>
+                Net Balance • {periodLabel}
+              </Text>
+              <Text style={[styles.netBalanceAmount, { color: netBalance >= 0 ? colors.success : colors.danger }]}>
+                {netBalance >= 0 ? '+' : ''}{(moneyIn - moneyOut).toLocaleString('en-US', { style: 'currency', currency: 'KES' })}
+              </Text>
+            </View>
+          </View>
+        </Animated.View>
 
         <PieChart moneyIn={moneyIn} moneyOut={moneyOut} />
 
@@ -419,13 +456,47 @@ const styles = StyleSheet.create({
     padding: spacing.xs,
     borderRadius: 999,
   },
-  cardsRow: {
+  circularMetricsContainer: {
     flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
     paddingHorizontal: spacing.md,
-    gap: spacing.sm,
+    paddingVertical: spacing.lg,
+    gap: spacing.xs,
   },
-  netBalanceContainer: {
-    paddingHorizontal: spacing.md,
+  circleWrapper: {
+    alignItems: 'center',
+  },
+  netBalanceCard: {
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    marginBottom: spacing.lg,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  netBalanceContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  netBalanceText: {
+    flex: 1,
+  },
+  netBalanceLabel: {
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: spacing.xs,
+  },
+  netBalanceAmount: {
+    fontSize: fontSize.xxl,
+    fontWeight: 'bold',
   },
   section: {
     marginTop: spacing.lg,
