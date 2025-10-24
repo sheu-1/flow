@@ -193,44 +193,6 @@ function TransactionsScreen() {
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
             }
           />
-          
-          {/* Pagination Controls */}
-          {totalPages > 1 && (
-            <View style={[styles.paginationContainer, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
-              <TouchableOpacity
-                style={[styles.paginationButton, !hasPrevPage && styles.paginationButtonDisabled]}
-                onPress={handlePrevPage}
-                disabled={!hasPrevPage}
-              >
-                <Ionicons 
-                  name="chevron-back" 
-                  size={24} 
-                  color={hasPrevPage ? colors.primary : colors.textMuted} 
-                />
-              </TouchableOpacity>
-              
-              <View style={styles.paginationInfo}>
-                <Text style={[styles.paginationText, { color: colors.text }]}>
-                  Page {currentPage} of {totalPages}
-                </Text>
-                <Text style={[styles.paginationSubtext, { color: colors.textSecondary }]}>
-                  {(currentPage - 1) * ITEMS_PER_PAGE + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, totalTransactions)} of {totalTransactions}
-                </Text>
-              </View>
-              
-              <TouchableOpacity
-                style={[styles.paginationButton, !hasNextPage && styles.paginationButtonDisabled]}
-                onPress={handleNextPage}
-                disabled={!hasNextPage}
-              >
-                <Ionicons 
-                  name="chevron-forward" 
-                  size={24} 
-                  color={hasNextPage ? colors.primary : colors.textMuted} 
-                />
-              </TouchableOpacity>
-            </View>
-          )}
         </>
       ) : (
         <View style={styles.emptyState}>
