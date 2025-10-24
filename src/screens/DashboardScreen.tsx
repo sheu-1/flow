@@ -139,99 +139,56 @@ export default function DashboardScreen() {
 
     switch (selectedPeriod) {
       case 'daily':
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-        endDate = new Date(startDate); endDate.setDate(endDate.getDate() + 1);
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
         periodLabel = 'Today';
         break;
       case 'weekly':
-        // Week starts on Sunday. If you prefer Monday, change offset to: ((now.getDay() + 6) % 7)
         const offset = now.getDay();
-        const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-        weekStart.setDate(weekStart.getDate() - offset);
-        startDate = weekStart;
-        endDate = new Date(startDate); endDate.setDate(endDate.getDate() + 7);
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset);
+        endDate = new Date(startDate);
+        endDate.setDate(endDate.getDate() + 6);
+        endDate.setHours(23, 59, 59);
         periodLabel = 'This Week';
         break;
       case 'monthly':
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0);
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
         periodLabel = 'This Month';
         break;
       case 'yearly':
-        startDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
-        endDate = new Date(now.getFullYear() + 1, 0, 1, 0, 0, 0, 0);
+        startDate = new Date(now.getFullYear(), 0, 1);
+        endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
         periodLabel = 'This Year';
         break;
     }
 
-    // Fallback for typescript narrowing (endDate is always set in switch above)
-    endDate = endDate || now;
-
-    // Use date-filtered transactions instead of all transactions
-    const periodFilteredTransactions = filteredTransactions.filter(t => {
-      const transactionDate = new Date(t.date);
-      return transactionDate >= startDate && transactionDate < endDate;
+    // Simple filter: only count transactions within the period
+    const periodTransactions = transactions.filter(t => {
+      const txDate = new Date(t.date);
+      return txDate >= startDate && txDate <= endDate;
     });
 
-    const moneyIn = periodFilteredTransactions
+    const moneyIn = periodTransactions
       .filter(t => t.type === 'income')
       .reduce((sum, t) => sum + t.amount, 0);
 
-    const moneyOut = periodFilteredTransactions
+    const moneyOut = periodTransactions
       .filter(t => t.type === 'expense')
       .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
-    const netBalance = moneyIn - moneyOut;
-
-    return { moneyIn, moneyOut, netBalance, periodLabel };
+    return {
+      moneyIn,
+      moneyOut,
+      netBalance: moneyIn - moneyOut,
+      periodLabel,
+      transactionCount: periodTransactions.length // Simple count of transactions in period
+    };
   };
 
-  const { moneyIn, moneyOut, netBalance, periodLabel } = calculatePeriodStats();
+  const { moneyIn, moneyOut, netBalance, periodLabel, transactionCount } = calculatePeriodStats();
   const recentTransactions = filteredTransactions.slice(0, 5);
   
-  // Calculate additional metrics for animated circles
-  // Compute start/end for the selected period (relative to "now")
-  const computePeriodBounds = (period: 'daily' | 'weekly' | 'monthly' | 'yearly') => {
-    const now = new Date();
-    let startDate: Date;
-    let endDate: Date;
-    switch (period) {
-      case 'daily':
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-        endDate = new Date(startDate);
-        endDate.setDate(endDate.getDate() + 1);
-        break;
-      case 'weekly': {
-        const offset = now.getDay(); // week starts Sunday
-        const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-        weekStart.setDate(weekStart.getDate() - offset);
-        startDate = weekStart;
-        endDate = new Date(startDate);
-        endDate.setDate(endDate.getDate() + 7);
-        break;
-      }
-      case 'monthly':
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0);
-        break;
-      case 'yearly':
-        startDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
-        endDate = new Date(now.getFullYear() + 1, 0, 1, 0, 0, 0, 0);
-        break;
-      default:
-        startDate = new Date(0);
-        endDate = new Date();
-    }
-    return { startDate, endDate };
-  };
-
-  const { startDate, endDate } = computePeriodBounds(selectedPeriod);
-  // Count transactions that fall within the selected period bounds
-  const transactionCount = filteredTransactions.filter(t => {
-    const d = new Date(t.date);
-    return d >= startDate && d < endDate;
-  }).length;
-
   const avgTransaction = transactionCount > 0 ? (Math.abs(moneyIn) + Math.abs(moneyOut)) / transactionCount : 0;
   const maxAmount = Math.max(moneyIn, moneyOut);
 
@@ -244,7 +201,8 @@ export default function DashboardScreen() {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
         }
-        stickyHeaderIndices={[1]} // Make the period selector (index 1) sticky
+        stickyHeaderIndices={[1]} // Keep the period selector (index 1) sticky
+        scrollEventThrottle={16} // Improve scroll performance
       >
         {/* Scrollable Header */}
         <View style={[styles.header, { backgroundColor: colors.background }]}>
@@ -270,20 +228,24 @@ export default function DashboardScreen() {
           </View>
         </View>
         
-        {/* Sticky Unified Period Selector */}
+        {/* Sticky Unified Period Selector - Update styles */}
         <View style={[styles.stickyPeriodSelector, { backgroundColor: colors.background }]}>
-          <UnifiedPeriodSelector
-            selectedPeriod={selectedPeriod}
-            onPeriodChange={setSelectedPeriod}
-            onOpenDetailedSelector={() => setShowDetailedPeriodSelector(true)}
-            removeMargin
-          />
-          {filterLoading && (
-            <View style={styles.filterLoadingIndicator}>
-              <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={[styles.filterLoadingText, { color: colors.textSecondary }]}>Applying filters...</Text>
-            </View>
-          )}
+          <View style={styles.stickyContent}>
+            <UnifiedPeriodSelector
+              selectedPeriod={selectedPeriod}
+              onPeriodChange={setSelectedPeriod}
+              onOpenDetailedSelector={() => setShowDetailedPeriodSelector(true)}
+              removeMargin
+            />
+            {filterLoading && (
+              <View style={styles.filterLoadingIndicator}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={[styles.filterLoadingText, { color: colors.textSecondary }]}>
+                  Applying filters...
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
         
         {/* Main Content */}
@@ -416,14 +378,18 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
   },
   stickyPeriodSelector: {
+    paddingVertical: spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  stickyContent: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.1,
     shadowRadius: 3,
-    elevation: 6,
-    // Ensure sticky header remains above content and interactive on Android
+    elevation: 3,
     zIndex: 1000,
   },
   filterLoadingIndicator: {
