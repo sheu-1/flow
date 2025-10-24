@@ -55,7 +55,7 @@ export default function DashboardScreen() {
     setRefreshing(true);
     try {
       const [txns, aggregates] = await Promise.all([
-        getTransactions(user.id, { limit: 100 }).catch(err => {
+        getTransactions(user.id, { limit: 1000 }).catch(err => {
           console.warn('Failed to load transactions:', err);
           return [];
         }),
@@ -139,32 +139,32 @@ export default function DashboardScreen() {
 
     switch (selectedPeriod) {
       case 'daily':
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        endDate = new Date(startDate);
+        endDate.setDate(endDate.getDate() + 1);
         periodLabel = 'Today';
         break;
       case 'weekly':
         const offset = now.getDay();
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset);
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset, 0, 0, 0, 0);
         endDate = new Date(startDate);
-        endDate.setDate(endDate.getDate() + 6);
-        endDate.setHours(23, 59, 59);
+        endDate.setDate(endDate.getDate() + 7);
         periodLabel = 'This Week';
         break;
       case 'monthly':
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
         periodLabel = 'This Month';
         break;
       case 'yearly':
-        startDate = new Date(now.getFullYear(), 0, 1);
-        endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+        startDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+        endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
         periodLabel = 'This Year';
         break;
     }
 
-    // Simple filter: only count transactions within the period
-    const periodTransactions = transactions.filter(t => {
+    // Use filteredTransactions to respect date filters and get accurate counts
+    const periodTransactions = filteredTransactions.filter(t => {
       const txDate = new Date(t.date);
       return txDate >= startDate && txDate <= endDate;
     });
@@ -182,7 +182,7 @@ export default function DashboardScreen() {
       moneyOut,
       netBalance: moneyIn - moneyOut,
       periodLabel,
-      transactionCount: periodTransactions.length // Simple count of transactions in period
+      transactionCount: periodTransactions.length // Accurate count of transactions in period
     };
   };
 
