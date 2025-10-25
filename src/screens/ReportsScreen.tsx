@@ -438,8 +438,64 @@ export default function ReportsScreen() {
                 </View>
               </View>
               
-              {/* Conditional wrapper: ScrollView for daily, fixed View for weekly */}
-              {period === 'daily' ? (
+              {/* Conditional wrapper: ScrollView for daily/monthly/yearly, fixed View for weekly */}
+              {period === 'weekly' ? (
+                <View style={styles.chartBarsWrapper}>
+                  <View style={styles.chartBars}>
+                    {currentWeekData.labels.map((label, index) => {
+                      const income = currentWeekData.income[index] || 0;
+                      const expense = currentWeekData.expense[index] || 0;
+                      const maxValue = Math.max(...currentWeekData.income, ...currentWeekData.expense);
+                      const incomeHeight = maxValue > 0 ? (income / maxValue) * 120 : 0;
+                      const expenseHeight = maxValue > 0 ? (expense / maxValue) * 120 : 0;
+                      
+                      // For weekly: show only day abbreviation (Sun, Mon, etc.)
+                      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                      const date = new Date();
+                      const totalDaysBack = (currentWeek * 7) + (currentWeekData.labels.length - 1 - index);
+                      date.setDate(date.getDate() - totalDaysBack);
+                      const displayLabel = days[date.getDay()];
+                    
+                      return (
+                        <TouchableOpacity
+                          key={index}
+                          onPress={() => setBarTooltip({ label: displayLabel, income, expense, index })}
+                          activeOpacity={0.7}
+                        >
+                          <Animated.View style={styles.barGroupWeekly} entering={FadeInUp.delay(index * 30).springify()}>
+                            <View style={styles.barContainer}>
+                              <Animated.View 
+                                style={[
+                                  styles.barWeekly, 
+                                  { 
+                                    height: incomeHeight, 
+                                    backgroundColor: colors.success 
+                                  }
+                                ]} 
+                                entering={FadeInUp.delay(index * 30 + 100).springify()}
+                              />
+                              <Animated.View 
+                                style={[
+                                  styles.barWeekly, 
+                                  { 
+                                    height: expenseHeight, 
+                                    backgroundColor: colors.danger, 
+                                    marginLeft: 2 
+                                  }
+                                ]}
+                                entering={FadeInUp.delay(index * 30 + 150).springify()}
+                              />
+                            </View>
+                            <Text style={[styles.barLabel, { color: colors.textSecondary }]} numberOfLines={1}>
+                              {displayLabel}
+                            </Text>
+                          </Animated.View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              ) : (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chartScroll}>
                   <View style={styles.chartBarsScrollable}>
                     {currentWeekData.labels.map((label, index) => {
@@ -449,8 +505,18 @@ export default function ReportsScreen() {
                       const incomeHeight = maxValue > 0 ? (income / maxValue) * 120 : 0;
                       const expenseHeight = maxValue > 0 ? (expense / maxValue) * 120 : 0;
                       
-                      // For daily: show hour format (0h, 1h, 2h, etc.)
-                      const displayLabel = `${index}h`;
+                      // Format labels based on period
+                      let displayLabel = label;
+                      if (period === 'daily') {
+                        // For daily: show hour format (0h, 1h, 2h, etc.)
+                        displayLabel = `${index}h`;
+                      } else if (period === 'monthly') {
+                        // For monthly: show month abbreviations (Jan, Feb, etc.)
+                        displayLabel = label.length > 3 ? label.substring(0, 3) : label;
+                      } else if (period === 'yearly') {
+                        // For yearly: show year
+                        displayLabel = label;
+                      }
                       
                       return (
                         <TouchableOpacity
@@ -491,69 +557,6 @@ export default function ReportsScreen() {
                     })}
                   </View>
                 </ScrollView>
-              ) : (
-                <View style={styles.chartBarsWrapper}>
-                  <View style={styles.chartBars}>
-                    {currentWeekData.labels.map((label, index) => {
-                      const income = currentWeekData.income[index] || 0;
-                      const expense = currentWeekData.expense[index] || 0;
-                      const maxValue = Math.max(...currentWeekData.income, ...currentWeekData.expense);
-                      const incomeHeight = maxValue > 0 ? (income / maxValue) * 120 : 0;
-                      const expenseHeight = maxValue > 0 ? (expense / maxValue) * 120 : 0;
-                      
-                      // Format labels based on period
-                      let displayLabel = label;
-                      if (period === 'weekly') {
-                        // For weekly: show only day abbreviation (Sun, Mon, etc.)
-                        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-                        const date = new Date();
-                        const totalDaysBack = (currentWeek * 7) + (currentWeekData.labels.length - 1 - index);
-                        date.setDate(date.getDate() - totalDaysBack);
-                        displayLabel = days[date.getDay()];
-                      } else if (period === 'monthly') {
-                        // For monthly: show month abbreviations (Jan, Feb, etc.)
-                        displayLabel = label.length > 3 ? label.substring(0, 3) : label;
-                      }
-                    
-                    return (
-                      <TouchableOpacity
-                        key={index}
-                        onPress={() => setBarTooltip({ label: displayLabel, income, expense, index })}
-                        activeOpacity={0.7}
-                      >
-                        <Animated.View style={styles.barGroup} entering={FadeInUp.delay(index * 30).springify()}>
-                          <View style={styles.barContainer}>
-                            <Animated.View 
-                              style={[
-                                styles.bar, 
-                                { 
-                                  height: incomeHeight, 
-                                  backgroundColor: colors.success 
-                                }
-                              ]} 
-                              entering={FadeInUp.delay(index * 30 + 100).springify()}
-                            />
-                            <Animated.View 
-                              style={[
-                                styles.bar, 
-                                { 
-                                  height: expenseHeight, 
-                                  backgroundColor: colors.danger, 
-                                  marginLeft: 4 
-                                }
-                              ]}
-                              entering={FadeInUp.delay(index * 30 + 150).springify()}
-                            />
-                          </View>
-                          <Text style={[styles.barLabel, { color: colors.textSecondary }]} numberOfLines={1}>
-                            {displayLabel}
-                          </Text>
-                        </Animated.View>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
               )}
               
               {/* Dynamic Tooltip */}
@@ -876,18 +879,22 @@ const styles = StyleSheet.create({
   chartBarsWrapper: {
     width: '100%',
     overflow: 'hidden',
-    paddingHorizontal: spacing.xs,
+    paddingHorizontal: 2,
   },
   chartBars: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    justifyContent: 'space-evenly',
+    justifyContent: 'space-between',
     width: '100%',
+    paddingHorizontal: spacing.xs,
   },
   barGroup: {
     alignItems: 'center',
+    minWidth: 50,
+  },
+  barGroupWeekly: {
+    alignItems: 'center',
     flex: 1,
-    minWidth: 40,
   },
   barContainer: {
     flexDirection: 'row',
@@ -900,10 +907,14 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     minHeight: 2,
   },
+  barWeekly: {
+    width: 12,
+    borderRadius: 2,
+    minHeight: 2,
+  },
   barLabel: {
     fontSize: fontSize.xs,
     textAlign: 'center',
-    width: 50,
   },
   categoryToggle: {
     flexDirection: 'row',
