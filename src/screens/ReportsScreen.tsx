@@ -19,6 +19,7 @@ import { invalidateUserCaches } from '../services/TransactionService';
 import { getTransactions } from '../services/TransactionService';
 import { useDateFilter } from '../hooks/useDateFilter';
 import { Transaction } from '../types';
+import { Logger } from '../utils/Logger';
 
 export default function ReportsScreen() {
   const colors = useThemeColors();
@@ -76,11 +77,16 @@ export default function ReportsScreen() {
       const expense = buckets.map((b) => b.expense);
       setSeries({ labels, income, expense });
 
-      // Use date range for category breakdown
+      // Use filtered transactions for category breakdown
       const start = dateRange.startDate.toISOString();
       const end = dateRange.endDate.toISOString();
       const cat = await getCategoriesBreakdown(user.id, start, end);
       setCategories(cat);
+      
+      Logger.info('ReportsScreen', `Categories loaded for range: ${start} to ${end}`, { 
+        incomeCategories: Object.keys(cat.income).length,
+        expenseCategories: Object.keys(cat.expense).length 
+      });
     } catch (e) {
       // swallow and show empty
       setSeries({ labels: [], income: [], expense: [] });
@@ -219,13 +225,18 @@ export default function ReportsScreen() {
     if (period !== 'weekly') return series;
     
     const weekSize = 7;
+    // Reverse the arrays to show most recent week first (index 0 = current week)
+    const reversedLabels = [...series.labels].reverse();
+    const reversedIncome = [...series.income].reverse();
+    const reversedExpense = [...series.expense].reverse();
+    
     const startIndex = currentWeek * weekSize;
     const endIndex = startIndex + weekSize;
     
     return {
-      labels: series.labels.slice(startIndex, endIndex),
-      income: series.income.slice(startIndex, endIndex),
-      expense: series.expense.slice(startIndex, endIndex),
+      labels: reversedLabels.slice(startIndex, endIndex).reverse(), // Reverse again to show Sun-Sat order
+      income: reversedIncome.slice(startIndex, endIndex).reverse(),
+      expense: reversedExpense.slice(startIndex, endIndex).reverse(),
     };
   }, [series, currentWeek, period]);
 
@@ -684,7 +695,10 @@ export default function ReportsScreen() {
                         </Text>
                       </View>
                       <View style={[styles.categoryBar, { backgroundColor: colors.surface }]}> 
-                        <View style={[styles.categoryBarFill, { width: `${((amount as number) / maxIncome) * 100}%`, backgroundColor: colors.success }]} />
+                        <Animated.View 
+                          entering={FadeInUp.delay(idx * 25 + 100).springify()}
+                          style={[styles.categoryBarFill, { width: `${((amount as number) / maxIncome) * 100}%`, backgroundColor: colors.success }]} 
+                        />
                       </View>
                     </Animated.View>
                   ));
@@ -712,7 +726,10 @@ export default function ReportsScreen() {
                         </Text>
                       </View>
                       <View style={[styles.categoryBar, { backgroundColor: colors.surface }]}> 
-                        <View style={[styles.categoryBarFill, { width: `${((amount as number) / maxExpense) * 100}%`, backgroundColor: colors.danger }]} />
+                        <Animated.View 
+                          entering={FadeInUp.delay(idx * 25 + 100).springify()}
+                          style={[styles.categoryBarFill, { width: `${((amount as number) / maxExpense) * 100}%`, backgroundColor: colors.danger }]} 
+                        />
                       </View>
                     </Animated.View>
                   ));
