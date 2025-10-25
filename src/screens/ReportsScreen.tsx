@@ -134,10 +134,96 @@ export default function ReportsScreen() {
     return Object.entries(currentCategories).sort(([, a], [, b]) => (b as number) - (a as number));
   }, [categories, categoryView]);
 
-  // Compute summary stats from the current series over the selected range
+  // Calculate period data from filtered transactions (like Dashboard) for all periods
+  const currentWeekData = useMemo(() => {
+    const now = new Date();
+    const labels: string[] = [];
+    const income: number[] = [];
+    const expense: number[] = [];
+    
+    if (period === 'daily') {
+      // Daily: 24 hours of today
+      const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      
+      for (let hour = 0; hour < 24; hour++) {
+        const hourStart = new Date(dayStart);
+        hourStart.setHours(hour, 0, 0, 0);
+        const hourEnd = new Date(hourStart);
+        hourEnd.setHours(hour + 1, 0, 0, 0);
+        
+        const hourTransactions = filteredTransactions.filter(t => {
+          const txDate = new Date(t.date);
+          return txDate >= hourStart && txDate < hourEnd;
+        });
+        
+        labels.push(`${hour}h`);
+        income.push(hourTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + Math.abs(t.amount), 0));
+        expense.push(hourTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + Math.abs(t.amount), 0));
+      }
+    } else if (period === 'weekly') {
+      // Weekly: Current week (Sun-Sat)
+      const offset = now.getDay();
+      const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset - (currentWeek * 7), 0, 0, 0, 0);
+      
+      for (let day = 0; day < 7; day++) {
+        const dayStart = new Date(weekStart);
+        dayStart.setDate(weekStart.getDate() + day);
+        const dayEnd = new Date(dayStart);
+        dayEnd.setDate(dayStart.getDate() + 1);
+        
+        const dayTransactions = filteredTransactions.filter(t => {
+          const txDate = new Date(t.date);
+          return txDate >= dayStart && txDate < dayEnd;
+        });
+        
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        labels.push(days[dayStart.getDay()]);
+        income.push(dayTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + Math.abs(t.amount), 0));
+        expense.push(dayTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + Math.abs(t.amount), 0));
+      }
+    } else if (period === 'monthly') {
+      // Monthly: 12 months of current year
+      const yearStart = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      
+      for (let month = 0; month < 12; month++) {
+        const monthStart = new Date(now.getFullYear(), month, 1, 0, 0, 0, 0);
+        const monthEnd = new Date(now.getFullYear(), month + 1, 0, 23, 59, 59, 999);
+        
+        const monthTransactions = filteredTransactions.filter(t => {
+          const txDate = new Date(t.date);
+          return txDate >= monthStart && txDate <= monthEnd;
+        });
+        
+        labels.push(monthNames[month]);
+        income.push(monthTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + Math.abs(t.amount), 0));
+        expense.push(monthTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + Math.abs(t.amount), 0));
+      }
+    } else if (period === 'yearly') {
+      // Yearly: Last 5 years
+      for (let i = 4; i >= 0; i--) {
+        const year = now.getFullYear() - i;
+        const yearStart = new Date(year, 0, 1, 0, 0, 0, 0);
+        const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
+        
+        const yearTransactions = filteredTransactions.filter(t => {
+          const txDate = new Date(t.date);
+          return txDate >= yearStart && txDate <= yearEnd;
+        });
+        
+        labels.push(year.toString());
+        income.push(yearTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + Math.abs(t.amount), 0));
+        expense.push(yearTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + Math.abs(t.amount), 0));
+      }
+    }
+    
+    return { labels, income, expense };
+  }, [period, currentWeek, filteredTransactions]);
+
+  // Compute summary stats from the current period data
   // Min = lowest positive transaction (x > 0), Max = highest positive transaction
   const incomeStats = useMemo(() => {
-    const arr = series.income || [];
+    const arr = currentWeekData.income || [];
     // Filter out non-finite values, zeros, and nulls
     const positiveValues = arr.filter((n) => Number.isFinite(n) && n > 0);
     
@@ -151,10 +237,10 @@ export default function ReportsScreen() {
     const max = positiveValues.length ? Math.max(...positiveValues) : 0;
     
     return { sum, avg, min, max };
-  }, [series.income]);
+  }, [currentWeekData.income]);
 
   const expenseStats = useMemo(() => {
-    const arr = series.expense || [];
+    const arr = currentWeekData.expense || [];
     // Filter out non-finite values, zeros, and nulls
     const positiveValues = arr.filter((n) => Number.isFinite(n) && n > 0);
     
@@ -168,7 +254,7 @@ export default function ReportsScreen() {
     const max = positiveValues.length ? Math.max(...positiveValues) : 0;
     
     return { sum, avg, min, max };
-  }, [series.expense]);
+  }, [currentWeekData.expense]);
 
   // Get current stats based on selected view
   const currentStats = useMemo(() => {
@@ -220,50 +306,6 @@ export default function ReportsScreen() {
     return statsView === 'income' ? incomeStats.sum : expenseStats.sum;
   }, [statsView, incomeStats, expenseStats]);
 
-  // For weekly view, calculate current week data from filtered transactions (like Dashboard)
-  const currentWeekData = useMemo(() => {
-    if (period !== 'weekly') return series;
-    
-    // Calculate the current week range (Sun-Sat)
-    const now = new Date();
-    const offset = now.getDay(); // 0 = Sunday, 6 = Saturday
-    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset - (currentWeek * 7), 0, 0, 0, 0);
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekEnd.getDate() + 7);
-    
-    // Create 7 daily buckets for the week (Sun-Sat)
-    const labels: string[] = [];
-    const income: number[] = [];
-    const expense: number[] = [];
-    
-    for (let day = 0; day < 7; day++) {
-      const dayStart = new Date(weekStart);
-      dayStart.setDate(weekStart.getDate() + day);
-      const dayEnd = new Date(dayStart);
-      dayEnd.setDate(dayStart.getDate() + 1);
-      
-      // Filter transactions for this day
-      const dayTransactions = filteredTransactions.filter(t => {
-        const txDate = new Date(t.date);
-        return txDate >= dayStart && txDate < dayEnd;
-      });
-      
-      const dayIncome = dayTransactions
-        .filter(t => t.type === 'income')
-        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
-      const dayExpense = dayTransactions
-        .filter(t => t.type === 'expense')
-        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
-      
-      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      labels.push(days[dayStart.getDay()]);
-      income.push(dayIncome);
-      expense.push(dayExpense);
-    }
-    
-    return { labels, income, expense };
-  }, [series, currentWeek, period, filteredTransactions]);
-
   // Calculate total number of weeks available
   const totalWeeks = useMemo(() => {
     if (period !== 'weekly') return 1;
@@ -286,12 +328,25 @@ export default function ReportsScreen() {
         
         {/* Sticky Unified Period Selector */}
         <View style={[styles.stickyPeriodSelector, { backgroundColor: colors.background }]}>
-          <UnifiedPeriodSelector
-            selectedPeriod={period}
-            onPeriodChange={setPeriod}
-            onOpenDetailedSelector={() => setShowDetailedPeriodSelector(true)}
-            removeMargin
-          />
+          <View style={styles.periodSelectorRow}>
+            <View style={{ flex: 1 }}>
+              <UnifiedPeriodSelector
+                selectedPeriod={period}
+                onPeriodChange={setPeriod}
+                onOpenDetailedSelector={() => setShowDetailedPeriodSelector(true)}
+                removeMargin
+              />
+            </View>
+            {selectedPreset && selectedPreset !== 'all' && (
+              <TouchableOpacity
+                style={[styles.clearFilterButton, { backgroundColor: colors.surface }]}
+                onPress={resetFilter}
+              >
+                <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+                <Text style={[styles.clearFilterText, { color: colors.textSecondary }]}>Clear</Text>
+              </TouchableOpacity>
+            )}
+          </View>
           {filterLoading && (
             <View style={styles.filterLoadingIndicator}>
               <ActivityIndicator size="small" color={colors.primary} />
@@ -810,6 +865,23 @@ const styles = StyleSheet.create({
     elevation: 6,
     // Ensure the sticky header stays above content and remains tappable
     zIndex: 1000,
+  },
+  periodSelectorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  clearFilterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.md,
+    gap: 4,
+  },
+  clearFilterText: {
+    fontSize: fontSize.xs,
+    fontWeight: '600',
   },
   filterLoadingIndicator: {
     flexDirection: 'row',
