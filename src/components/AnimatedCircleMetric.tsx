@@ -70,13 +70,13 @@ export function AnimatedCircleMetric({
   const getMetricColor = () => {
     switch (type) {
       case 'total':
-        return '#14B8A6'; // Teal
+        return '#14B8A6'; // Teal for Money In
       case 'average':
         return '#A855F7'; // Purple
       case 'count':
         return '#F59E0B'; // Amber/Orange
       case 'max':
-        return '#10B981'; // Green
+        return '#EF4444'; // Red for Money Out
       case 'min':
         return '#EF4444'; // Red
       default:
@@ -88,13 +88,13 @@ export function AnimatedCircleMetric({
   const getMetricIcon = (): keyof typeof Ionicons.glyphMap => {
     switch (type) {
       case 'total':
-        return 'cash-outline';
+        return 'arrow-down-circle-outline'; // Inward-facing arrow for Money In
       case 'average':
         return 'speedometer-outline';
       case 'count':
         return 'receipt-outline';
       case 'max':
-        return 'trending-up-outline';
+        return 'arrow-up-circle-outline'; // Outward-facing arrow for Money Out
       case 'min':
         return 'trending-down-outline';
       default:
