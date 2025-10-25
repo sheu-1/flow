@@ -37,6 +37,7 @@ export default function ReportsScreen() {
   const [showDetailedPeriodSelector, setShowDetailedPeriodSelector] = useState(false);
   const [filterLoading, setFilterLoading] = useState(false);
   const [barTooltip, setBarTooltip] = useState<{ label: string; income: number; expense: number; index: number } | null>(null);
+  const [showMetricsExplanation, setShowMetricsExplanation] = useState(false);
   
   // Date filtering
   const {
@@ -221,7 +222,7 @@ export default function ReportsScreen() {
   }, [period, currentWeek, filteredTransactions]);
 
   // Compute summary stats from the current period data
-  // Min = lowest positive transaction (x > 0), Max = highest positive transaction
+  // Count = number of individual transactions, Max = highest transaction
   const incomeStats = useMemo(() => {
     const arr = currentWeekData.income || [];
     // Filter out non-finite values, zeros, and nulls
@@ -232,12 +233,14 @@ export default function ReportsScreen() {
     const sum = validForSum.reduce((a, b) => a + b, 0);
     const avg = validForSum.length ? sum / validForSum.length : 0;
     
-    // Min and Max only consider actual positive transactions
-    const min = positiveValues.length ? Math.min(...positiveValues) : 0;
+    // Count individual income transactions
+    const count = filteredTransactions.filter(t => t.type === 'income').length;
+    
+    // Max only considers actual positive transactions
     const max = positiveValues.length ? Math.max(...positiveValues) : 0;
     
-    return { sum, avg, min, max };
-  }, [currentWeekData.income]);
+    return { sum, avg, count, max };
+  }, [currentWeekData.income, filteredTransactions]);
 
   const expenseStats = useMemo(() => {
     const arr = currentWeekData.expense || [];
@@ -249,12 +252,14 @@ export default function ReportsScreen() {
     const sum = validForSum.reduce((a, b) => a + b, 0);
     const avg = validForSum.length ? sum / validForSum.length : 0;
     
-    // Min and Max only consider actual positive transactions
-    const min = positiveValues.length ? Math.min(...positiveValues) : 0;
+    // Count individual expense transactions
+    const count = filteredTransactions.filter(t => t.type === 'expense').length;
+    
+    // Max only considers actual positive transactions
     const max = positiveValues.length ? Math.max(...positiveValues) : 0;
     
-    return { sum, avg, min, max };
-  }, [currentWeekData.expense]);
+    return { sum, avg, count, max };
+  }, [currentWeekData.expense, filteredTransactions]);
 
   // Get current stats based on selected view
   const currentStats = useMemo(() => {
@@ -328,25 +333,12 @@ export default function ReportsScreen() {
         
         {/* Sticky Unified Period Selector */}
         <View style={[styles.stickyPeriodSelector, { backgroundColor: colors.background }]}>
-          <View style={styles.periodSelectorRow}>
-            <View style={{ flex: 1 }}>
-              <UnifiedPeriodSelector
-                selectedPeriod={period}
-                onPeriodChange={setPeriod}
-                onOpenDetailedSelector={() => setShowDetailedPeriodSelector(true)}
-                removeMargin
-              />
-            </View>
-            {selectedPreset && selectedPreset !== 'all' && (
-              <TouchableOpacity
-                style={[styles.clearFilterButton, { backgroundColor: colors.surface }]}
-                onPress={resetFilter}
-              >
-                <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
-                <Text style={[styles.clearFilterText, { color: colors.textSecondary }]}>Clear</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          <UnifiedPeriodSelector
+            selectedPeriod={period}
+            onPeriodChange={setPeriod}
+            onOpenDetailedSelector={() => setShowDetailedPeriodSelector(true)}
+            removeMargin
+          />
           {filterLoading && (
             <View style={styles.filterLoadingIndicator}>
               <ActivityIndicator size="small" color={colors.primary} />
@@ -394,6 +386,58 @@ export default function ReportsScreen() {
               </TouchableOpacity>
             </View>
 
+            {/* Metrics Explanation */}
+            <TouchableOpacity 
+              style={[styles.metricsExplanationHeader, { backgroundColor: colors.surface }]}
+              onPress={() => setShowMetricsExplanation(!showMetricsExplanation)}
+            >
+              <Text style={[styles.metricsExplanationTitle, { color: colors.text }]}>
+                What do these metrics mean?
+              </Text>
+              <Ionicons 
+                name={showMetricsExplanation ? "chevron-up" : "chevron-down"} 
+                size={20} 
+                color={colors.textSecondary} 
+              />
+            </TouchableOpacity>
+            
+            {showMetricsExplanation && (
+              <Animated.View 
+                entering={FadeInUp.springify()}
+                style={[styles.metricsExplanationContent, { backgroundColor: colors.surface }]}
+              >
+                <View style={styles.explanationItem}>
+                  <View style={[styles.explanationDot, { backgroundColor: '#14B8A6' }]} />
+                  <View style={styles.explanationTextContainer}>
+                    <Text style={[styles.explanationLabel, { color: colors.text }]}>Count</Text>
+                    <Text style={[styles.explanationText, { color: colors.textSecondary }]}>
+                      Number of individual {statsView === 'income' ? 'money in' : 'money out'} transactions
+                    </Text>
+                  </View>
+                </View>
+                
+                <View style={styles.explanationItem}>
+                  <View style={[styles.explanationDot, { backgroundColor: '#A855F7' }]} />
+                  <View style={styles.explanationTextContainer}>
+                    <Text style={[styles.explanationLabel, { color: colors.text }]}>Average</Text>
+                    <Text style={[styles.explanationText, { color: colors.textSecondary }]}>
+                      Average amount per period bucket
+                    </Text>
+                  </View>
+                </View>
+                
+                <View style={styles.explanationItem}>
+                  <View style={[styles.explanationDot, { backgroundColor: statsView === 'income' ? colors.success : colors.danger }]} />
+                  <View style={styles.explanationTextContainer}>
+                    <Text style={[styles.explanationLabel, { color: colors.text }]}>Maximum</Text>
+                    <Text style={[styles.explanationText, { color: colors.textSecondary }]}>
+                      Highest amount in a single period bucket
+                    </Text>
+                  </View>
+                </View>
+              </Animated.View>
+            )}
+
             {/* Animated Circular Stats Cards */}
             <View style={styles.circularStatsContainer}>
               {/* For Daily/Weekly: Show Min, Avg, Max */}
@@ -401,13 +445,12 @@ export default function ReportsScreen() {
                 <>
                   <Animated.View entering={FadeInUp.delay(50).springify()}>
                     <AnimatedCircleMetric
-                      value={currentStats.min}
-                      label="Min"
-                      type="min"
+                      value={currentStats.count}
+                      label="Count"
+                      type="count"
                       period={period}
-                      maxValue={currentStats.max}
+                      showCurrency={false}
                       size={100}
-                      colorOverride={statsView === 'income' ? colors.success : colors.danger}
                     />
                   </Animated.View>
                   
@@ -419,7 +462,6 @@ export default function ReportsScreen() {
                       period={period}
                       maxValue={currentStats.max}
                       size={100}
-                      colorOverride={statsView === 'income' ? colors.success : colors.danger}
                     />
                   </Animated.View>
                   
@@ -440,7 +482,7 @@ export default function ReportsScreen() {
                 <>
                   <Animated.View entering={FadeInUp.delay(50).springify()}>
                     <AnimatedCircleMetric
-                      value={transactionCount}
+                      value={currentStats.count}
                       label="Count"
                       type="count"
                       period={period}
@@ -457,7 +499,6 @@ export default function ReportsScreen() {
                       period={period}
                       maxValue={currentStats.max}
                       size={100}
-                      colorOverride={statsView === 'income' ? colors.success : colors.danger}
                     />
                   </Animated.View>
                   
@@ -1104,6 +1145,48 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 6,
     borderWidth: 1,
+  },
+  metricsExplanationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+    marginVertical: spacing.sm,
+  },
+  metricsExplanationTitle: {
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+  },
+  metricsExplanationContent: {
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  explanationItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  explanationDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginTop: 4,
+  },
+  explanationTextContainer: {
+    flex: 1,
+  },
+  explanationLabel: {
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  explanationText: {
+    fontSize: fontSize.xs,
+    lineHeight: 16,
   },
   circularStatsContainer: {
     flexDirection: 'row',
