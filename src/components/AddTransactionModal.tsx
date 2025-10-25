@@ -88,7 +88,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
               onPress={() => setType('income')}
             >
               <Text style={[styles.typeButtonText, { color: colors.textSecondary }, type === 'income' && styles.typeButtonTextActive, type === 'income' && { color: colors.text }]}>
-                Income
+                Money In
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -96,7 +96,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
               onPress={() => setType('expense')}
             >
               <Text style={[styles.typeButtonText, { color: colors.textSecondary }, type === 'expense' && styles.typeButtonTextActive, type === 'expense' && { color: colors.text }]}>
-                Expense
+                Money Out
               </Text>
             </TouchableOpacity>
           </View>

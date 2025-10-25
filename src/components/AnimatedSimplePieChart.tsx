@@ -125,7 +125,7 @@ export const AnimatedSimplePieChart: React.FC<AnimatedSimplePieChartProps> = ({
       <View style={styles.legend}>
         <Animated.View entering={FadeInUp.delay(150).springify()} style={styles.legendItem}>
           <View style={[styles.legendColor, { backgroundColor: colors.success }]} />
-          <Text style={[styles.legendLabel, { color: colors.text }]}>Income</Text>
+          <Text style={[styles.legendLabel, { color: colors.text }]}>Money In</Text>
           <Text style={[styles.legendValue, { color: colors.success }]}>
             {formatCurrency(income)} ({incomePercentage.toFixed(0)}%)
           </Text>
@@ -133,7 +133,7 @@ export const AnimatedSimplePieChart: React.FC<AnimatedSimplePieChartProps> = ({
         
         <Animated.View entering={FadeInUp.delay(200).springify()} style={styles.legendItem}>
           <View style={[styles.legendColor, { backgroundColor: colors.danger }]} />
-          <Text style={[styles.legendLabel, { color: colors.text }]}>Expense</Text>
+          <Text style={[styles.legendLabel, { color: colors.text }]}>Money Out</Text>
           <Text style={[styles.legendValue, { color: colors.danger }]}>
             {formatCurrency(expense)} ({expensePercentage.toFixed(0)}%)
           </Text>

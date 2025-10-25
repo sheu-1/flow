@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
-import Animated, { FadeInUp } from 'react-native-reanimated';
+import Animated, { FadeInUp, FadeOut } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { spacing, fontSize, borderRadius } from '../theme/colors';
@@ -35,6 +35,7 @@ export default function ReportsScreen() {
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [showDetailedPeriodSelector, setShowDetailedPeriodSelector] = useState(false);
   const [filterLoading, setFilterLoading] = useState(false);
+  const [barTooltip, setBarTooltip] = useState<{ label: string; income: number; expense: number; index: number } | null>(null);
   
   // Date filtering
   const {
@@ -423,8 +424,8 @@ export default function ReportsScreen() {
               expense={expenseStats.sum} 
             />
             
-            {/* Simple bar chart: Income vs Expense */}
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Income vs Expense</Text>
+            {/* Simple bar chart: Money In vs Money Out */}
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Money In vs Money Out</Text>
             <View style={styles.chartContainer}>
               <View style={styles.chartLegend}>
                 <View style={styles.legendItem}>
@@ -437,7 +438,7 @@ export default function ReportsScreen() {
                 </View>
               </View>
               
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chartScroll}>
+              <View style={styles.chartBarsWrapper}>
                 <View style={styles.chartBars}>
                   {currentWeekData.labels.map((label, index) => {
                     const income = currentWeekData.income[index] || 0;
@@ -466,19 +467,90 @@ export default function ReportsScreen() {
                     }
                     
                     return (
-                      <Animated.View key={index} style={styles.barGroup} entering={FadeInUp.delay(index * 30).springify()}>
-                        <View style={styles.barContainer}>
-                          <View style={[styles.bar, { height: incomeHeight, backgroundColor: colors.success }]} />
-                          <View style={[styles.bar, { height: expenseHeight, backgroundColor: colors.danger, marginLeft: 4 }]} />
-                        </View>
-                        <Text style={[styles.barLabel, { color: colors.textSecondary }]} numberOfLines={1}>
-                          {displayLabel}
-                        </Text>
-                      </Animated.View>
+                      <TouchableOpacity
+                        key={index}
+                        onPress={() => setBarTooltip({ label: displayLabel, income, expense, index })}
+                        activeOpacity={0.7}
+                      >
+                        <Animated.View style={styles.barGroup} entering={FadeInUp.delay(index * 30).springify()}>
+                          <View style={styles.barContainer}>
+                            <Animated.View 
+                              style={[
+                                styles.bar, 
+                                { 
+                                  height: incomeHeight, 
+                                  backgroundColor: colors.success 
+                                }
+                              ]} 
+                              entering={FadeInUp.delay(index * 30 + 100).springify()}
+                            />
+                            <Animated.View 
+                              style={[
+                                styles.bar, 
+                                { 
+                                  height: expenseHeight, 
+                                  backgroundColor: colors.danger, 
+                                  marginLeft: 4 
+                                }
+                              ]}
+                              entering={FadeInUp.delay(index * 30 + 150).springify()}
+                            />
+                          </View>
+                          <Text style={[styles.barLabel, { color: colors.textSecondary }]} numberOfLines={1}>
+                            {displayLabel}
+                          </Text>
+                        </Animated.View>
+                      </TouchableOpacity>
                     );
                   })}
                 </View>
-              </ScrollView>
+              </View>
+              
+              {/* Dynamic Tooltip */}
+              {barTooltip && (
+                <Animated.View 
+                  entering={FadeInUp.springify()}
+                  exiting={FadeOut.duration(200)}
+                  style={[styles.tooltipContainer, { backgroundColor: colors.surface }]}
+                >
+                  <TouchableOpacity 
+                    style={styles.tooltipClose}
+                    onPress={() => setBarTooltip(null)}
+                  >
+                    <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                  <Text style={[styles.tooltipTitle, { color: colors.text }]}>{barTooltip.label}</Text>
+                  <View style={styles.tooltipRow}>
+                    <View style={styles.tooltipItem}>
+                      <View style={[styles.tooltipDot, { backgroundColor: colors.success }]} />
+                      <Text style={[styles.tooltipLabel, { color: colors.textSecondary }]}>Money In:</Text>
+                      <Text style={[styles.tooltipValue, { color: colors.success }]}>
+                        {formatCurrency(barTooltip.income)}
+                      </Text>
+                    </View>
+                    <View style={styles.tooltipItem}>
+                      <View style={[styles.tooltipDot, { backgroundColor: colors.danger }]} />
+                      <Text style={[styles.tooltipLabel, { color: colors.textSecondary }]}>Money Out:</Text>
+                      <Text style={[styles.tooltipValue, { color: colors.danger }]}>
+                        {formatCurrency(barTooltip.expense)}
+                      </Text>
+                    </View>
+                  </View>
+                  {barTooltip.income > barTooltip.expense ? (
+                    <Text style={[styles.tooltipInsight, { color: colors.success }]}>
+                      ✓ Positive flow: +{formatCurrency(barTooltip.income - barTooltip.expense)}
+                    </Text>
+                  ) : barTooltip.expense > barTooltip.income ? (
+                    <Text style={[styles.tooltipInsight, { color: colors.danger }]}>
+                      ⚠ Spending exceeded income by {formatCurrency(barTooltip.expense - barTooltip.income)}
+                    </Text>
+                  ) : (
+                    <Text style={[styles.tooltipInsight, { color: colors.textSecondary }]}>
+                      ⚖ Balanced
+                    </Text>
+                  )}
+                </Animated.View>
+              )}
             </View>
 
             {/* Week Navigation - Enhanced with month indicators */}
@@ -744,15 +816,21 @@ const styles = StyleSheet.create({
   chartScroll: {
     maxHeight: 180,
   },
+  chartBarsWrapper: {
+    width: '100%',
+    overflow: 'hidden',
+  },
   chartBars: {
     flexDirection: 'row',
     alignItems: 'flex-end',
+    justifyContent: 'space-around',
     paddingHorizontal: spacing.sm,
-    gap: spacing.md,
+    width: '100%',
   },
   barGroup: {
     alignItems: 'center',
-    minWidth: 50,
+    flex: 1,
+    maxWidth: 60,
   },
   barContainer: {
     flexDirection: 'row',
@@ -877,5 +955,57 @@ const styles = StyleSheet.create({
   periodTotalAmount: {
     fontSize: fontSize.xxl,
     fontWeight: 'bold',
+  },
+  tooltipContainer: {
+    marginTop: spacing.md,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  tooltipClose: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    zIndex: 1,
+  },
+  tooltipTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: 'bold',
+    marginBottom: spacing.md,
+    textAlign: 'center',
+  },
+  tooltipRow: {
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  tooltipItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  tooltipDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  tooltipLabel: {
+    fontSize: fontSize.sm,
+  },
+  tooltipValue: {
+    fontSize: fontSize.md,
+    fontWeight: 'bold',
+  },
+  tooltipInsight: {
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: spacing.xs,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.1)',
   },
 });

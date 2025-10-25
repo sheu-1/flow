@@ -33,14 +33,14 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
       
       <View style={styles.statsRow}>
         <View style={styles.statItem}>
-          <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Income</Text>
+          <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Money In</Text>
           <Text style={[styles.statAmount, { color: colors.success }]}>
             {formatCurrency(monthlyIncome)}
           </Text>
         </View>
         
         <View style={styles.statItem}>
-          <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Expenses</Text>
+          <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Money Out</Text>
           <Text style={[styles.statAmount, { color: colors.danger }]}>
             {formatCurrency(monthlyExpenses)}
           </Text>

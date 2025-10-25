@@ -19,7 +19,7 @@ import { spacing, fontSize } from '../theme/colors';
 import { useThemeColors } from '../theme/ThemeProvider';
 import { Transaction } from '../types';
 import { useAuth } from '../hooks/useAuth';
-import { getTransactions, createTransaction, updateTransaction, invalidateUserCaches } from '../services/TransactionService';
+import { getTransactions, createTransaction, updateTransaction, deleteTransaction, invalidateUserCaches } from '../services/TransactionService';
 import { useRealtimeTransactions } from '../hooks/useRealtimeTransactions';
 
 const ITEMS_PER_PAGE = 100;
@@ -159,9 +159,41 @@ function TransactionsScreen() {
     }
   };
 
+  const handleDeleteTransaction = (tx: Transaction) => {
+    Alert.alert(
+      'Delete Transaction',
+      `Are you sure you want to delete this transaction?\n\n${tx.description}\n${tx.type === 'income' ? '+' : '-'}${Math.abs(tx.amount).toLocaleString()}`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            if (!user?.id) return;
+            try {
+              const result = await deleteTransaction(user.id, tx.id);
+              if (!result.success) throw new Error(result.error?.message || 'Delete failed');
+              await invalidateUserCaches(user.id);
+              await refresh(false);
+            } catch (e: any) {
+              Alert.alert('Delete Failed', e?.message || 'Could not delete transaction');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const renderTransaction = ({ item, index }: { item: Transaction; index: number }) => (
     <Animated.View entering={FadeInUp.delay(Math.min(index, 20) * 20).springify()}>
-      <TransactionCard transaction={item} onEditCategory={() => onEditCategory(item)} />
+      <TransactionCard 
+        transaction={item} 
+        onEditCategory={() => onEditCategory(item)}
+        onDelete={() => handleDeleteTransaction(item)}
+      />
     </Animated.View>
   );
 

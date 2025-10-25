@@ -100,23 +100,30 @@ function AnimatedDonut({
   const inDash = circumference * inFraction;
   const outDash = circumference * outFraction;
 
-  // Animate on mount and when values change
+  // Animate on mount and when values change with smooth ease-in-out timing
   useEffect(() => {
-    // Staggered arc animations
+    // Reset to 0 first for re-animation on data change
+    inProgress.value = 0;
+    outProgress.value = 0;
+    
+    // Smooth arc animations with ease-in-out timing (matching metric circles)
     inProgress.value = withTiming(1, {
-      duration: 800,
-      easing: Easing.out(Easing.cubic),
+      duration: 1000,
+      easing: Easing.inOut(Easing.ease),
     });
     
-    outProgress.value = withTiming(1, {
-      duration: 800,
-      easing: Easing.out(Easing.cubic),
-    });
+    // Stagger the expense animation slightly for visual flow
+    setTimeout(() => {
+      outProgress.value = withTiming(1, {
+        duration: 1000,
+        easing: Easing.inOut(Easing.ease),
+      });
+    }, 150);
 
-    // Center total scale animation
+    // Center total scale animation with spring
     totalScale.value = withSpring(1, {
-      damping: 12,
-      stiffness: 100,
+      damping: 15,
+      stiffness: 80,
     });
   }, [moneyIn, moneyOut]);
 

@@ -47,14 +47,14 @@ export const QuickActionsMenu: React.FC<Props> = ({
   const quickActions: QuickAction[] = [
     {
       id: 'income',
-      title: 'Add Income',
+      title: 'Add Money In',
       icon: 'trending-up',
       color: colors.success,
       action: () => onAddTransaction('income'),
     },
     {
       id: 'expense',
-      title: 'Add Expense',
+      title: 'Add Money Out',
       icon: 'trending-down',
       color: colors.danger,
       action: () => onAddTransaction('expense'),
