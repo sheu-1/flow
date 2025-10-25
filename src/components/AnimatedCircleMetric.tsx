@@ -26,6 +26,7 @@ interface AnimatedCircleMetricProps {
   maxValue?: number; // For calculating fill percentage
   size?: number;
   showCurrency?: boolean;
+  colorOverride?: string; // Allow manual color override
 }
 
 /**
@@ -45,15 +46,16 @@ interface AnimatedCircleMetricProps {
  * @param size - Circle diameter in pixels (default: 110)
  * @param showCurrency - Whether to format value as currency (default: true for non-count types)
  */
-export function AnimatedCircleMetric({
+export const AnimatedCircleMetric: React.FC<AnimatedCircleMetricProps> = ({
   value,
   label,
   type,
   period = 'daily',
   maxValue,
-  size = 110,
-  showCurrency = type !== 'count',
-}: AnimatedCircleMetricProps) {
+  size = 120,
+  showCurrency = true,
+  colorOverride,
+}) => {
   const colors = useThemeColors();
   const { formatCurrency } = useCurrency();
   
@@ -102,7 +104,7 @@ export function AnimatedCircleMetric({
     }
   };
   
-  const metricColor = getMetricColor();
+  const metricColor = colorOverride || getMetricColor();
   const metricIcon = getMetricIcon();
   
   // Calculate fill percentage

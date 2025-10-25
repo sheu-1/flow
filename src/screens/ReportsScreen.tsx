@@ -220,25 +220,49 @@ export default function ReportsScreen() {
     return statsView === 'income' ? incomeStats.sum : expenseStats.sum;
   }, [statsView, incomeStats, expenseStats]);
 
-  // For weekly view, slice data into weeks and get current week
+  // For weekly view, calculate current week data from filtered transactions (like Dashboard)
   const currentWeekData = useMemo(() => {
     if (period !== 'weekly') return series;
     
-    const weekSize = 7;
-    // Reverse the arrays to show most recent week first (index 0 = current week)
-    const reversedLabels = [...series.labels].reverse();
-    const reversedIncome = [...series.income].reverse();
-    const reversedExpense = [...series.expense].reverse();
+    // Calculate the current week range (Sun-Sat)
+    const now = new Date();
+    const offset = now.getDay(); // 0 = Sunday, 6 = Saturday
+    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset - (currentWeek * 7), 0, 0, 0, 0);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 7);
     
-    const startIndex = currentWeek * weekSize;
-    const endIndex = startIndex + weekSize;
+    // Create 7 daily buckets for the week (Sun-Sat)
+    const labels: string[] = [];
+    const income: number[] = [];
+    const expense: number[] = [];
     
-    return {
-      labels: reversedLabels.slice(startIndex, endIndex).reverse(), // Reverse again to show Sun-Sat order
-      income: reversedIncome.slice(startIndex, endIndex).reverse(),
-      expense: reversedExpense.slice(startIndex, endIndex).reverse(),
-    };
-  }, [series, currentWeek, period]);
+    for (let day = 0; day < 7; day++) {
+      const dayStart = new Date(weekStart);
+      dayStart.setDate(weekStart.getDate() + day);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayStart.getDate() + 1);
+      
+      // Filter transactions for this day
+      const dayTransactions = filteredTransactions.filter(t => {
+        const txDate = new Date(t.date);
+        return txDate >= dayStart && txDate < dayEnd;
+      });
+      
+      const dayIncome = dayTransactions
+        .filter(t => t.type === 'income')
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      const dayExpense = dayTransactions
+        .filter(t => t.type === 'expense')
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      labels.push(days[dayStart.getDay()]);
+      income.push(dayIncome);
+      expense.push(dayExpense);
+    }
+    
+    return { labels, income, expense };
+  }, [series, currentWeek, period, filteredTransactions]);
 
   // Calculate total number of weeks available
   const totalWeeks = useMemo(() => {
@@ -328,6 +352,7 @@ export default function ReportsScreen() {
                       period={period}
                       maxValue={currentStats.max}
                       size={100}
+                      colorOverride={statsView === 'income' ? colors.success : colors.danger}
                     />
                   </Animated.View>
                   
@@ -339,6 +364,7 @@ export default function ReportsScreen() {
                       period={period}
                       maxValue={currentStats.max}
                       size={100}
+                      colorOverride={statsView === 'income' ? colors.success : colors.danger}
                     />
                   </Animated.View>
                   
@@ -350,6 +376,7 @@ export default function ReportsScreen() {
                       period={period}
                       maxValue={currentStats.max}
                       size={100}
+                      colorOverride={statsView === 'income' ? colors.success : colors.danger}
                     />
                   </Animated.View>
                 </>
@@ -375,6 +402,7 @@ export default function ReportsScreen() {
                       period={period}
                       maxValue={currentStats.max}
                       size={100}
+                      colorOverride={statsView === 'income' ? colors.success : colors.danger}
                     />
                   </Animated.View>
                   
@@ -386,6 +414,7 @@ export default function ReportsScreen() {
                       period={period}
                       maxValue={currentStats.max}
                       size={100}
+                      colorOverride={statsView === 'income' ? colors.success : colors.danger}
                     />
                   </Animated.View>
                 </>
