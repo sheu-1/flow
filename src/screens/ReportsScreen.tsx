@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
-import Animated, { FadeInUp, FadeOut, withTiming } from 'react-native-reanimated';
+import Animated, { FadeInUp, FadeOut, useAnimatedStyle, withTiming, useSharedValue } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { spacing, fontSize, borderRadius } from '../theme/colors';
@@ -39,6 +39,10 @@ export default function ReportsScreen() {
   const [barTooltip, setBarTooltip] = useState<{ label: string; income: number; expense: number; index: number } | null>(null);
   const [showMetricsExplanation, setShowMetricsExplanation] = useState(false);
   const chartScrollRef = useRef<ScrollView>(null);
+  
+  // Shared values for toggle animation
+  const incomeOpacity = useSharedValue(1);
+  const expenseOpacity = useSharedValue(0);
   
   // Date filtering
   const {
@@ -346,6 +350,26 @@ export default function ReportsScreen() {
     return statsView === 'income' ? incomeStats.sum : expenseStats.sum;
   }, [statsView, incomeStats, expenseStats]);
 
+  // Update opacity animations when statsView changes
+  useEffect(() => {
+    if (statsView === 'income') {
+      incomeOpacity.value = withTiming(1, { duration: 200 });
+      expenseOpacity.value = withTiming(0, { duration: 200 });
+    } else {
+      incomeOpacity.value = withTiming(0, { duration: 200 });
+      expenseOpacity.value = withTiming(1, { duration: 200 });
+    }
+  }, [statsView]);
+
+  // Animated styles for toggle indicators
+  const incomeIndicatorStyle = useAnimatedStyle(() => ({
+    opacity: incomeOpacity.value,
+  }));
+
+  const expenseIndicatorStyle = useAnimatedStyle(() => ({
+    opacity: expenseOpacity.value,
+  }));
+
   // Calculate total number of weeks available
   const totalWeeks = useMemo(() => {
     if (period !== 'weekly') return 1;
@@ -398,10 +422,8 @@ export default function ReportsScreen() {
                 <Animated.View 
                   style={[
                     styles.categoryToggleIndicator,
-                    { 
-                      backgroundColor: colors.success, 
-                      opacity: withTiming(statsView === 'income' ? 1 : 0, { duration: 200 })
-                    }
+                    { backgroundColor: colors.success },
+                    incomeIndicatorStyle
                   ]}
                 />
                 <Animated.Text style={[
@@ -418,10 +440,8 @@ export default function ReportsScreen() {
                 <Animated.View 
                   style={[
                     styles.categoryToggleIndicator,
-                    { 
-                      backgroundColor: colors.danger, 
-                      opacity: withTiming(statsView === 'expense' ? 1 : 0, { duration: 200 })
-                    }
+                    { backgroundColor: colors.danger },
+                    expenseIndicatorStyle
                   ]}
                 />
                 <Animated.Text style={[
