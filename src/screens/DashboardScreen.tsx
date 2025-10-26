@@ -251,21 +251,6 @@ export default function DashboardScreen() {
         
         {/* Main Content */}
         <View>
-        {/* Circular Metrics Card with Insights */}
-        <TouchableOpacity
-          style={[styles.metricsCard, { backgroundColor: colors.surface }]}
-          onPress={() => setShowMetricsInsights(!showMetricsInsights)}
-          activeOpacity={0.8}
-        >
-          <View style={styles.metricsHeader}>
-            <Text style={[styles.metricsTitle, { color: colors.text }]}>Period Overview</Text>
-            <Ionicons 
-              name={showMetricsInsights ? 'chevron-up' : 'chevron-down'} 
-              size={20} 
-              color={colors.textSecondary} 
-            />
-          </View>
-
         {/* Animated Circular Metrics */}
         <View style={styles.circularMetricsContainer}>
           <Animated.View entering={FadeInUp.delay(50).springify()} style={styles.circleWrapper}>
@@ -302,10 +287,24 @@ export default function DashboardScreen() {
           </Animated.View>
         </View>
 
-        {/* Metrics Insights Dropdown */}
+        {/* Metrics Insights Section */}
+        <TouchableOpacity
+          style={[styles.insightsCard, { backgroundColor: colors.surface }]}
+          onPress={() => setShowMetricsInsights(!showMetricsInsights)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.insightsHeader}>
+            <Text style={[styles.insightsTitle, { color: colors.text }]}>Period Insights</Text>
+            <Ionicons 
+              name={showMetricsInsights ? 'chevron-up' : 'chevron-down'} 
+              size={20} 
+              color={colors.textSecondary} 
+            />
+          </View>
+
         {showMetricsInsights && (
           <Animated.View 
-            style={styles.insightsContainer}
+            style={styles.insightsDropdown}
             entering={FadeInUp.springify()}
           >
             <View style={styles.insightRow}>
@@ -600,7 +599,7 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: fontSize.sm,
   },
-  metricsCard: {
+  insightsCard: {
     borderRadius: 16,
     padding: spacing.md,
     marginHorizontal: spacing.md,
@@ -612,17 +611,16 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 4,
   },
-  metricsHeader: {
+  insightsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.sm,
   },
-  metricsTitle: {
+  insightsTitle: {
     fontSize: fontSize.lg,
     fontWeight: 'bold',
   },
-  insightsContainer: {
+  insightsDropdown: {
     marginTop: spacing.md,
     paddingTop: spacing.md,
     borderTopWidth: 1,

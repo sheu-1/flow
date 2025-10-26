@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
-import Animated, { FadeInUp, FadeOut } from 'react-native-reanimated';
+import Animated, { FadeInUp, FadeOut, withTiming } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { spacing, fontSize, borderRadius } from '../theme/colors';
@@ -390,34 +390,46 @@ export default function ReportsScreen() {
           <View style={{ paddingHorizontal: spacing.md }}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Summary Statistics</Text>
             
-            <View style={[styles.categoryToggle, { backgroundColor: colors.surface }]}>
+            <View style={styles.categoryToggle}>
               <TouchableOpacity
-                style={[
-                  styles.categoryToggleButton,
-                  statsView === 'income' && { backgroundColor: colors.success }
-                ]}
+                style={styles.categoryToggleButton}
                 onPress={() => setStatsView('income')}
               >
-                <Text style={[
+                <Animated.View 
+                  style={[
+                    styles.categoryToggleIndicator,
+                    { 
+                      backgroundColor: colors.success, 
+                      opacity: withTiming(statsView === 'income' ? 1 : 0, { duration: 200 })
+                    }
+                  ]}
+                />
+                <Animated.Text style={[
                   styles.categoryToggleText,
-                  { color: statsView === 'income' ? colors.text : colors.textSecondary }
+                  { color: statsView === 'income' ? colors.success : colors.textSecondary, fontWeight: statsView === 'income' ? '700' : '500' }
                 ]}>
                   Money In
-                </Text>
+                </Animated.Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[
-                  styles.categoryToggleButton,
-                  statsView === 'expense' && { backgroundColor: colors.danger }
-                ]}
+                style={styles.categoryToggleButton}
                 onPress={() => setStatsView('expense')}
               >
-                <Text style={[
+                <Animated.View 
+                  style={[
+                    styles.categoryToggleIndicator,
+                    { 
+                      backgroundColor: colors.danger, 
+                      opacity: withTiming(statsView === 'expense' ? 1 : 0, { duration: 200 })
+                    }
+                  ]}
+                />
+                <Animated.Text style={[
                   styles.categoryToggleText,
-                  { color: statsView === 'expense' ? colors.text : colors.textSecondary }
+                  { color: statsView === 'expense' ? colors.danger : colors.textSecondary, fontWeight: statsView === 'expense' ? '700' : '500' }
                 ]}>
                   Money Out
-                </Text>
+                </Animated.Text>
               </TouchableOpacity>
             </View>
 
@@ -511,7 +523,11 @@ export default function ReportsScreen() {
                 </View>
               </Animated.View>
             )}
+          </View>
+        ) : null}
 
+        {!loading && series.labels.length > 0 ? (
+          <View>
             {/* Animated Circular Stats Cards */}
             <View style={styles.circularStatsContainer}>
               {/* For Daily/Weekly: Show Min, Avg, Max */}
@@ -592,6 +608,7 @@ export default function ReportsScreen() {
             </View>
             
             {/* Period Total - Dynamic based on selected period */}
+            <View style={{ paddingHorizontal: spacing.md }}>
             <Animated.View 
               entering={FadeInUp.delay(200).springify()}
               style={[styles.periodTotalCard, { backgroundColor: colors.surface }]}
@@ -612,6 +629,7 @@ export default function ReportsScreen() {
                 </View>
               </View>
             </Animated.View>
+            </View>
           </View>
         ) : null}
 
@@ -1136,22 +1154,27 @@ const styles = StyleSheet.create({
   },
   categoryToggle: {
     flexDirection: 'row',
-    borderRadius: borderRadius.md,
-    padding: spacing.xs,
-    marginBottom: spacing.lg,
-    marginHorizontal: spacing.md,
+    justifyContent: 'center',
+    gap: spacing.lg,
+    marginBottom: spacing.md,
   },
   categoryToggleButton: {
-    flex: 1,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderRadius: borderRadius.md,
+    position: 'relative',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
     alignItems: 'center',
-    marginHorizontal: spacing.xs,
+  },
+  categoryToggleIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+    borderRadius: 1,
   },
   categoryToggleText: {
-    fontSize: fontSize.md,
-    fontWeight: '700',
+    fontSize: fontSize.sm,
+    paddingBottom: spacing.xs,
   },
   chartHeaderContainer: {
     flexDirection: 'row',
