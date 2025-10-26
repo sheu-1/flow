@@ -620,12 +620,8 @@ export default function ReportsScreen() {
                       const incomeHeight = maxValue > 0 ? (income / maxValue) * 120 : 0;
                       const expenseHeight = maxValue > 0 ? (expense / maxValue) * 120 : 0;
                       
-                      // For weekly: show only day abbreviation (Sun, Mon, etc.)
-                      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-                      const date = new Date();
-                      const totalDaysBack = (currentWeek * 7) + (currentWeekData.labels.length - 1 - index);
-                      date.setDate(date.getDate() - totalDaysBack);
-                      const displayLabel = days[date.getDay()];
+                      // Use the correctly calculated label from currentWeekData
+                      const displayLabel = label;
                     
                       return (
                         <TouchableOpacity
