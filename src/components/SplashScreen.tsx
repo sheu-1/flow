@@ -1,6 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, Dimensions } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, StyleSheet, Animated, Image } from 'react-native';
 import { useThemeColors } from '../theme/ThemeProvider';
 
 interface SplashScreenProps {
@@ -11,11 +10,9 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onAnimationComplete 
   const colors = useThemeColors();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.3)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
 
   useEffect(() => {
     const animationSequence = Animated.sequence([
-      // Fade in and scale up the icon
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 1,
@@ -29,20 +26,13 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onAnimationComplete 
           useNativeDriver: true,
         }),
       ]),
-      // Slide up the text
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-      // Hold for a brief moment
       Animated.delay(500),
     ]);
 
     animationSequence.start(() => {
       onAnimationComplete?.();
     });
-  }, [fadeAnim, scaleAnim, slideAnim, onAnimationComplete]);
+  }, [fadeAnim, scaleAnim, onAnimationComplete]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -55,41 +45,11 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onAnimationComplete 
           },
         ]}
       >
-        <Ionicons name="analytics" size={80} color={colors.primary} />
-      </Animated.View>
-      
-      <Animated.View
-        style={[
-          styles.textContainer,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
-          },
-        ]}
-      >
-        <Text style={[styles.title, { color: colors.text }]}>Cashflow Tracker</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Manage your finances with ease</Text>
-      </Animated.View>
-
-      <Animated.View
-        style={[
-          styles.loadingContainer,
-          {
-            opacity: fadeAnim,
-          },
-        ]}
-      >
-        <View style={[styles.loadingBar, { backgroundColor: colors.surface }]}>
-          <Animated.View 
-            style={[
-              styles.loadingProgress, 
-              { 
-                backgroundColor: colors.primary,
-                transform: [{ scaleX: fadeAnim }],
-              }
-            ]} 
-          />
-        </View>
+        <Image
+          source={require('../../assets/icon.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
       </Animated.View>
     </View>
   );
@@ -100,39 +60,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
   },
   iconContainer: {
-    marginBottom: 30,
+    marginBottom: 0,
   },
-  textContainer: {
-    alignItems: 'center',
-    marginBottom: 60,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    textAlign: 'center',
-    opacity: 0.8,
-  },
-  loadingContainer: {
-    position: 'absolute',
-    bottom: 100,
-    width: '60%',
-  },
-  loadingBar: {
-    height: 4,
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  loadingProgress: {
-    height: '100%',
-    borderRadius: 2,
-    transformOrigin: 'left',
+  logo: {
+    width: 120,
+    height: 120,
   },
 });
