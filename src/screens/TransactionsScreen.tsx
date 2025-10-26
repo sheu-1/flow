@@ -328,7 +328,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   listContainer: {
-    paddingHorizontal: spacing.md,
     paddingBottom: spacing.xs,
   },
   emptyState: {

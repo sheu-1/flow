@@ -470,6 +470,45 @@ export default function ReportsScreen() {
                     </Text>
                   </View>
                 </View>
+
+                {/* Detailed Insights */}
+                <View style={[styles.detailedInsightsSection, { borderTopColor: colors.border }]}>
+                  <View style={styles.insightDetailRow}>
+                    <Ionicons name="information-circle" size={16} color={colors.primary} />
+                    <Text style={[styles.insightDetailLabel, { color: colors.text }]}>Period Total</Text>
+                    <Text style={[styles.insightDetailValue, { color: statsView === 'income' ? colors.success : colors.danger }]}>
+                      {formatCurrency(periodTotal)}
+                    </Text>
+                  </View>
+                  <Text style={[styles.insightDetailDescription, { color: colors.textSecondary }]}>
+                    Total {statsView === 'income' ? 'income' : 'expenses'} for the selected period
+                  </Text>
+
+                  <View style={[styles.insightDetailRow, { marginTop: spacing.sm }]}>
+                    <Ionicons name="calculator" size={16} color={colors.primary} />
+                    <Text style={[styles.insightDetailLabel, { color: colors.text }]}>Average per Period</Text>
+                    <Text style={[styles.insightDetailValue, { color: colors.primary }]}>
+                      {formatCurrency(currentStats.avg)}
+                    </Text>
+                  </View>
+                  <Text style={[styles.insightDetailDescription, { color: colors.textSecondary }]}>
+                    Average {statsView === 'income' ? 'income' : 'spending'} per {period === 'daily' ? 'hour' : period === 'weekly' ? 'day' : period === 'monthly' ? 'month' : 'year'}
+                  </Text>
+                </View>
+
+                {/* Smart Tip */}
+                <View style={[styles.tip, { backgroundColor: colors.primary + '15' }]}>
+                  <Ionicons name="bulb" size={16} color={colors.primary} />
+                  <Text style={[styles.tipText, { color: colors.primary }]}>
+                    {statsView === 'income' 
+                      ? currentStats.count > 0 
+                        ? `You have ${currentStats.count} income transactions. Your highest single income was ${formatCurrency(currentStats.max)}.`
+                        : 'No income recorded for this period.'
+                      : currentStats.count > 0
+                        ? `You made ${currentStats.count} expense transactions. Try to keep daily expenses below ${formatCurrency(currentStats.avg * 0.9)} to reduce spending.`
+                        : 'No expenses recorded for this period.'}
+                  </Text>
+                </View>
               </Animated.View>
             )}
 
@@ -1296,5 +1335,44 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     borderTopWidth: 1,
     borderTopColor: 'rgba(0,0,0,0.1)',
+  },
+  detailedInsightsSection: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+  },
+  insightDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  insightDetailLabel: {
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    flex: 1,
+  },
+  insightDetailValue: {
+    fontSize: fontSize.md,
+    fontWeight: 'bold',
+  },
+  insightDetailDescription: {
+    fontSize: fontSize.xs,
+    marginLeft: 24,
+    marginBottom: spacing.sm,
+    lineHeight: 16,
+  },
+  tip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.sm,
+    borderRadius: 8,
+    marginTop: spacing.sm,
+    gap: spacing.xs,
+  },
+  tipText: {
+    fontSize: fontSize.xs,
+    flex: 1,
+    lineHeight: 16,
   },
 });

@@ -38,6 +38,7 @@ export default function DashboardScreen() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [showDetailedPeriodSelector, setShowDetailedPeriodSelector] = useState(false);
   const [filterLoading, setFilterLoading] = useState(false);
+  const [showMetricsInsights, setShowMetricsInsights] = useState(false);
   
   // Date filtering
   const {
@@ -250,6 +251,21 @@ export default function DashboardScreen() {
         
         {/* Main Content */}
         <View>
+        {/* Circular Metrics Card with Insights */}
+        <TouchableOpacity
+          style={[styles.metricsCard, { backgroundColor: colors.surface }]}
+          onPress={() => setShowMetricsInsights(!showMetricsInsights)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.metricsHeader}>
+            <Text style={[styles.metricsTitle, { color: colors.text }]}>Period Overview</Text>
+            <Ionicons 
+              name={showMetricsInsights ? 'chevron-up' : 'chevron-down'} 
+              size={20} 
+              color={colors.textSecondary} 
+            />
+          </View>
+
         {/* Animated Circular Metrics */}
         <View style={styles.circularMetricsContainer}>
           <Animated.View entering={FadeInUp.delay(50).springify()} style={styles.circleWrapper}>
@@ -285,6 +301,65 @@ export default function DashboardScreen() {
             />
           </Animated.View>
         </View>
+
+        {/* Metrics Insights Dropdown */}
+        {showMetricsInsights && (
+          <Animated.View 
+            style={styles.insightsContainer}
+            entering={FadeInUp.springify()}
+          >
+            <View style={styles.insightRow}>
+              <View style={styles.insightInfo}>
+                <Ionicons name="trending-up" size={16} color={colors.success} />
+                <Text style={[styles.insightLabel, { color: colors.text }]}>Money In</Text>
+              </View>
+              <Text style={[styles.insightValue, { color: colors.success }]}>
+                {moneyIn.toLocaleString('en-US', { style: 'currency', currency: 'KES' })}
+              </Text>
+            </View>
+            <Text style={[styles.insightDescription, { color: colors.textSecondary }]}>
+              Total income received during {periodLabel.toLowerCase()}
+            </Text>
+
+            <View style={[styles.insightRow, { marginTop: spacing.md }]}>
+              <View style={styles.insightInfo}>
+                <Ionicons name="receipt" size={16} color={colors.primary} />
+                <Text style={[styles.insightLabel, { color: colors.text }]}>Transaction Count</Text>
+              </View>
+              <Text style={[styles.insightValue, { color: colors.primary }]}>
+                {transactionCount}
+              </Text>
+            </View>
+            <Text style={[styles.insightDescription, { color: colors.textSecondary }]}>
+              Total number of transactions in {periodLabel.toLowerCase()}
+            </Text>
+
+            <View style={[styles.insightRow, { marginTop: spacing.md }]}>
+              <View style={styles.insightInfo}>
+                <Ionicons name="trending-down" size={16} color={colors.danger} />
+                <Text style={[styles.insightLabel, { color: colors.text }]}>Money Out</Text>
+              </View>
+              <Text style={[styles.insightValue, { color: colors.danger }]}>
+                {moneyOut.toLocaleString('en-US', { style: 'currency', currency: 'KES' })}
+              </Text>
+            </View>
+            <Text style={[styles.insightDescription, { color: colors.textSecondary }]}>
+              Total expenses incurred during {periodLabel.toLowerCase()}
+            </Text>
+
+            <View style={[styles.tip, { backgroundColor: colors.primary + '15' }]}>
+              <Ionicons name="bulb" size={16} color={colors.primary} />
+              <Text style={[styles.tipText, { color: colors.primary }]}>
+                {netBalance > 0 
+                  ? `Great job! You have a positive cash flow of ${Math.abs(netBalance).toLocaleString('en-US', { style: 'currency', currency: 'KES' })} for ${periodLabel.toLowerCase()}.`
+                  : netBalance < 0
+                  ? `Your expenses exceed income by ${Math.abs(netBalance).toLocaleString('en-US', { style: 'currency', currency: 'KES' })}. Consider reducing spending.`
+                  : 'Your income and expenses are balanced.'}
+              </Text>
+            </View>
+          </Animated.View>
+        )}
+        </TouchableOpacity>
         
         {/* Net Balance Card */}
         <Animated.View 
@@ -524,5 +599,71 @@ const styles = StyleSheet.create({
   },
   emptySubtext: {
     fontSize: fontSize.sm,
+  },
+  metricsCard: {
+    borderRadius: 16,
+    padding: spacing.md,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  metricsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  metricsTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: 'bold',
+  },
+  insightsContainer: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.1)',
+  },
+  insightRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  insightInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  insightLabel: {
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+  },
+  insightValue: {
+    fontSize: fontSize.md,
+    fontWeight: 'bold',
+  },
+  insightDescription: {
+    fontSize: fontSize.xs,
+    marginLeft: 24,
+    marginBottom: spacing.sm,
+    lineHeight: 16,
+  },
+  tip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.sm,
+    borderRadius: 8,
+    marginTop: spacing.sm,
+    gap: spacing.xs,
+  },
+  tipText: {
+    fontSize: fontSize.xs,
+    flex: 1,
+    lineHeight: 16,
   },
 });
