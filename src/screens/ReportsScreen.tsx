@@ -446,220 +446,17 @@ export default function ReportsScreen() {
                 />
                 <Animated.Text style={[
                   styles.categoryToggleText,
-
-      const expenseStats = useMemo(() => {
-        const arr = currentWeekData.expense || [];
-        // Filter out non-finite values, zeros, and nulls
-        const positiveValues = arr.filter((n) => Number.isFinite(n) && n > 0);
-        
-        // For sum and avg, include all valid values (including zeros)
-        const validForSum = arr.filter((n) => Number.isFinite(n));
-        const sum = validForSum.reduce((a, b) => a + b, 0);
-        const avg = validForSum.length ? sum / validForSum.length : 0;
-        
-        // Count individual expense transactions
-        const count = filteredTransactions.filter(t => t.type === 'expense').length;
-        
-        // Max only considers actual positive transactions
-        const max = positiveValues.length ? Math.max(...positiveValues) : 0;
-        
-        return { sum, avg, count, max };
-      }, [currentWeekData.expense, filteredTransactions]);
-
-      // Get current stats based on selected view
-      const currentStats = useMemo(() => {
-        return statsView === 'income' ? incomeStats : expenseStats;
-      }, [statsView, incomeStats, expenseStats]);
-
-      // Calculate transaction count based on selected period
-      const calculatePeriodTransactionCount = useCallback(() => {
-        const now = new Date();
-        let startDate: Date;
-        let endDate: Date;
-
-        switch (period) {
-          case 'daily':
-            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-            endDate = new Date(startDate);
-            endDate.setDate(endDate.getDate() + 1);
-            break;
-          case 'weekly':
-            const offset = now.getDay();
-            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset, 0, 0, 0, 0);
-            endDate = new Date(startDate);
-            endDate.setDate(endDate.getDate() + 7);
-            break;
-          case 'monthly':
-            startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-            endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-            break;
-          case 'yearly':
-            startDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
-            endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
-            break;
-          default:
-            startDate = new Date(0);
-            endDate = now;
-        }
-
-        return filteredTransactions.filter(t => {
-          const txDate = new Date(t.date);
-          return txDate >= startDate && txDate <= endDate;
-        }).length;
-      }, [period, filteredTransactions]);
-
-      // Replace the existing transactionCount calculation with:
-      const transactionCount = calculatePeriodTransactionCount();
-
-      // Calculate dynamic period total based on selected view
-      const periodTotal = useMemo(() => {
-        return statsView === 'income' ? incomeStats.sum : expenseStats.sum;
-      }, [statsView, incomeStats, expenseStats]);
-
-      // Update opacity animations when statsView changes
-      useEffect(() => {
-        if (statsView === 'income') {
-          incomeOpacity.value = withTiming(1, { duration: 200 });
-          expenseOpacity.value = withTiming(0, { duration: 200 });
-        } else {
-          incomeOpacity.value = withTiming(0, { duration: 200 });
-          expenseOpacity.value = withTiming(1, { duration: 200 });
-        }
-      }, [statsView]);
-
-      // Animated styles for toggle indicators
-      const incomeIndicatorStyle = useAnimatedStyle(() => ({
-        opacity: incomeOpacity.value,
-      }));
-
-      const expenseIndicatorStyle = useAnimatedStyle(() => ({
-        opacity: expenseOpacity.value,
-      }));
-
-      // Calculate total number of weeks available
-      const totalWeeks = useMemo(() => {
-        if (period !== 'weekly') return 1;
-        return Math.ceil(series.labels.length / 7);
-      }, [series.labels.length, period]);
-
-      return (
-        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-          <ScrollView 
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
-            }
-            stickyHeaderIndices={[1]} // Make the period selector (index 1) sticky
-          >
-            {/* Scrollable Header */}
-            <View style={[styles.header, { backgroundColor: colors.background }]}>
-              <Text style={[styles.title, { color: colors.text }]}>Reports</Text>
+                  { color: statsView === 'expense' ? colors.danger : colors.textSecondary, fontWeight: statsView === 'expense' ? '700' : '500' }
+                ]}>
+                  Money Out
+                </Animated.Text>
+              </TouchableOpacity>
             </View>
-            
-            {/* Sticky Unified Period Selector */}
-            <View style={[styles.stickyPeriodSelector, { backgroundColor: colors.background }]}>
-              <UnifiedPeriodSelector
-                selectedPeriod={period}
-                onPeriodChange={setPeriod}
-                onOpenDetailedSelector={() => setShowDetailedPeriodSelector(true)}
-                removeMargin
-              />
-              {filterLoading && (
-                <View style={styles.filterLoadingIndicator}>
-                  <ActivityIndicator size="small" color={colors.primary} />
-                  <Text style={[styles.filterLoadingText, { color: colors.textSecondary }]}>Applying filters...</Text>
-                </View>
-              )}
-            </View>
-            
-            {/* Main Content */}
-            <View>
+          </View>
+        ) : null}
 
-            {/* Summary statistics */}
-            {!loading && series.labels.length > 0 ? (
-              <View style={{ paddingHorizontal: spacing.md }}>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>Summary Statistics</Text>
-                
-                <View style={styles.categoryToggle}>
-                  <TouchableOpacity
-                    style={styles.categoryToggleButton}
-                    onPress={() => setStatsView('income')}
-                  >
-                    <Animated.View 
-                      style={[
-                        styles.categoryToggleIndicator,
-                        { backgroundColor: colors.success },
-                        incomeIndicatorStyle
-                      ]}
-                    />
-                    <Animated.Text style={[
-                      styles.categoryToggleText,
-                      { color: statsView === 'income' ? colors.success : colors.textSecondary, fontWeight: statsView === 'income' ? '700' : '500' }
-                    ]}>
-                      Money In
-                    </Animated.Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.categoryToggleButton}
-                    onPress={() => setStatsView('expense')}
-                  >
-                    <Animated.View 
-                      style={[
-                        styles.categoryToggleIndicator,
-                        { backgroundColor: colors.danger },
-                        expenseIndicatorStyle
-                      ]}
-                    />
-                    <Animated.Text style={[
-                      styles.categoryToggleText,
-                      { color: statsView === 'expense' ? colors.danger : colors.textSecondary, fontWeight: statsView === 'expense' ? '700' : '500' }
-                    ]}>
-                      Money Out
-                    </Animated.Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Metrics Explanation */}
-                {/* Removed from here */}
-
-                {/* Detailed Insights */}
-                <View style={[styles.detailedInsightsSection, { borderTopColor: colors.border }]}>
-                  <View style={styles.insightDetailRow}>
-                    <Ionicons name="information-circle" size={16} color={colors.primary} />
-                    <Text style={[styles.insightDetailLabel, { color: colors.text }]}>Period Total</Text>
-                    <Text style={[styles.insightDetailValue, { color: statsView === 'income' ? colors.success : colors.danger }]}>
-                      {formatCurrency(periodTotal)}
-                    </Text>
-                  </View>
-                  <Text style={[styles.insightDetailDescription, { color: colors.textSecondary }]}>
-                    Total {statsView === 'income' ? 'income' : 'expenses'} for the selected period
-                  </Text>
-
-                  <View style={[styles.insightDetailRow, { marginTop: spacing.sm }]}>
-                    <Ionicons name="calculator" size={16} color={colors.primary} />
-                    <Text style={[styles.insightDetailLabel, { color: colors.text }]}>Average per Period</Text>
-                    <Text style={[styles.insightDetailValue, { color: colors.primary }]}>
-                      {formatCurrency(currentStats.avg)}
-                    </Text>
-                  </View>
-                  <Text style={[styles.insightDetailDescription, { color: colors.textSecondary }]}>
-                    Average {statsView === 'income' ? 'income' : 'spending'} per {period === 'daily' ? 'hour' : period === 'weekly' ? 'day' : period === 'monthly' ? 'month' : 'year'}
-                  </Text>
-                </View>
-
-                {/* Smart Tip */}
-                <View style={[styles.tip, { backgroundColor: colors.primary + '15' }]}>
-                  <Ionicons name="bulb" size={16} color={colors.primary} />
-                  <Text style={[styles.tipText, { color: colors.primary }]}>
-                    {statsView === 'income' 
-                      ? currentStats.count > 0 
-                        ? `You have ${currentStats.count} income transactions. Your highest single income was ${formatCurrency(currentStats.max)}.`
-                        : 'No income recorded for this period.'
-                      : currentStats.count > 0
-                        ? `You made ${currentStats.count} expense transactions. Try to keep daily expenses below ${formatCurrency(currentStats.avg * 0.9)} to reduce spending.`
-                        : 'No expenses recorded for this period.'}
-                  </Text>
-                </View>
+        {!loading && series.labels.length > 0 ? (
+          <View>
             {/* Animated Circular Stats Cards */}
             <View style={styles.circularStatsContainer}>
               {/* For Daily/Weekly: Show Min, Avg, Max */}
@@ -763,7 +560,7 @@ export default function ReportsScreen() {
             </Animated.View>
             </View>
 
-            {/* Metrics Explanation (moved below circles) */}
+            {/* Metrics Explanation - moved below circles */}
             <View style={{ paddingHorizontal: spacing.md }}>
               <TouchableOpacity 
                 style={[styles.metricsExplanationHeader, { backgroundColor: colors.surface }]}
@@ -778,6 +575,7 @@ export default function ReportsScreen() {
                   color={colors.textSecondary} 
                 />
               </TouchableOpacity>
+              
               {showMetricsExplanation && (
                 <Animated.View 
                   entering={FadeInUp.springify()}
@@ -787,21 +585,29 @@ export default function ReportsScreen() {
                     <View style={[styles.explanationDot, { backgroundColor: '#14B8A6' }]} />
                     <View style={styles.explanationTextContainer}>
                       <Text style={[styles.explanationLabel, { color: colors.text }]}>Count</Text>
-                      <Text style={[styles.explanationText, { color: colors.textSecondary }]}>Number of individual {statsView === 'income' ? 'money in' : 'money out'} transactions</Text>
+                      <Text style={[styles.explanationText, { color: colors.textSecondary }]}>
+                        Number of individual {statsView === 'income' ? 'money in' : 'money out'} transactions
+                      </Text>
                     </View>
                   </View>
+                  
                   <View style={styles.explanationItem}>
                     <View style={[styles.explanationDot, { backgroundColor: '#A855F7' }]} />
                     <View style={styles.explanationTextContainer}>
                       <Text style={[styles.explanationLabel, { color: colors.text }]}>Average</Text>
-                      <Text style={[styles.explanationText, { color: colors.textSecondary }]}>Average amount per period bucket</Text>
+                      <Text style={[styles.explanationText, { color: colors.textSecondary }]}>
+                        Average amount per period bucket
+                      </Text>
                     </View>
                   </View>
+                  
                   <View style={styles.explanationItem}>
                     <View style={[styles.explanationDot, { backgroundColor: statsView === 'income' ? colors.success : colors.danger }]} />
                     <View style={styles.explanationTextContainer}>
                       <Text style={[styles.explanationLabel, { color: colors.text }]}>Maximum</Text>
-                      <Text style={[styles.explanationText, { color: colors.textSecondary }]}>Highest amount in a single period bucket</Text>
+                      <Text style={[styles.explanationText, { color: colors.textSecondary }]}>
+                        Highest amount in a single period bucket
+                      </Text>
                     </View>
                   </View>
 
@@ -813,7 +619,10 @@ export default function ReportsScreen() {
                         {formatCurrency(periodTotal)}
                       </Text>
                     </View>
-                    <Text style={[styles.insightDetailDescription, { color: colors.textSecondary }]}>Total {statsView === 'income' ? 'income' : 'expenses'} for the selected period</Text>
+                    <Text style={[styles.insightDetailDescription, { color: colors.textSecondary }]}>
+                      Total {statsView === 'income' ? 'income' : 'expenses'} for the selected period
+                    </Text>
+
                     <View style={[styles.insightDetailRow, { marginTop: spacing.sm }]}>
                       <Ionicons name="calculator" size={16} color={colors.primary} />
                       <Text style={[styles.insightDetailLabel, { color: colors.text }]}>Average per Period</Text>
@@ -821,7 +630,9 @@ export default function ReportsScreen() {
                         {formatCurrency(currentStats.avg)}
                       </Text>
                     </View>
-                    <Text style={[styles.insightDetailDescription, { color: colors.textSecondary }]}>Average {statsView === 'income' ? 'income' : 'spending'} per {period === 'daily' ? 'hour' : period === 'weekly' ? 'day' : period === 'monthly' ? 'month' : 'year'}</Text>
+                    <Text style={[styles.insightDetailDescription, { color: colors.textSecondary }]}>
+                      Average {statsView === 'income' ? 'income' : 'spending'} per {period === 'daily' ? 'hour' : period === 'weekly' ? 'day' : period === 'monthly' ? 'month' : 'year'}
+                    </Text>
                   </View>
 
                   <View style={[styles.tip, { backgroundColor: colors.primary + '15' }]}>
