@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import Animated, { FadeInUp, FadeOut } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -38,6 +38,7 @@ export default function ReportsScreen() {
   const [filterLoading, setFilterLoading] = useState(false);
   const [barTooltip, setBarTooltip] = useState<{ label: string; income: number; expense: number; index: number } | null>(null);
   const [showMetricsExplanation, setShowMetricsExplanation] = useState(false);
+  const chartScrollRef = useRef<ScrollView>(null);
   
   // Date filtering
   const {
@@ -127,6 +128,40 @@ export default function ReportsScreen() {
   useEffect(() => {
     setCurrentWeek(0);
   }, [period]);
+
+  // Auto-scroll to current period when data loads or period changes
+  useEffect(() => {
+    if (series.labels.length === 0) return;
+    
+    const scrollToCurrentPeriod = () => {
+      if (!chartScrollRef.current) return;
+      
+      let scrollToIndex = 0;
+      const now = new Date();
+      
+      if (period === 'daily') {
+        // Scroll to current hour
+        scrollToIndex = now.getHours();
+      } else if (period === 'monthly') {
+        // Scroll to current month
+        scrollToIndex = now.getMonth();
+      } else if (period === 'yearly') {
+        // Scroll to current year (last item in 5-year view)
+        scrollToIndex = 4; // Current year is the last in the array
+      }
+      
+      // Calculate scroll position (approximate bar width + gap)
+      const barWidth = period === 'daily' ? 66 : 50; // Adjust based on bar group width
+      const scrollX = scrollToIndex * barWidth;
+      
+      // Delay to ensure layout is complete
+      setTimeout(() => {
+        chartScrollRef.current?.scrollTo({ x: scrollX, animated: true });
+      }, 300);
+    };
+    
+    scrollToCurrentPeriod();
+  }, [series.labels.length, period]);
 
   // Currency formatting provided by CurrencyProvider
 
@@ -632,7 +667,7 @@ export default function ReportsScreen() {
                   </View>
                 </View>
               ) : (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chartScroll}>
+                <ScrollView ref={chartScrollRef} horizontal showsHorizontalScrollIndicator={false} style={styles.chartScroll}>
                   <View style={styles.chartBarsScrollable}>
                     {currentWeekData.labels.map((label, index) => {
                       const income = currentWeekData.income[index] || 0;
@@ -742,59 +777,48 @@ export default function ReportsScreen() {
               )}
             </View>
 
-            {/* Week Navigation - Enhanced with month indicators */}
+            {/* Week Navigation - Enhanced with date ranges */}
             {period === 'weekly' && totalWeeks > 1 && (
               <View style={styles.weekSelectorContainer}>
                 <View style={styles.weekSelectorHeader}>
                   <TouchableOpacity 
-                    onPress={() => setCurrentWeek(Math.max(currentWeek - 1, 0))}
-                    disabled={currentWeek <= 0}
-                    style={[styles.navButton, { opacity: currentWeek <= 0 ? 0.3 : 1 }]}
+                    onPress={() => setCurrentWeek(Math.min(currentWeek + 1, totalWeeks - 1))}
+                    disabled={currentWeek >= totalWeeks - 1}
+                    style={[styles.navButton, { opacity: currentWeek >= totalWeeks - 1 ? 0.3 : 1 }]}
                   >
                     <Ionicons name="chevron-back" size={24} color={colors.text} />
                   </TouchableOpacity>
                   
                   <View style={styles.weekIndicatorContainer}>
-                    <Text style={[styles.weekIndicator, { color: colors.text }]}>
-                      Week {currentWeek + 1} of {totalWeeks}
-                    </Text>
                     {(() => {
-                      // Calculate month for current week
-                      const date = new Date();
-                      date.setDate(date.getDate() - (currentWeek * 7));
-                      const monthName = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+                      // Calculate date range for current week
+                      const now = new Date();
+                      const offset = now.getDay();
+                      const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset - (currentWeek * 7), 0, 0, 0, 0);
+                      const weekEnd = new Date(weekStart);
+                      weekEnd.setDate(weekStart.getDate() + 6);
+                      
+                      const formatDate = (date: Date) => {
+                        const month = date.toLocaleString('default', { month: 'short' });
+                        const day = date.getDate();
+                        return `${month} ${day}`;
+                      };
+                      
                       return (
-                        <Text style={[styles.monthIndicator, { color: colors.textSecondary }]}>
-                          {monthName}
+                        <Text style={[styles.weekIndicator, { color: colors.text }]}>
+                          {formatDate(weekStart)} – {formatDate(weekEnd)}
                         </Text>
                       );
                     })()}
                   </View>
                   
                   <TouchableOpacity 
-                    onPress={() => setCurrentWeek(Math.min(currentWeek + 1, totalWeeks - 1))}
-                    disabled={currentWeek >= totalWeeks - 1}
-                    style={[styles.navButton, { opacity: currentWeek >= totalWeeks - 1 ? 0.3 : 1 }]}
+                    onPress={() => setCurrentWeek(Math.max(currentWeek - 1, 0))}
+                    disabled={currentWeek <= 0}
+                    style={[styles.navButton, { opacity: currentWeek <= 0 ? 0.3 : 1 }]}
                   >
                     <Ionicons name="chevron-forward" size={24} color={colors.text} />
                   </TouchableOpacity>
-                </View>
-                
-                {/* Week dots indicator */}
-                <View style={styles.weekDotsContainer}>
-                  {Array.from({ length: totalWeeks }, (_, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      onPress={() => setCurrentWeek(index)}
-                      style={[
-                        styles.weekDot,
-                        {
-                          backgroundColor: index === currentWeek ? colors.primary : colors.surface,
-                          borderColor: colors.border,
-                        }
-                      ]}
-                    />
-                  ))}
                 </View>
               </View>
             )}

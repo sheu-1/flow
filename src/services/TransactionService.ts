@@ -246,7 +246,7 @@ async function clearUserCaches(userId: string): Promise<void> {
 function startOfWeek(d: Date) {
   const date = new Date(d);
   const day = date.getDay();
-  const diff = date.getDate() - day + (day === 0 ? -6 : 1); // week starts on Monday
+  const diff = date.getDate() - day; // week starts on Sunday
   return new Date(date.getFullYear(), date.getMonth(), diff, 0, 0, 0, 0);
 }
 

@@ -43,6 +43,16 @@ export const TransactionCard: React.FC<TransactionCardProps> = ({ transaction, o
   return (
     <>
       <TouchableOpacity style={[styles.container, { backgroundColor: colors.card }]} onPress={onPress} disabled={!onPress}>
+        {/* Ellipsis Menu Button - Top Right */}
+        {(onEditCategory || onDelete) && (
+          <TouchableOpacity 
+            style={styles.ellipsisButton}
+            onPress={() => setShowMenu(true)}
+          >
+            <Ionicons name="ellipsis-horizontal" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+        )}
+        
         <View style={[styles.iconContainer, { backgroundColor: colors.surface }]}>
           <Ionicons 
             name={getCategoryIcon(transaction.category || '')} 
@@ -73,16 +83,6 @@ export const TransactionCard: React.FC<TransactionCardProps> = ({ transaction, o
             </Text>
             <Text style={[styles.date, { color: colors.textSecondary }]}>{formatDate(typeof transaction.date === 'string' ? new Date(transaction.date) : transaction.date)}</Text>
           </View>
-          
-          {/* Ellipsis Menu Button */}
-          {(onEditCategory || onDelete) && (
-            <TouchableOpacity 
-              style={styles.ellipsisButton}
-              onPress={() => setShowMenu(true)}
-            >
-              <Ionicons name="ellipsis-horizontal" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
-          )}
         </View>
       </TouchableOpacity>
 
@@ -190,8 +190,11 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
   },
   ellipsisButton: {
+    position: 'absolute',
+    top: spacing.xs,
+    right: spacing.xs,
     padding: spacing.xs,
-    marginLeft: spacing.xs,
+    zIndex: 10,
   },
   modalOverlay: {
     flex: 1,
