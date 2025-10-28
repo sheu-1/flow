@@ -59,7 +59,7 @@ export async function signInApi(email: string, password: string) {
   return data;
 }
 
-export async function signOutApi() {
+export async function signOut() {
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
 }
@@ -408,19 +408,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     },
     signOut: async () => {
-      console.log('[Auth] signOut called');
       setLoading(true);
       try {
-        console.log('[Auth] Calling Supabase signOut API...');
-        await signOutApi();
-        console.log('[Auth] Supabase signOut successful');
-        console.log('[Auth] Clearing session and user state...');
+        await signOut();
         setSession(null);
         setUser(null);
-        console.log('[Auth] Sign out complete');
-      } catch (error) {
-        console.error('[Auth] Sign out error:', error);
-        throw error;
       } finally {
         setLoading(false);
       }

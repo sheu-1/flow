@@ -12,18 +12,15 @@ export default function ProfileScreen() {
   const { user, signOut } = useAuth();
   const navigation = useNavigation();
 
-  const handleSignOut = async () => {
-    console.log('[ProfileScreen] ===== SIGN OUT BUTTON PRESSED =====');
-    console.log('[ProfileScreen] User:', user?.email);
-    console.log('[ProfileScreen] signOut function:', typeof signOut);
-    try {
-      console.log('[ProfileScreen] About to call signOut() directly...');
-      await signOut();
-      console.log('[ProfileScreen] Sign out completed successfully');
-    } catch (error) {
-      console.error('[ProfileScreen] Sign out failed with error:', error);
-      Alert.alert('Error', 'Failed to sign out. Please try again.');
-    }
+  const handleSignOut = () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign Out', style: 'destructive', onPress: signOut },
+      ]
+    );
   };
 
   const displayName = user?.user_metadata?.full_name || user?.email || 'User';
@@ -137,9 +134,7 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <TouchableOpacity
             onPress={handleSignOut}
-            onPressIn={() => console.log('[ProfileScreen] Button touch detected')}
             style={[styles.signOutButton, { backgroundColor: colors.danger }]}
-            activeOpacity={0.7}
           >
             <Ionicons name="log-out-outline" size={20} color="#fff" style={styles.signOutIcon} />
             <Text style={styles.signOutText}>Sign Out</Text>
