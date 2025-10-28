@@ -178,7 +178,16 @@ const SettingsScreen: React.FC = () => {
           </Text>
         </View>
         <TouchableOpacity
-          onPress={signOut}
+          onPress={async () => {
+            console.log('[SettingsScreen] Sign out button pressed');
+            try {
+              await signOut();
+              console.log('[SettingsScreen] Sign out completed');
+            } catch (error) {
+              console.error('[SettingsScreen] Sign out failed:', error);
+              Alert.alert('Error', 'Failed to sign out. Please try again.');
+            }
+          }}
           style={[styles.signOutButton, { backgroundColor: colors.danger }]}
         >
           <Text style={styles.signOutText}>Sign out</Text>

@@ -7,6 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
+    "scheme": "cashflowtracker",
     "splash": {
       "image": "./assets/icon.png",
       "resizeMode": "contain",

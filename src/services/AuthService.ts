@@ -2,18 +2,14 @@ import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User, AuthChangeEvent } from '@supabase/supabase-js';
-// OAuth deep linking temporarily disabled
-// import { makeRedirectUri } from 'expo-auth-session';
-// import * as WebBrowser from 'expo-web-browser';
+import { makeRedirectUri } from 'expo-auth-session';
+import * as WebBrowser from 'expo-web-browser';
+import Constants from 'expo-constants';
 import { supabase, pingSupabase } from './SupabaseClient';
 import { PermissionService } from './PermissionService';
 import { startSmsListener, stopSmsListener } from './SmsService';
-// OAuth deep linking temporarily disabled
-// import { googleAuthService, GoogleAuthResult } from './GoogleAuthService';
-import { GoogleAuthResult } from './GoogleAuthService';
 
-// OAuth deep linking temporarily disabled
-// WebBrowser.maybeCompleteAuthSession();
+WebBrowser.maybeCompleteAuthSession();
 
 // Internal helpers (avoid name collision with context methods)
 export async function signUpApi(email: string, password: string, username?: string, phoneNumber?: string, country?: string) {
@@ -63,35 +59,154 @@ export async function signInApi(email: string, password: string) {
   return data;
 }
 
-export async function signOut() {
+export async function signOutApi() {
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
 }
 
-export async function signInWithGoogle(): Promise<GoogleAuthResult> {
-  // OAuth deep linking temporarily disabled
-  throw new Error('Google OAuth is temporarily disabled. Please use email/password authentication.');
-  
-  /* Commented out OAuth flow
+export async function signInWithGoogle(): Promise<{ error?: string }> {
   try {
-    // Use the new PKCE-based Google OAuth service
-    const googleResult = await googleAuthService.signInWithGoogle();
+    // Determine the correct redirect URI based on environment
+    const isExpoGo = Constants.appOwnership === 'expo';
     
-    // Sign in to Supabase using the Google ID token
-    const { data, error } = await supabase.auth.signInWithIdToken({
-      provider: 'google',
-      token: googleResult.idToken || googleResult.accessToken,
-      access_token: googleResult.accessToken,
+    const redirectTo = makeRedirectUri({
+      scheme: isExpoGo ? undefined : 'cashflowtracker',
+      path: 'auth-callback',
     });
     
-    if (error) throw error;
+    console.log('=== GOOGLE AUTH DEBUG ===');
+    console.log('Environment:', isExpoGo ? 'Expo Go' : 'Standalone');
+    console.log('Redirect URI:', redirectTo);
+    console.log('========================');
+    console.log('⚠️ IMPORTANT: Add this URL to Supabase Dashboard:');
+    console.log('   Authentication > URL Configuration > Redirect URLs');
+    console.log('   Add:', redirectTo);
+    console.log('========================');
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo,
+        skipBrowserRedirect: true,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
+    });
+
+    if (error) {
+      console.error('Auth.signInWithGoogle error:', error);
+      return { error: error.message };
+    }
+
+    if (!data?.url) {
+      return { error: 'Unable to start Google sign-in' };
+    }
+
+    console.log('Opening OAuth URL:', data.url);
+    console.log('Expected redirect URI:', redirectTo);
+
+    // Open the OAuth URL and handle the response
+    const result = await WebBrowser.openAuthSessionAsync(
+      data.url,
+      redirectTo,
+      {
+        showInRecents: true,
+        preferEphemeralSession: false,
+      }
+    );
     
-    return googleResult;
+    console.log('WebBrowser result type:', result.type);
+    if (result.type === 'success') {
+      console.log('WebBrowser result URL:', result.url);
+    }
+    
+    if (result.type === 'cancel' || result.type === 'dismiss') {
+      console.log('User cancelled or dismissed the sign-in');
+      return { error: 'Google sign-in was cancelled' };
+    }
+
+    if (result.type === 'success') {
+      console.log('Processing OAuth response...');
+      
+      const url = new URL(result.url);
+      
+      // With PKCE flow, look for authorization code
+      const code = url.searchParams.get('code');
+      
+      // With implicit flow (fallback), look for tokens directly
+      const accessToken = url.searchParams.get('access_token') || 
+                         url.hash.match(/access_token=([^&]+)/)?.[1];
+      const refreshToken = url.searchParams.get('refresh_token') || 
+                          url.hash.match(/refresh_token=([^&]+)/)?.[1];
+      
+      if (code) {
+        // PKCE flow: exchange code for session
+        console.log('PKCE flow: Got authorization code, exchanging for session...');
+        
+        const { data: sessionData, error: sessionError } = await supabase.auth.exchangeCodeForSession(code);
+        
+        if (sessionError) {
+          console.error('Error exchanging code for session:', sessionError);
+          return { error: sessionError.message };
+        }
+
+        if (sessionData?.session) {
+          console.log('✅ Google session created successfully (PKCE):', sessionData.session.user?.id);
+          console.log('Session expires at:', new Date(sessionData.session.expires_at! * 1000).toISOString());
+          return {};
+        }
+      } else if (accessToken && refreshToken) {
+        // Implicit flow: set session directly with tokens
+        console.log('Implicit flow: Setting session with tokens...');
+        
+        const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        
+        if (sessionError) {
+          console.error('Error setting session:', sessionError);
+          return { error: sessionError.message };
+        }
+
+        if (sessionData?.session) {
+          console.log('✅ Google session created successfully (Implicit):', sessionData.session.user?.id);
+          console.log('Session expires at:', new Date(sessionData.session.expires_at! * 1000).toISOString());
+          return {};
+        }
+      } else if (accessToken && !refreshToken) {
+        console.warn('⚠️ Access token found but no refresh token - session may not persist');
+        console.log('Attempting to set session with access token only...');
+        
+        const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: '',
+        });
+        
+        if (sessionError) {
+          console.error('Error setting session:', sessionError);
+          return { error: sessionError.message };
+        }
+
+        if (sessionData?.session) {
+          console.log('✅ Google session created (no refresh token):', sessionData.session.user?.id);
+          return {};
+        }
+      } else {
+        console.error('❌ No authorization code or access token in OAuth response');
+        console.log('URL params:', Array.from(url.searchParams.entries()));
+        console.log('URL hash:', url.hash);
+        return { error: 'Failed to get authentication credentials from Google' };
+      }
+    }
+    
+    return { error: 'Authentication flow incomplete' };
   } catch (error) {
-    console.error('Google sign-in error:', error);
-    throw error;
+    console.error('Auth.signInWithGoogle network/unknown error:', error);
+    return { error: error instanceof Error ? error.message : 'Network error during Google sign in' };
   }
-  */
 }
 
 export async function getCurrentUser(): Promise<User | null> {
@@ -106,7 +221,7 @@ export interface AuthContextValue {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ success: boolean }>;
   signUp: (email: string, password: string, username?: string, phoneNumber?: string, country?: string) => Promise<void>;
-  signInWithGoogle: () => Promise<GoogleAuthResult>;
+  signInWithGoogle: () => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
 }
 
@@ -262,7 +377,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     signInWithGoogle: async () => {
       setLoading(true);
       try {
-        const googleResult = await signInWithGoogle();
+        const result = await signInWithGoogle();
+        
+        if (result.error) {
+          return result;
+        }
         
         // Get the updated session after Google sign-in
         const {
@@ -280,20 +399,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
         
-        return googleResult;
+        return {};
       } catch (error) {
         const message = (error as any)?.message || 'Google sign in failed';
-        throw new Error(message);
+        return { error: message };
       } finally {
         setLoading(false);
       }
     },
     signOut: async () => {
+      console.log('[Auth] signOut called');
       setLoading(true);
       try {
-        await signOut();
+        console.log('[Auth] Calling Supabase signOut API...');
+        await signOutApi();
+        console.log('[Auth] Supabase signOut successful');
+        console.log('[Auth] Clearing session and user state...');
         setSession(null);
         setUser(null);
+        console.log('[Auth] Sign out complete');
+      } catch (error) {
+        console.error('[Auth] Sign out error:', error);
+        throw error;
       } finally {
         setLoading(false);
       }

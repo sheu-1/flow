@@ -18,7 +18,7 @@ import { useTheme } from '../theme/ThemeProvider';
 type AuthMode = 'signin' | 'signup';
 
 const AuthScreen: React.FC = () => {
-  const { signIn, signUp, loading } = useAuth();
+  const { signIn, signUp, signInWithGoogle, loading } = useAuth();
   const { colors } = useTheme();
   
   const [mode, setMode] = useState<AuthMode>('signin');
@@ -29,6 +29,7 @@ const AuthScreen: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const validateEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -92,6 +93,21 @@ const AuthScreen: React.FC = () => {
     setError(null);
     setPassword('');
     setConfirmPassword('');
+  };
+
+  const handleGoogleSignIn = async () => {
+    setError(null);
+    setGoogleLoading(true);
+    try {
+      const result = await signInWithGoogle();
+      if (result.error) {
+        setError(result.error);
+      }
+    } catch (e: any) {
+      setError(e?.message || 'Google sign-in failed. Please try again.');
+    } finally {
+      setGoogleLoading(false);
+    }
   };
 
   return (
@@ -241,6 +257,38 @@ const AuthScreen: React.FC = () => {
             )}
           </TouchableOpacity>
 
+          {/* Divider */}
+          <View style={styles.dividerContainer}>
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+            <Text style={[styles.dividerText, { color: colors.textSecondary }]}>OR</Text>
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          </View>
+
+          {/* Google Sign-In Button */}
+          <TouchableOpacity
+            style={[
+              styles.googleButton,
+              { 
+                backgroundColor: colors.card, 
+                borderColor: colors.border,
+                opacity: (loading || googleLoading) ? 0.6 : 1
+              },
+            ]}
+            onPress={handleGoogleSignIn}
+            disabled={loading || googleLoading}
+          >
+            {googleLoading ? (
+              <ActivityIndicator color={colors.text} />
+            ) : (
+              <>
+                <Ionicons name="logo-google" size={20} color={colors.text} />
+                <Text style={[styles.googleButtonText, { color: colors.text }]}>
+                  Continue with Google
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+
           {/* Toggle Mode */}
           <TouchableOpacity onPress={toggleMode} style={styles.toggleButton}>
             <Text style={[styles.toggleText, { color: colors.textSecondary }]}>
@@ -360,6 +408,34 @@ const styles = StyleSheet.create({
   },
   toggleText: {
     fontSize: 14,
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 24,
+  },
+  divider: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 52,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 12,
+    marginBottom: 16,
+  },
+  googleButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   footer: {
     fontSize: 12,
