@@ -79,7 +79,8 @@ export default function DashboardScreen() {
         setCustomRange(start, now);
         break;
     }
-  }, [selectedPeriod, selectedPreset, setCustomRange]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPeriod]);
 
   const refresh = useCallback(async () => {
     if (!user?.id) return;

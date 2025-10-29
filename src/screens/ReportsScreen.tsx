@@ -64,33 +64,40 @@ export default function ReportsScreen() {
 
   // Sync period changes to date filter
   useEffect(() => {
+    // Only auto-sync if user hasn't set a custom filter
     if (selectedPreset !== 'allTime' && selectedPreset !== 'custom') {
-      // User has a date filter active, don't override
       return;
     }
     // Auto-set date range based on period
     const now = new Date();
     let start: Date;
+    let shouldUpdate = false;
     switch (period) {
       case 'daily':
         start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-        setCustomRange(start, now);
+        shouldUpdate = true;
         break;
       case 'weekly':
         const weekOffset = now.getDay();
         start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - weekOffset, 0, 0, 0);
-        setCustomRange(start, now);
+        shouldUpdate = true;
         break;
       case 'monthly':
         start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
-        setCustomRange(start, now);
+        shouldUpdate = true;
         break;
       case 'yearly':
         start = new Date(now.getFullYear(), 0, 1, 0, 0, 0);
-        setCustomRange(start, now);
+        shouldUpdate = true;
         break;
+      default:
+        return;
     }
-  }, [period, selectedPreset]);
+    if (shouldUpdate && start) {
+      setCustomRange(start, now);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period]);
 
   const loadData = useCallback(async (showLoading = true) => {
     if (!user?.id) return;
