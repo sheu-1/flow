@@ -1,16 +1,71 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Alert, Switch, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { spacing, fontSize, borderRadius } from '../theme/colors';
 import { useThemeColors, useTheme } from '../theme/ThemeProvider';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigation } from '@react-navigation/native';
+import { PermissionService } from '../services/PermissionService';
+import { requestSmsPermission } from '../services/SmsService';
 
 export default function ProfileScreen() {
   const colors = useThemeColors();
   const { theme, toggleTheme } = useTheme();
   const { user, signOut } = useAuth();
   const navigation = useNavigation();
+  const [smsEnabled, setSmsEnabled] = useState(false);
+  const [checkingPermission, setCheckingPermission] = useState(true);
+
+  // Check SMS permission status on mount
+  useEffect(() => {
+    checkSmsPermission();
+  }, []);
+
+  const checkSmsPermission = async () => {
+    if (Platform.OS !== 'android') {
+      setCheckingPermission(false);
+      return;
+    }
+    try {
+      const status = await PermissionService.getSmsStatus();
+      setSmsEnabled(status.canImport);
+    } catch (error) {
+      console.warn('Error checking SMS permission:', error);
+    } finally {
+      setCheckingPermission(false);
+    }
+  };
+
+  const handleSmsToggle = async (value: boolean) => {
+    if (Platform.OS !== 'android') {
+      Alert.alert('Not Available', 'SMS permissions are only available on Android devices.');
+      return;
+    }
+
+    if (value) {
+      // Request permission
+      const granted = await requestSmsPermission();
+      if (granted) {
+        setSmsEnabled(true);
+        Alert.alert('Success', 'SMS permissions granted. The app will now automatically import M-PESA transactions.');
+      } else {
+        setSmsEnabled(false);
+        Alert.alert('Permission Denied', 'SMS permission is required to automatically import transactions.');
+      }
+    } else {
+      Alert.alert(
+        'Disable SMS Import?',
+        'You can re-enable this in Settings or by toggling this switch again.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Disable',
+            onPress: () => setSmsEnabled(false),
+          },
+        ]
+      );
+    }
+  };
 
   const handleSignOut = () => {
     Alert.alert(
@@ -77,6 +132,29 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Account Actions</Text>
           
+          {/* SMS Permission Toggle */}
+          {Platform.OS === 'android' && (
+            <View style={[styles.actionItem, { backgroundColor: colors.surface }]}>
+              <Ionicons 
+                name="chatbox-ellipses-outline" 
+                size={20} 
+                color={colors.primary} 
+                style={styles.actionIcon} 
+              />
+              <View style={styles.toggleContent}>
+                <Text style={[styles.actionText, { color: colors.text }]}>Auto-Import SMS</Text>
+                <Text style={[styles.toggleSubtext, { color: colors.textSecondary }]}>Automatically log M-PESA transactions</Text>
+              </View>
+              <Switch
+                value={smsEnabled}
+                onValueChange={handleSmsToggle}
+                disabled={checkingPermission}
+                trackColor={{ false: colors.border, true: colors.primary + '80' }}
+                thumbColor={smsEnabled ? colors.primary : colors.textSecondary}
+              />
+            </View>
+          )}
+
           <TouchableOpacity 
             style={[styles.actionItem, { backgroundColor: colors.surface }]}
             onPress={toggleTheme}
@@ -229,6 +307,15 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: fontSize.md,
     fontWeight: '500',
+    marginLeft: spacing.sm,
+  },
+  toggleContent: {
+    flex: 1,
+    marginLeft: spacing.sm,
+  },
+  toggleSubtext: {
+    fontSize: fontSize.sm,
+    marginTop: 2,
   },
   signOutButton: {
     flexDirection: 'row',

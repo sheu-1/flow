@@ -53,6 +53,34 @@ function parseSender(body: string): string | null {
 }
 
 export function parseTransactionFromSms(body: string, dateStr?: string): ParsedTransaction | null {
+  // Filter 1: Ignore Okoa Jahazi messages
+  if (/OKOA\s+JAHAZI/i.test(body)) {
+    return null;
+  }
+
+  // Filter 2: Ignore data bundle messages
+  if (/you have received.*MB.*data|data valid for the next hour|airtime reward/i.test(body)) {
+    return null;
+  }
+
+  // Filter 3: Handle Fuliza - only log access fee
+  const fulizaMatch = body.match(/Fuliza M-PESA.*Access Fee charged.*Ksh\s?([0-9,.]+)/i);
+  if (fulizaMatch) {
+    const feeStr = fulizaMatch[1]?.replace(/,/g, '');
+    const fee = feeStr ? parseFloat(feeStr) : null;
+    if (fee && fee > 0) {
+      return {
+        amount: fee,
+        type: 'debit',
+        sender: 'Fuliza Fee',
+        reference: parseReference(body),
+        message: body,
+        dateISO: dateStr ? new Date(dateStr).toISOString() : undefined,
+      };
+    }
+    return null; // Ignore if no valid fee
+  }
+
   const amount = parseAmount(body);
   const type = parseType(body);
   if (amount == null && type == null) return null; // Not a transaction-like message
