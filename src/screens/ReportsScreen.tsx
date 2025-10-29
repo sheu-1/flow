@@ -62,6 +62,36 @@ export default function ReportsScreen() {
     return 5; // Last 5 years
   }, [period]);
 
+  // Sync period changes to date filter
+  useEffect(() => {
+    if (selectedPreset !== 'allTime' && selectedPreset !== 'custom') {
+      // User has a date filter active, don't override
+      return;
+    }
+    // Auto-set date range based on period
+    const now = new Date();
+    let start: Date;
+    switch (period) {
+      case 'daily':
+        start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+        setCustomRange(start, now);
+        break;
+      case 'weekly':
+        const weekOffset = now.getDay();
+        start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - weekOffset, 0, 0, 0);
+        setCustomRange(start, now);
+        break;
+      case 'monthly':
+        start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+        setCustomRange(start, now);
+        break;
+      case 'yearly':
+        start = new Date(now.getFullYear(), 0, 1, 0, 0, 0);
+        setCustomRange(start, now);
+        break;
+    }
+  }, [period, selectedPreset]);
+
   const loadData = useCallback(async (showLoading = true) => {
     if (!user?.id) return;
     if (showLoading) setLoading(true);
