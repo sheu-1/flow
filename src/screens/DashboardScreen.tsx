@@ -53,10 +53,6 @@ export default function DashboardScreen() {
 
   // Sync period changes to date filter
   useEffect(() => {
-    if (selectedPreset !== 'allTime' && selectedPreset !== 'custom') {
-      // User has a date filter active, don't override
-      return;
-    }
     // Auto-set date range based on period
     const now = new Date();
     let start: Date;

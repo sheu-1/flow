@@ -47,17 +47,25 @@ export default function ProfileScreen() {
       const granted = await requestSmsPermission();
       if (granted) {
         setSmsEnabled(true);
-        Alert.alert('Success', 'SMS permissions granted. The app will now automatically import M-PESA transactions.');
+        Alert.alert('Success', 'SMS permissions granted. The app will now automatically import transactions.');
       } else {
         setSmsEnabled(false);
         Alert.alert('Permission Denied', 'SMS permission is required to automatically import transactions.');
       }
     } else {
+      // Don't change state immediately - wait for user confirmation
       Alert.alert(
         'Disable SMS Import?',
         'You can re-enable this in Settings or by toggling this switch again.',
         [
-          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Cancel', 
+            style: 'cancel',
+            onPress: () => {
+              // Keep toggle enabled
+              setSmsEnabled(true);
+            }
+          },
           {
             text: 'Disable',
             onPress: () => setSmsEnabled(false),
@@ -143,14 +151,15 @@ export default function ProfileScreen() {
               />
               <View style={styles.toggleContent}>
                 <Text style={[styles.actionText, { color: colors.text }]}>Auto-Import SMS</Text>
-                <Text style={[styles.toggleSubtext, { color: colors.textSecondary }]}>Automatically log M-PESA transactions</Text>
+                <Text style={[styles.toggleSubtext, { color: colors.textSecondary }]}>Automatically log transactions from SMS</Text>
               </View>
               <Switch
                 value={smsEnabled}
                 onValueChange={handleSmsToggle}
                 disabled={checkingPermission}
-                trackColor={{ false: colors.border, true: colors.primary + '80' }}
-                thumbColor={smsEnabled ? colors.primary : colors.textSecondary}
+                trackColor={{ false: colors.border, true: '#3B82F6' }}
+                thumbColor={smsEnabled ? '#FFFFFF' : '#F3F4F6'}
+                ios_backgroundColor={colors.border}
               />
             </View>
           )}

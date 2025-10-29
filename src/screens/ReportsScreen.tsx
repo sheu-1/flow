@@ -64,10 +64,6 @@ export default function ReportsScreen() {
 
   // Sync period changes to date filter
   useEffect(() => {
-    // Only auto-sync if user hasn't set a custom filter
-    if (selectedPreset !== 'allTime' && selectedPreset !== 'custom') {
-      return;
-    }
     // Auto-set date range based on period
     const now = new Date();
     let start: Date;
