@@ -7,6 +7,11 @@ import { useAuth } from '../hooks/useAuth';
 import { useNavigation } from '@react-navigation/native';
 import { PermissionService } from '../services/PermissionService';
 import { requestSmsPermission } from '../services/SmsService';
+import EditProfileModal from '../components/EditProfileModal';
+import ChangePasswordModal from '../components/ChangePasswordModal';
+import ExportDataModal from '../components/ExportDataModal';
+import { supabase } from '../services/SupabaseClient';
+import { Transaction } from '../types';
 
 export default function ProfileScreen() {
   const colors = useThemeColors();
@@ -15,11 +20,37 @@ export default function ProfileScreen() {
   const navigation = useNavigation();
   const [smsEnabled, setSmsEnabled] = useState(false);
   const [checkingPermission, setCheckingPermission] = useState(true);
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showExportData, setShowExportData] = useState(false);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loadingTransactions, setLoadingTransactions] = useState(false);
 
-  // Check SMS permission status on mount
+  // Check SMS permission status and load transactions on mount
   useEffect(() => {
     checkSmsPermission();
+    loadTransactions();
   }, []);
+
+  const loadTransactions = async () => {
+    if (!user) return;
+    
+    setLoadingTransactions(true);
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('date', { ascending: false });
+      
+      if (error) throw error;
+      setTransactions(data || []);
+    } catch (error) {
+      console.error('Error loading transactions:', error);
+    } finally {
+      setLoadingTransactions(false);
+    }
+  };
 
   const checkSmsPermission = async () => {
     if (Platform.OS !== 'android') {
@@ -191,27 +222,28 @@ export default function ProfileScreen() {
 
           <TouchableOpacity 
             style={[styles.actionItem, { backgroundColor: colors.surface }]}
-            onPress={() => Alert.alert('Coming Soon', 'Profile editing will be available in a future update.')}
+            onPress={() => setShowEditProfile(true)}
           >
-            <Ionicons name="create-outline" size={20} color={colors.text} style={styles.actionIcon} />
+            <Ionicons name="create-outline" size={20} color={colors.primary} style={styles.actionIcon} />
             <Text style={[styles.actionText, { color: colors.text }]}>Edit Profile</Text>
             <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
 
           <TouchableOpacity 
             style={[styles.actionItem, { backgroundColor: colors.surface }]}
-            onPress={() => Alert.alert('Coming Soon', 'Password change will be available in a future update.')}
+            onPress={() => setShowChangePassword(true)}
           >
-            <Ionicons name="key-outline" size={20} color={colors.text} style={styles.actionIcon} />
+            <Ionicons name="key-outline" size={20} color={colors.primary} style={styles.actionIcon} />
             <Text style={[styles.actionText, { color: colors.text }]}>Change Password</Text>
             <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
 
           <TouchableOpacity 
             style={[styles.actionItem, { backgroundColor: colors.surface }]}
-            onPress={() => Alert.alert('Coming Soon', 'Data export will be available in a future update.')}
+            onPress={() => setShowExportData(true)}
+            disabled={loadingTransactions}
           >
-            <Ionicons name="download-outline" size={20} color={colors.text} style={styles.actionIcon} />
+            <Ionicons name="download-outline" size={20} color={colors.primary} style={styles.actionIcon} />
             <Text style={[styles.actionText, { color: colors.text }]}>Export Data</Text>
             <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
@@ -228,6 +260,31 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Modals */}
+      <EditProfileModal
+        visible={showEditProfile}
+        onClose={() => setShowEditProfile(false)}
+        currentName={user?.user_metadata?.full_name || ''}
+        currentEmail={user?.email || ''}
+        currentPhone={user?.user_metadata?.phone_number || ''}
+        onSuccess={() => {
+          // Refresh user data
+          // The user object will update automatically via auth state change
+        }}
+      />
+
+      <ChangePasswordModal
+        visible={showChangePassword}
+        onClose={() => setShowChangePassword(false)}
+        userEmail={user?.email || ''}
+      />
+
+      <ExportDataModal
+        visible={showExportData}
+        onClose={() => setShowExportData(false)}
+        transactions={transactions}
+      />
     </SafeAreaView>
   );
 }

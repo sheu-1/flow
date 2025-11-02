@@ -22,6 +22,7 @@ import { spacing, fontSize, borderRadius } from '../theme/colors';
 import { useRealtimeTransactions } from '../hooks/useRealtimeTransactions';
 import { invalidateUserCaches } from '../services/TransactionService';
 import { useDateFilterContext } from '../contexts/DateFilterContext';
+import { useFilteredTransactions } from '../hooks/useFilteredTransactions';
 import { getSubscriptionStatus, shouldShowSubscriptionPrompt, getTrialMessage } from '../services/SubscriptionManager';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 
@@ -29,7 +30,6 @@ import Animated, { FadeInUp } from 'react-native-reanimated';
 console.log('🚀 DashboardScreen loading...');
 
 export default function DashboardScreen() {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [aggregates, setAggregates] = useState<any[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('daily');
   const [refreshing, setRefreshing] = useState(false);
@@ -52,16 +52,8 @@ export default function DashboardScreen() {
     resetFilter,
   } = useDateFilterContext();
 
-  // Filter transactions based on shared date range
-  const filteredTransactions = useMemo(() => {
-    return transactions.filter(transaction => {
-      const transactionDate = new Date(transaction.date);
-      const txDate = new Date(transactionDate.getFullYear(), transactionDate.getMonth(), transactionDate.getDate());
-      const start = new Date(dateRange.startDate.getFullYear(), dateRange.startDate.getMonth(), dateRange.startDate.getDate());
-      const end = new Date(dateRange.endDate.getFullYear(), dateRange.endDate.getMonth(), dateRange.endDate.getDate());
-      return txDate >= start && txDate <= end;
-    });
-  }, [transactions, dateRange]);
+  // Use filtered transactions hook - fetches from Supabase with date filter
+  const { transactions: filteredTransactions, loading: transactionsLoading, refetch: refetchTransactions } = useFilteredTransactions();
 
   const formattedRange = useMemo(() => {
     const formatDate = (date: Date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -102,41 +94,30 @@ export default function DashboardScreen() {
     if (!user?.id) return;
     setRefreshing(true);
     try {
-      const [txns, aggregates] = await Promise.all([
-        getTransactions(user.id, { limit: 1000 }).catch(err => {
-          console.warn('Failed to load transactions:', err);
-          return [];
-        }),
-        getAggregatesByPeriod(user.id, selectedPeriod, 30).catch(err => {
-          console.warn('Failed to load aggregates:', err);
-          return [];
-        }),
-      ]);
-      const mapped: Transaction[] = txns.map(r => ({
-        ...r,
-        date: new Date(r.date),
-        description: (r as any).description || (r as any).sender || r.category || '',
-        category: r.category || 'Other',
-        type: (r.type === 'income' || r.type === 'expense') ? r.type : (r.amount >= 0 ? 'income' : 'expense'),
-      }));
-      mapped.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      setTransactions(mapped);
+      // Refetch transactions with current filter
+      await refetchTransactions();
+      
+      // Fetch aggregates
+      const aggregates = await getAggregatesByPeriod(user.id, selectedPeriod, 30).catch(err => {
+        console.warn('Failed to load aggregates:', err);
+        return [];
+      });
+      
       setAggregates(aggregates);
-    } catch (error) {
-      console.error('Dashboard refresh error:', error);
-      // Set empty data to prevent crashes
-      setTransactions([]);
-      setAggregates([]);
+      
       try {
         // Check for spending notifications
         await notificationService.checkWeeklySpending(user.id);
       } catch (e) {
         // ignore notification errors
       }
+    } catch (error) {
+      console.error('Dashboard refresh error:', error);
+      setAggregates([]);
     } finally {
       setRefreshing(false);
     }
-  }, [user?.id, selectedPeriod]);
+  }, [user?.id, selectedPeriod, refetchTransactions]);
 
   // Listen for notification updates
   useEffect(() => {
@@ -467,7 +448,7 @@ export default function DashboardScreen() {
           totalIncome={moneyIn}
           totalExpense={moneyOut}
           savingsRate={moneyIn > 0 ? ((moneyIn - moneyOut) / moneyIn) * 100 : 0}
-          transactionCount={transactions.length}
+          transactionCount={filteredTransactions.length}
           onPress={() => console.log('Health score pressed')}
         />
 

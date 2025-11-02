@@ -20,6 +20,7 @@ import { getTransactions } from '../services/TransactionService';
 import { useDateFilterContext } from '../contexts/DateFilterContext';
 import { Transaction } from '../types';
 import { Logger } from '../utils/Logger';
+import { useFilteredTransactions } from '../hooks/useFilteredTransactions';
 
 export default function ReportsScreen() {
   const colors = useThemeColors();
@@ -33,7 +34,6 @@ export default function ReportsScreen() {
   const [categoryView, setCategoryView] = useState<'income' | 'expense'>('income');
   const [statsView, setStatsView] = useState<'income' | 'expense'>('income');
   const [currentWeek, setCurrentWeek] = useState(0); // 0 = current week, 1 = previous week, etc.
-  const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [showDetailedPeriodSelector, setShowDetailedPeriodSelector] = useState(false);
   const [filterLoading, setFilterLoading] = useState(false);
   const [barTooltip, setBarTooltip] = useState<{ label: string; income: number; expense: number; index: number } | null>(null);
@@ -53,16 +53,8 @@ export default function ReportsScreen() {
     resetFilter,
   } = useDateFilterContext();
 
-  // Filter transactions based on shared date range
-  const filteredTransactions = useMemo(() => {
-    return allTransactions.filter(transaction => {
-      const transactionDate = new Date(transaction.date);
-      const txDate = new Date(transactionDate.getFullYear(), transactionDate.getMonth(), transactionDate.getDate());
-      const start = new Date(dateRange.startDate.getFullYear(), dateRange.startDate.getMonth(), dateRange.startDate.getDate());
-      const end = new Date(dateRange.endDate.getFullYear(), dateRange.endDate.getMonth(), dateRange.endDate.getDate());
-      return txDate >= start && txDate <= end;
-    });
-  }, [allTransactions, dateRange]);
+  // Use filtered transactions hook - fetches from Supabase with date filter
+  const { transactions: filteredTransactions, loading: transactionsLoading, refetch: refetchTransactions } = useFilteredTransactions();
 
   const formattedRange = useMemo(() => {
     const formatDate = (date: Date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -116,16 +108,8 @@ export default function ReportsScreen() {
     if (!user?.id) return;
     if (showLoading) setLoading(true);
     try {
-      // Load all transactions for date filtering
-      const txns = await getTransactions(user.id, { limit: 1000 }).catch(() => []);
-      const mapped: Transaction[] = txns.map(r => ({
-        ...r,
-        date: new Date(r.date),
-        description: (r as any).description || (r as any).sender || r.category || '',
-        category: r.category || 'Other',
-        type: (r.type === 'income' || r.type === 'expense') ? r.type : (r.amount >= 0 ? 'income' : 'expense'),
-      }));
-      setAllTransactions(mapped);
+      // Refetch filtered transactions
+      await refetchTransactions();
       
       const buckets = await getAggregatesByPeriod(user.id, period, rangeCount);
       const labels = buckets.map((b) => b.periodLabel);

@@ -21,6 +21,8 @@ import { Transaction } from '../types';
 import { useAuth } from '../hooks/useAuth';
 import { getTransactions, createTransaction, updateTransaction, deleteTransaction, invalidateUserCaches } from '../services/TransactionService';
 import { useRealtimeTransactions } from '../hooks/useRealtimeTransactions';
+import { useFilteredTransactions } from '../hooks/useFilteredTransactions';
+import { useDateFilterContext } from '../contexts/DateFilterContext';
 
 const ITEMS_PER_PAGE = 100;
 

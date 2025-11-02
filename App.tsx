@@ -20,7 +20,10 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import SubscriptionScreen from './src/screens/SubscriptionScreen';
 import PaymentMethodScreen from './src/screens/PaymentMethodScreen';
 import PaymentWebViewScreen from './src/screens/PaymentWebViewScreen';
+import WelcomeScreen from './src/screens/WelcomeScreen';
+import CustomSplashScreen from './src/screens/SplashScreen';
 import { AuthProvider, useAuth } from './src/services/AuthService';
+import { getSubscriptionStatus } from './src/services/SubscriptionManager';
 // SQLite sync removed: Supabase is the source of truth
 // import { initDB } from './src/services/Database';
 // import { syncTransactions } from './src/services/SyncService';
@@ -46,6 +49,7 @@ type RootTabParamList = {
 type RootStackParamList = {
   MainTabs: undefined;
   Profile: undefined;
+  Welcome: undefined;
   Subscription: undefined;
   PaymentMethod: {
     plan: string;
@@ -149,36 +153,35 @@ function MainTabNavigator() {
 function AppContainer() {
   const { user, loading } = useAuth();
   const { colors } = useTheme();
-  // Commented out splash screen - directly show auth or main app
-  // const [showSplash, setShowSplash] = React.useState(true);
+  const [trialExpired, setTrialExpired] = React.useState(false);
+  const [showSplash, setShowSplash] = React.useState(true);
 
-  // Hide the native splash as soon as our auth loading completes
+  // Check trial status when user logs in
+  useEffect(() => {
+    async function checkTrialStatus() {
+      if (user && !loading) {
+        const status = await getSubscriptionStatus(user.id);
+        setTrialExpired(status.trialEnded && !status.isActive);
+      }
+    }
+    checkTrialStatus();
+  }, [user, loading]);
+
+  // Hide the native splash when custom splash is ready
   useEffect(() => {
     if (!loading) {
-      // Add a small delay to ensure splash is visible
-      setTimeout(() => {
-        SplashScreen.hideAsync().catch(() => {});
-      }, 500);
+      SplashScreen.hideAsync().catch(() => {});
     }
   }, [loading]);
 
-  // Fallback: hide native splash after timeout to avoid being stuck
-  useEffect(() => {
-    const t = setTimeout(() => {
-      SplashScreen.hideAsync().catch(() => {});
-    }, 3000); // Increased timeout to ensure splash shows
-    return () => clearTimeout(t);
-  }, []);
+  const handleSplashFinish = () => {
+    setShowSplash(false);
+  };
 
-  // Skip custom splash screen entirely - go straight to auth or main app
-  // if (showSplash) {
-  //   return (
-  //     <View style={{ flex: 1 }}>
-  //       <CustomSplashScreen onAnimationComplete={handleSplashComplete} />
-  //       <AuthDebugPanel />
-  //     </View>
-  //   );
-  // }
+  // Show custom splash screen
+  if (showSplash) {
+    return <CustomSplashScreen onFinish={handleSplashFinish} />;
+  }
   
   // If still loading and we don't yet know the user, show a simple loading indicator
   if (loading && !user) {
@@ -202,6 +205,13 @@ function AppContainer() {
   // Check if user is new (first time signup)
   const isNewUser = user?.user_metadata?.is_new_user === true;
 
+  // Determine initial route
+  const getInitialRoute = () => {
+    if (isNewUser) return 'Welcome';
+    if (trialExpired) return 'Subscription';
+    return 'MainTabs';
+  };
+
   return (
     <NavigationContainer theme={makeNavTheme(colors)}>
       <StatusBar barStyle={colors.background === '#FFFFFF' ? 'dark-content' : 'light-content'} backgroundColor={colors.background} />
@@ -209,7 +219,7 @@ function AppContainer() {
         screenOptions={{
           headerShown: false,
         }}
-        initialRouteName={isNewUser ? 'Subscription' : 'MainTabs'}
+        initialRouteName={getInitialRoute()}
       >
         <RootStack.Screen name="MainTabs" component={MainTabNavigator} />
         <RootStack.Screen 
@@ -218,6 +228,15 @@ function AppContainer() {
           options={{
             presentation: 'card',
             animation: 'slide_from_right',
+          }}
+        />
+        <RootStack.Screen 
+          name="Welcome" 
+          component={WelcomeScreen}
+          options={{
+            presentation: 'card',
+            animation: 'fade',
+            gestureEnabled: false,
           }}
         />
         <RootStack.Screen 

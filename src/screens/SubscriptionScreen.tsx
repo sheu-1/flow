@@ -7,6 +7,7 @@ import { useThemeColors } from '../theme/ThemeProvider';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../services/SupabaseClient';
+import { getSubscriptionStatus } from '../services/SubscriptionManager';
 
 type SubscriptionPlan = 'free' | 'daily' | 'monthly' | 'yearly';
 
@@ -97,21 +98,36 @@ export default function SubscriptionScreen() {
   const colors = useThemeColors();
   const navigation = useNavigation();
   const { user } = useAuth();
-  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>('free');
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>('daily');
   const [isNewUser, setIsNewUser] = useState(false);
+  const [trialUsed, setTrialUsed] = useState(false);
 
   useEffect(() => {
-    // Check if this is a new user
-    if (user?.user_metadata?.is_new_user === true) {
-      setIsNewUser(true);
+    async function checkStatus() {
+      if (user) {
+        // Check if this is a new user
+        if (user.user_metadata?.is_new_user === true) {
+          setIsNewUser(true);
+          setSelectedPlan('free'); // New users can select free trial
+        } else {
+          // Check if trial has been used
+          const status = await getSubscriptionStatus(user.id);
+          setTrialUsed(status.trialEnded || !status.isTrial);
+          // Don't allow free trial selection if already used
+          if (status.trialEnded || !status.isTrial) {
+            setSelectedPlan('daily'); // Default to daily plan
+          } else {
+            setSelectedPlan('free'); // Still in trial
+          }
+        }
+      }
     }
+    checkStatus();
   }, [user]);
 
   const handleClose = () => {
-    if (isNewUser) {
-      // For new users, clear the flag and navigate to dashboard
-      clearNewUserFlag();
-    } else {
+    // Only allow closing for existing users, not new users
+    if (!isNewUser) {
       navigation.goBack();
     }
   };
@@ -135,8 +151,13 @@ export default function SubscriptionScreen() {
     }
   };
 
-  const handleSubscribe = () => {
+  const handleSubscribe = async () => {
     if (selectedPlan === 'free') {
+      // For new users, start free trial and navigate to dashboard
+      if (isNewUser) {
+        await clearNewUserFlag();
+        return;
+      }
       Alert.alert(
         'Free Trial',
         'You are already on the free trial. Enjoy all basic features!',
@@ -234,42 +255,63 @@ export default function SubscriptionScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-      {/* Header with Close Button */}
+      {/* Header with Close Button (only for existing users) */}
       <View style={styles.header}>
         <Text style={[styles.title, { color: colors.text }]}>
-          {isNewUser ? 'Welcome! Choose Your Plan' : 'Subscription Plans'}
+          {isNewUser ? 'Choose Your Plan' : 'Subscription Plans'}
         </Text>
-        <TouchableOpacity
-          onPress={handleClose}
-          style={[styles.closeButton, { backgroundColor: colors.surface }]}
-        >
-          <Ionicons name={isNewUser ? 'arrow-forward' : 'close'} size={24} color={colors.text} />
-        </TouchableOpacity>
+        {!isNewUser && (
+          <TouchableOpacity
+            onPress={handleClose}
+            style={[styles.closeButton, { backgroundColor: colors.surface }]}
+          >
+            <Ionicons name="close" size={24} color={colors.text} />
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView 
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
+        {isNewUser && (
+          <View style={[styles.infoBanner, { backgroundColor: colors.primary + '10' }]}>
+            <Ionicons name="information-circle" size={20} color={colors.primary} />
+            <Text style={[styles.infoText, { color: colors.primary }]}>
+              Please select a plan to continue. You can start with the free trial!
+            </Text>
+          </View>
+        )}
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
           {isNewUser 
-            ? 'Start with a 2-week free trial, then choose the plan that works best for you'
+            ? 'Start with a 2-week free trial, then upgrade anytime'
             : 'Choose the plan that works best for you'}
         </Text>
 
-        {plans.map((plan) => (
-          <PlanCard
-            key={plan.id}
-            title={plan.title}
-            price={plan.price}
-            period={plan.period}
-            features={plan.features}
-            isPopular={plan.isPopular}
-            onSelect={() => setSelectedPlan(plan.id)}
-            selected={selectedPlan === plan.id}
-            colors={colors}
-          />
-        ))}
+        {plans.map((plan) => {
+          // Disable free trial if already used
+          const isDisabled = plan.id === 'free' && trialUsed && !isNewUser;
+          
+          return (
+            <View key={plan.id} style={{ opacity: isDisabled ? 0.5 : 1 }}>
+              {isDisabled && (
+                <View style={[styles.disabledBadge, { backgroundColor: colors.danger || '#EF4444' }]}>
+                  <Text style={styles.disabledText}>TRIAL USED</Text>
+                </View>
+              )}
+              <PlanCard
+                title={plan.title}
+                price={plan.price}
+                period={plan.period}
+                features={plan.features}
+                isPopular={plan.isPopular}
+                onSelect={() => !isDisabled && setSelectedPlan(plan.id)}
+                selected={selectedPlan === plan.id}
+                colors={colors}
+              />
+            </View>
+          );
+        })}
 
         <View style={styles.footer}>
           <TouchableOpacity
@@ -280,7 +322,7 @@ export default function SubscriptionScreen() {
             onPress={handleSubscribe}
           >
             <Text style={styles.subscribeButtonText}>
-              {selectedPlan === 'free' ? 'Continue with Free Trial' : 'Subscribe Now'}
+              {isNewUser && selectedPlan === 'free' ? 'Start Free Trial' : selectedPlan === 'free' ? 'Continue with Free Trial' : 'Subscribe Now'}
             </Text>
           </TouchableOpacity>
 
@@ -320,6 +362,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.xl,
   },
+  infoBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    marginBottom: spacing.md,
+  },
+  infoText: {
+    fontSize: fontSize.sm,
+    marginLeft: spacing.sm,
+    flex: 1,
+    fontWeight: '600',
+  },
   subtitle: {
     fontSize: fontSize.md,
     textAlign: 'center',
@@ -341,6 +396,21 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.sm,
   },
   popularText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+  },
+  disabledBadge: {
+    position: 'absolute',
+    top: -10,
+    left: spacing.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: borderRadius.sm,
+    zIndex: 10,
+  },
+  disabledText: {
     color: '#fff',
     fontSize: 10,
     fontWeight: 'bold',
