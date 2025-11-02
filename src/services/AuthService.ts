@@ -28,6 +28,7 @@ export async function signUpApi(email: string, password: string, username?: stri
         username: username || '',
         phone_number: phoneNumber || '',
         country: country || '',
+        is_new_user: true, // Flag to show subscription screen first
       },
     },
   });

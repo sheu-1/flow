@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useAuth } from '../hooks/useAuth';
 import { useThemeColors } from '../theme/ThemeProvider';
 import { getTransactions, getAggregatesByPeriod } from '../services/TransactionService';
@@ -21,7 +21,8 @@ import { SavingsGoals } from '../components/SavingsGoals';
 import { spacing, fontSize, borderRadius } from '../theme/colors';
 import { useRealtimeTransactions } from '../hooks/useRealtimeTransactions';
 import { invalidateUserCaches } from '../services/TransactionService';
-import { useDateFilter } from '../hooks/useDateFilter';
+import { useDateFilterContext } from '../contexts/DateFilterContext';
+import { getSubscriptionStatus, shouldShowSubscriptionPrompt, getTrialMessage } from '../services/SubscriptionManager';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 
 // Enable detailed logging
@@ -34,22 +35,41 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const colors = useThemeColors();
   const { user } = useAuth();
+  const navigation = useNavigation();
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showDetailedPeriodSelector, setShowDetailedPeriodSelector] = useState(false);
   const [filterLoading, setFilterLoading] = useState(false);
   const [showMetricsInsights, setShowMetricsInsights] = useState(false);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<any>(null);
   
-  // Date filtering
+  // Date filtering from shared context
   const {
-    filteredTransactions,
+    dateRange,
     selectedPreset,
-    formattedRange,
     setPreset,
     setCustomRange,
     resetFilter,
-    dateRange,
-  } = useDateFilter(transactions);
+  } = useDateFilterContext();
+
+  // Filter transactions based on shared date range
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter(transaction => {
+      const transactionDate = new Date(transaction.date);
+      const txDate = new Date(transactionDate.getFullYear(), transactionDate.getMonth(), transactionDate.getDate());
+      const start = new Date(dateRange.startDate.getFullYear(), dateRange.startDate.getMonth(), dateRange.startDate.getDate());
+      const end = new Date(dateRange.endDate.getFullYear(), dateRange.endDate.getMonth(), dateRange.endDate.getDate());
+      return txDate >= start && txDate <= end;
+    });
+  }, [transactions, dateRange]);
+
+  const formattedRange = useMemo(() => {
+    const formatDate = (date: Date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    if (dateRange.startDate.getTime() === dateRange.endDate.getTime()) {
+      return formatDate(dateRange.startDate);
+    }
+    return `${formatDate(dateRange.startDate)} - ${formatDate(dateRange.endDate)}`;
+  }, [dateRange]);
 
   // Sync period changes to date filter
   useEffect(() => {
@@ -147,6 +167,30 @@ export default function DashboardScreen() {
       return () => clearTimeout(timer);
     }
   }, [dateRange, selectedPeriod]);
+
+  // Check subscription status
+  useEffect(() => {
+    if (user?.id) {
+      getSubscriptionStatus(user.id).then(status => {
+        setSubscriptionStatus(status);
+        // Show subscription prompt if trial ended
+        if (status.trialEnded && !status.isActive) {
+          shouldShowSubscriptionPrompt(user.id).then(shouldShow => {
+            if (shouldShow) {
+              Alert.alert(
+                'Free Trial Ended',
+                'Your 2-week free trial has ended. Subscribe now to continue enjoying all features!',
+                [
+                  { text: 'Maybe Later', style: 'cancel' },
+                  { text: 'Subscribe', onPress: () => navigation.navigate('Subscription' as never) },
+                ]
+              );
+            }
+          });
+        }
+      });
+    }
+  }, [user?.id, navigation]);
 
   useFocusEffect(
     useCallback(() => {
@@ -340,7 +384,7 @@ export default function DashboardScreen() {
                 <Text style={[styles.insightLabel, { color: colors.text }]}>Money In</Text>
               </View>
               <Text style={[styles.insightValue, { color: colors.success }]}>
-                {moneyIn.toLocaleString('en-US', { style: 'currency', currency: 'KES' })}
+                {moneyIn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </Text>
             </View>
             <Text style={[styles.insightDescription, { color: colors.textSecondary }]}>
@@ -366,7 +410,7 @@ export default function DashboardScreen() {
                 <Text style={[styles.insightLabel, { color: colors.text }]}>Money Out</Text>
               </View>
               <Text style={[styles.insightValue, { color: colors.danger }]}>
-                {moneyOut.toLocaleString('en-US', { style: 'currency', currency: 'KES' })}
+                {moneyOut.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </Text>
             </View>
             <Text style={[styles.insightDescription, { color: colors.textSecondary }]}>
@@ -377,9 +421,9 @@ export default function DashboardScreen() {
               <Ionicons name="bulb" size={16} color={colors.primary} />
               <Text style={[styles.tipText, { color: colors.primary }]}>
                 {netBalance > 0 
-                  ? `Great job! You have a positive cash flow of ${Math.abs(netBalance).toLocaleString('en-US', { style: 'currency', currency: 'KES' })} for ${periodLabel.toLowerCase()}.`
+                  ? `Great job! You have a positive cash flow of ${Math.abs(netBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} for ${periodLabel.toLowerCase()}.`
                   : netBalance < 0
-                  ? `Your expenses exceed income by ${Math.abs(netBalance).toLocaleString('en-US', { style: 'currency', currency: 'KES' })}. Consider reducing spending.`
+                  ? `Your expenses exceed income by ${Math.abs(netBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Consider reducing spending.`
                   : 'Your income and expenses are balanced.'}
               </Text>
             </View>
@@ -390,7 +434,14 @@ export default function DashboardScreen() {
         {/* Net Balance Card */}
         <Animated.View 
           entering={FadeInUp.delay(200).springify()}
-          style={[styles.netBalanceCard, { backgroundColor: colors.surface }]}
+          style={[
+            styles.netBalanceCard, 
+            { 
+              backgroundColor: colors.surface,
+              borderWidth: 2,
+              borderColor: netBalance >= 0 ? colors.success : colors.danger,
+            }
+          ]}
         >
           <View style={styles.netBalanceContent}>
             <Ionicons 
@@ -403,7 +454,7 @@ export default function DashboardScreen() {
                 Net Balance • {periodLabel}
               </Text>
               <Text style={[styles.netBalanceAmount, { color: netBalance >= 0 ? colors.success : colors.danger }]}>
-                {netBalance >= 0 ? '+' : ''}{(moneyIn - moneyOut).toLocaleString('en-US', { style: 'currency', currency: 'KES' })}
+                {netBalance >= 0 ? '+' : ''}{(moneyIn - moneyOut).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </Text>
             </View>
           </View>

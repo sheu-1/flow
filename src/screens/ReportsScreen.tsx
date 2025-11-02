@@ -17,7 +17,7 @@ import { useCurrency } from '../services/CurrencyProvider';
 import { useRealtimeTransactions } from '../hooks/useRealtimeTransactions';
 import { invalidateUserCaches } from '../services/TransactionService';
 import { getTransactions } from '../services/TransactionService';
-import { useDateFilter } from '../hooks/useDateFilter';
+import { useDateFilterContext } from '../contexts/DateFilterContext';
 import { Transaction } from '../types';
 import { Logger } from '../utils/Logger';
 
@@ -44,16 +44,33 @@ export default function ReportsScreen() {
   const incomeOpacity = useSharedValue(1);
   const expenseOpacity = useSharedValue(0);
   
-  // Date filtering
+  // Date filtering from shared context
   const {
-    filteredTransactions,
+    dateRange,
     selectedPreset,
-    formattedRange,
     setPreset,
     setCustomRange,
     resetFilter,
-    dateRange,
-  } = useDateFilter(allTransactions);
+  } = useDateFilterContext();
+
+  // Filter transactions based on shared date range
+  const filteredTransactions = useMemo(() => {
+    return allTransactions.filter(transaction => {
+      const transactionDate = new Date(transaction.date);
+      const txDate = new Date(transactionDate.getFullYear(), transactionDate.getMonth(), transactionDate.getDate());
+      const start = new Date(dateRange.startDate.getFullYear(), dateRange.startDate.getMonth(), dateRange.startDate.getDate());
+      const end = new Date(dateRange.endDate.getFullYear(), dateRange.endDate.getMonth(), dateRange.endDate.getDate());
+      return txDate >= start && txDate <= end;
+    });
+  }, [allTransactions, dateRange]);
+
+  const formattedRange = useMemo(() => {
+    const formatDate = (date: Date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    if (dateRange.startDate.getTime() === dateRange.endDate.getTime()) {
+      return formatDate(dateRange.startDate);
+    }
+    return `${formatDate(dateRange.startDate)} - ${formatDate(dateRange.endDate)}`;
+  }, [dateRange]);
 
   const rangeCount = useMemo(() => {
     if (period === 'daily') return 24; // 24 hours

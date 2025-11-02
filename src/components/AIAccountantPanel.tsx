@@ -183,6 +183,11 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
               multiline
               maxLength={500}
               blurOnSubmit={false}
+              autoFocus={false}
+              onFocus={() => {
+                // Scroll to bottom when input is focused for better visibility
+                setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+              }}
             />
             
             <TouchableOpacity 
@@ -319,7 +324,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     lineHeight: 20,
-    maxHeight: 100,
+    maxHeight: 60, // Reduced from 100 to 60
     marginHorizontal: 8,
     fontFamily: 'System',
   },

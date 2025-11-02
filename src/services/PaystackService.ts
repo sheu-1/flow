@@ -18,6 +18,8 @@ export interface PaymentInitializationParams {
   plan: string;
   userId: string;
   metadata?: Record<string, any>;
+  paymentMethod?: 'card' | 'mobile_money'; // Payment method selection
+  phoneNumber?: string; // For M-Pesa payments
 }
 
 export interface PaymentResult {
@@ -36,24 +38,34 @@ export async function initializePaystackPayment(
   params: PaymentInitializationParams
 ): Promise<PaymentResult> {
   try {
-    const { email, amount, plan, userId, metadata = {} } = params;
+    const { email, amount, plan, userId, metadata = {}, paymentMethod = 'card', phoneNumber } = params;
 
     // Generate unique reference
     const reference = `SUB_${userId}_${Date.now()}`;
 
     // Prepare request body
-    const requestBody = {
+    const requestBody: any = {
       email,
       amount, // Amount in kobo (e.g., 50 kobo = $0.50)
       reference,
-      currency: 'USD', // Change to NGN for Nigerian Naira
+      currency: paymentMethod === 'mobile_money' ? 'KES' : 'USD', // KES for M-Pesa, USD for cards
       metadata: {
         plan,
         userId,
+        payment_method: paymentMethod,
         ...metadata,
       },
       callback_url: 'cashflowtracker://payment/callback', // Deep link for mobile app
     };
+
+    // Add M-Pesa specific parameters
+    if (paymentMethod === 'mobile_money' && phoneNumber) {
+      requestBody.channels = ['mobile_money']; // Restrict to mobile money only
+      requestBody.mobile_money = {
+        phone: phoneNumber,
+        provider: 'mpesa', // M-Pesa provider
+      };
+    }
 
     // Call Paystack API
     const response = await fetch(`${PAYSTACK_API_URL}/transaction/initialize`, {

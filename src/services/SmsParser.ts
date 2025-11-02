@@ -10,7 +10,10 @@ export type ParsedSms = {
 
 // Enhanced keyword patterns for better accuracy
 const incomeKeywords = /(received|credited|deposit|\bin\b|income|salary|refund|cashback|bonus|dividend|interest)/i;
-const expenseKeywords = /(sent|paid|purchased|debited|withdrawn|expense|bill|fee|charge|subscription|transfer)/i;
+const expenseKeywords = /(sent|paid|purchased|debited|withdrawn|expense|bill|fee|charge|subscription|transfer|access fee|airtime|data bundle)/i;
+
+// Patterns to exclude from parsing (avoid double entries)
+const excludePatterns = /(outstanding amount|total.*outstanding|balance.*due|amount due)/i;
 
 // Enhanced currency and amount matching with more formats
 const amountRegex = /(?:(USD|KES|KSH|UGX|TZS|ZAR|NGN|GHS|EUR|GBP)\s?([\d,]+(?:\.\d{1,2})?)|([\d,]+(?:\.\d{1,2})?)\s?(USD|KES|KSH|UGX|TZS|ZAR|NGN|GHS|EUR|GBP)|([\d,]+(?:\.\d{1,2})?))/i;
@@ -48,6 +51,34 @@ export function detectProvider(text: string): ParsedSms['service_provider'] {
 }
 
 export function parseAmount(text: string): number | null {
+  // Check if this is a Fuliza message with outstanding amount
+  if (/fuliza/i.test(text)) {
+    // For Fuliza, only extract "Access Fee charged" amount, not outstanding
+    const accessFeeMatch = text.match(/access fee charged.*?(KES|Ksh|KSH)?\s*([\d,]+(?:\.\d{1,2})?)/i);
+    if (accessFeeMatch) {
+      const amountStr = accessFeeMatch[2].replace(/,/g, '');
+      const val = parseFloat(amountStr);
+      return Number.isFinite(val) && val > 0 ? val : null;
+    }
+    return null; // Don't parse other amounts from Fuliza messages
+  }
+  
+  // Check if this contains excluded patterns (outstanding amounts)
+  if (excludePatterns.test(text)) {
+    // Try to find the actual transaction amount before the excluded part
+    const beforeExcluded = text.split(/outstanding|balance.*due|amount due/i)[0];
+    if (beforeExcluded) {
+      const m = beforeExcluded.match(amountRegex);
+      if (m) {
+        const amountStr = (m[2] || m[3] || m[5])?.replace(/,/g, '');
+        if (amountStr) {
+          const val = parseFloat(amountStr);
+          return Number.isFinite(val) && val > 0 ? val : null;
+        }
+      }
+    }
+  }
+  
   const m = text.match(amountRegex);
   if (!m) return null;
   
@@ -67,6 +98,11 @@ export function parseReference(text: string): string | null {
 
 export function classifyType(text: string): 'income' | 'expense' | null {
   const t = text.toLowerCase();
+  
+  // Fuliza, airtime, and data are always expenses
+  if (/(fuliza|access fee|airtime|data bundle|data purchased)/i.test(t)) {
+    return 'expense';
+  }
   
   // Check for explicit income/expense indicators
   const isIncome = incomeKeywords.test(t);
@@ -89,6 +125,9 @@ export function detectCategory(text: string, type: 'income' | 'expense' | null):
   const t = text.toLowerCase();
   
   if (type === 'expense') {
+    // Specific categories for common expenses
+    if (/(fuliza|access fee|loan fee)/i.test(t)) return 'Fees & Charges';
+    if (/(airtime|data bundle|data purchased|bundles)/i.test(t)) return 'Airtime & Data';
     if (/(food|restaurant|cafe|dining|meal|lunch|dinner|breakfast)/i.test(t)) return 'Food & Dining';
     if (/(transport|taxi|uber|bus|fuel|petrol|parking)/i.test(t)) return 'Transportation';
     if (/(shop|store|market|supermarket|mall)/i.test(t)) return 'Shopping';

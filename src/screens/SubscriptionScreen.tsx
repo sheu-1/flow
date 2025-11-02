@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { spacing, fontSize, borderRadius } from '../theme/colors';
 import { useThemeColors } from '../theme/ThemeProvider';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../hooks/useAuth';
-import { initializePaystackPayment } from '../services/PaystackService';
+import { supabase } from '../services/SupabaseClient';
 
 type SubscriptionPlan = 'free' | 'daily' | 'monthly' | 'yearly';
 
@@ -98,13 +98,44 @@ export default function SubscriptionScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>('free');
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isNewUser, setIsNewUser] = useState(false);
+
+  useEffect(() => {
+    // Check if this is a new user
+    if (user?.user_metadata?.is_new_user === true) {
+      setIsNewUser(true);
+    }
+  }, [user]);
 
   const handleClose = () => {
-    navigation.goBack();
+    if (isNewUser) {
+      // For new users, clear the flag and navigate to dashboard
+      clearNewUserFlag();
+    } else {
+      navigation.goBack();
+    }
   };
 
-  const handleSubscribe = async () => {
+  const clearNewUserFlag = async () => {
+    try {
+      await supabase.auth.updateUser({
+        data: { is_new_user: false }
+      });
+      // Navigate to main app
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainTabs' as never }],
+      });
+    } catch (error) {
+      console.error('Error clearing new user flag:', error);
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainTabs' as never }],
+      });
+    }
+  };
+
+  const handleSubscribe = () => {
     if (selectedPlan === 'free') {
       Alert.alert(
         'Free Trial',
@@ -119,47 +150,24 @@ export default function SubscriptionScreen() {
       return;
     }
 
-    setIsProcessing(true);
-
-    try {
-      // Get plan details
-      const plan = plans.find(p => p.id === selectedPlan);
-      if (!plan) throw new Error('Plan not found');
-
-      // Convert price to kobo (Paystack uses smallest currency unit)
-      const amountInKobo = parseFloat(plan.price.replace('$', '')) * 100;
-
-      // Initialize Paystack payment
-      const result = await initializePaystackPayment({
-        email: user.email,
-        amount: amountInKobo,
-        plan: selectedPlan,
-        userId: user.id,
-      });
-
-      if (result.success) {
-        Alert.alert(
-          'Payment Successful!',
-          `You have successfully subscribed to the ${plan.title}.`,
-          [
-            {
-              text: 'OK',
-              onPress: () => navigation.goBack(),
-            },
-          ]
-        );
-      } else {
-        Alert.alert('Payment Failed', result.message || 'Please try again.');
-      }
-    } catch (error: any) {
-      console.error('Subscription error:', error);
-      Alert.alert(
-        'Error',
-        error.message || 'Failed to process payment. Please try again.'
-      );
-    } finally {
-      setIsProcessing(false);
+    // Get plan details
+    const plan = plans.find(p => p.id === selectedPlan);
+    if (!plan) {
+      Alert.alert('Error', 'Plan not found');
+      return;
     }
+
+    // Convert price to KES (Kenyan Shillings) - assuming $1 = 130 KES
+    const priceInUSD = parseFloat(plan.price.replace('$', ''));
+    const priceInKES = priceInUSD * 130; // Convert to KES
+    const amountInCents = Math.round(priceInKES * 100); // Convert to cents
+
+    // Navigate to payment method selection
+    navigation.navigate('PaymentMethod' as never, {
+      plan: selectedPlan,
+      amount: amountInCents,
+      planTitle: plan.title,
+    } as never);
   };
 
   const plans = [
@@ -228,12 +236,14 @@ export default function SubscriptionScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       {/* Header with Close Button */}
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text }]}>Subscription Plans</Text>
+        <Text style={[styles.title, { color: colors.text }]}>
+          {isNewUser ? 'Welcome! Choose Your Plan' : 'Subscription Plans'}
+        </Text>
         <TouchableOpacity
           onPress={handleClose}
           style={[styles.closeButton, { backgroundColor: colors.surface }]}
         >
-          <Ionicons name="close" size={24} color={colors.text} />
+          <Ionicons name={isNewUser ? 'arrow-forward' : 'close'} size={24} color={colors.text} />
         </TouchableOpacity>
       </View>
 
@@ -242,7 +252,9 @@ export default function SubscriptionScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Choose the plan that works best for you
+          {isNewUser 
+            ? 'Start with a 2-week free trial, then choose the plan that works best for you'
+            : 'Choose the plan that works best for you'}
         </Text>
 
         {plans.map((plan) => (
@@ -263,19 +275,13 @@ export default function SubscriptionScreen() {
           <TouchableOpacity
             style={[
               styles.subscribeButton, 
-              { backgroundColor: colors.primary },
-              isProcessing && { opacity: 0.6 }
+              { backgroundColor: colors.primary }
             ]}
             onPress={handleSubscribe}
-            disabled={isProcessing}
           >
-            {isProcessing ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.subscribeButtonText}>
-                {selectedPlan === 'free' ? 'Continue with Free Trial' : 'Subscribe Now'}
-              </Text>
-            )}
+            <Text style={styles.subscribeButtonText}>
+              {selectedPlan === 'free' ? 'Continue with Free Trial' : 'Subscribe Now'}
+            </Text>
           </TouchableOpacity>
 
           <Text style={[styles.footerNote, { color: colors.textMuted }]}>

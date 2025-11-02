@@ -18,12 +18,15 @@ import ReportsScreen from './src/screens/ReportsScreen';
 import AIAccountantScreen from './src/screens/AIAccountantScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import SubscriptionScreen from './src/screens/SubscriptionScreen';
+import PaymentMethodScreen from './src/screens/PaymentMethodScreen';
+import PaymentWebViewScreen from './src/screens/PaymentWebViewScreen';
 import { AuthProvider, useAuth } from './src/services/AuthService';
 // SQLite sync removed: Supabase is the source of truth
 // import { initDB } from './src/services/Database';
 // import { syncTransactions } from './src/services/SyncService';
 import { CurrencyProvider } from './src/services/CurrencyProvider';
 import { ThemeProvider, useTheme } from './src/theme/ThemeProvider';
+import { DateFilterProvider } from './src/contexts/DateFilterContext';
 import AuthScreen from './src/screens/AuthScreen';
 // import { SplashScreen as CustomSplashScreen } from './src/components/SplashScreen'; // Commented out
 // Debug panel removed from production UI
@@ -44,6 +47,17 @@ type RootStackParamList = {
   MainTabs: undefined;
   Profile: undefined;
   Subscription: undefined;
+  PaymentMethod: {
+    plan: string;
+    amount: number;
+    planTitle: string;
+  };
+  PaymentWebView: {
+    url: string;
+    reference: string;
+    plan: string;
+    amount: number;
+  };
 };
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
@@ -185,6 +199,9 @@ function AppContainer() {
     );
   }
 
+  // Check if user is new (first time signup)
+  const isNewUser = user?.user_metadata?.is_new_user === true;
+
   return (
     <NavigationContainer theme={makeNavTheme(colors)}>
       <StatusBar barStyle={colors.background === '#FFFFFF' ? 'dark-content' : 'light-content'} backgroundColor={colors.background} />
@@ -192,6 +209,7 @@ function AppContainer() {
         screenOptions={{
           headerShown: false,
         }}
+        initialRouteName={isNewUser ? 'Subscription' : 'MainTabs'}
       >
         <RootStack.Screen name="MainTabs" component={MainTabNavigator} />
         <RootStack.Screen 
@@ -210,6 +228,22 @@ function AppContainer() {
             animation: 'slide_from_right',
           }}
         />
+        <RootStack.Screen 
+          name="PaymentMethod" 
+          component={PaymentMethodScreen}
+          options={{
+            presentation: 'card',
+            animation: 'slide_from_right',
+          }}
+        />
+        <RootStack.Screen 
+          name="PaymentWebView" 
+          component={PaymentWebViewScreen}
+          options={{
+            presentation: 'modal',
+            animation: 'slide_from_bottom',
+          }}
+        />
       </RootStack.Navigator>
     </NavigationContainer>
   );
@@ -225,9 +259,11 @@ export default function App() {
     >
       <CurrencyProvider>
         <ThemeProvider>
-          <AuthProvider>
-            <AppContainer />
-          </AuthProvider>
+          <DateFilterProvider>
+            <AuthProvider>
+              <AppContainer />
+            </AuthProvider>
+          </DateFilterProvider>
         </ThemeProvider>
       </CurrencyProvider>
     </ErrorBoundary>
