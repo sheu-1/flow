@@ -28,11 +28,17 @@ export function useFilteredTransactions() {
     setError(null);
 
     try {
+      // Normalize start to start-of-day, end to end-of-day (inclusive)
+      const start = new Date(dateRange.startDate);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(dateRange.endDate);
+      end.setHours(23, 59, 59, 999);
+
       // Fetch transactions with date filter from Supabase
       const txns = await getTransactions(user.id, {
         limit: 1000,
-        from: dateRange.startDate,
-        to: dateRange.endDate,
+        from: start,
+        to: end,
       });
 
       // Map and sort transactions

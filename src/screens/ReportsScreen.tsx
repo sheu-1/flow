@@ -7,20 +7,18 @@ import { spacing, fontSize, borderRadius } from '../theme/colors';
 import { useThemeColors } from '../theme/ThemeProvider';
 import { useAuth } from '../hooks/useAuth';
 import { AggregatePeriod } from '../types';
-import { getAggregatesByPeriod, getCategoriesBreakdown } from '../services/TransactionService';
+// Category breakdown computed locally from filtered transactions
 import { Dimensions } from 'react-native';
 import { AnimatedSimplePieChart } from '../components/AnimatedSimplePieChart';
 import { AnimatedCircleMetric } from '../components/AnimatedCircleMetric';
 import { UnifiedPeriodSelector } from '../components/UnifiedPeriodSelector';
 import { DetailedPeriodSelector } from '../components/DetailedPeriodSelector';
 import { useCurrency } from '../services/CurrencyProvider';
-import { useRealtimeTransactions } from '../hooks/useRealtimeTransactions';
-import { invalidateUserCaches } from '../services/TransactionService';
-import { getTransactions } from '../services/TransactionService';
+// Realtime handled centrally in DateFilterContext
 import { useDateFilterContext } from '../contexts/DateFilterContext';
 import { Transaction } from '../types';
 import { Logger } from '../utils/Logger';
-import { useFilteredTransactions } from '../hooks/useFilteredTransactions';
+// Using DateFilterContext for filtered transactions
 
 export default function ReportsScreen() {
   const colors = useThemeColors();
@@ -51,10 +49,10 @@ export default function ReportsScreen() {
     setPreset,
     setCustomRange,
     resetFilter,
+    transactions: filteredTransactions,
+    loading: transactionsLoading,
+    refetch: refetchTransactions,
   } = useDateFilterContext();
-
-  // Use filtered transactions hook - fetches from Supabase with date filter
-  const { transactions: filteredTransactions, loading: transactionsLoading, refetch: refetchTransactions } = useFilteredTransactions();
 
   const formattedRange = useMemo(() => {
     const formatDate = (date: Date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -108,24 +106,92 @@ export default function ReportsScreen() {
     if (!user?.id) return;
     if (showLoading) setLoading(true);
     try {
-      // Refetch filtered transactions
-      await refetchTransactions();
-      
-      const buckets = await getAggregatesByPeriod(user.id, period, rangeCount);
-      const labels = buckets.map((b) => b.periodLabel);
-      const income = buckets.map((b) => b.income);
-      const expense = buckets.map((b) => b.expense);
+      // Build series locally from filtered transactions to respect the custom range
+      const start = new Date(dateRange.startDate);
+      const end = new Date(dateRange.endDate);
+
+      // Helper to iterate dates
+      const addDays = (d: Date, n: number) => {
+        const nd = new Date(d);
+        nd.setDate(nd.getDate() + n);
+        return nd;
+      };
+
+      // Bucketing by selected period
+      const labels: string[] = [];
+      const income: number[] = [];
+      const expense: number[] = [];
+
+      if (period === 'daily' || period === 'weekly') {
+        // Per-day buckets across the custom range
+        const days = Math.max(1, Math.ceil((addDays(end, 1).getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
+        for (let i = 0; i < days; i++) {
+          const dayStart = addDays(start, i);
+          dayStart.setHours(0, 0, 0, 0);
+          const dayEnd = addDays(dayStart, 1);
+
+          labels.push(dayStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+
+          const dayTx = filteredTransactions.filter(t => {
+            const dt = new Date(t.date);
+            return dt >= dayStart && dt < dayEnd;
+          });
+          income.push(dayTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
+          expense.push(dayTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
+        }
+      } else if (period === 'monthly') {
+        // Per-month buckets across the custom range
+        const cursor = new Date(start.getFullYear(), start.getMonth(), 1, 0, 0, 0, 0);
+        const endCursor = new Date(end.getFullYear(), end.getMonth(), 1, 0, 0, 0, 0);
+        while (cursor <= endCursor) {
+          const monthStart = new Date(cursor);
+          const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1, 0, 0, 0, 0);
+          labels.push(monthStart.toLocaleString('default', { month: 'short', year: 'numeric' }));
+          const monthTx = filteredTransactions.filter(t => {
+            const dt = new Date(t.date);
+            return dt >= monthStart && dt < monthEnd;
+          });
+          income.push(monthTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
+          expense.push(monthTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
+          cursor.setMonth(cursor.getMonth() + 1);
+        }
+      } else {
+        // yearly: per-year buckets across the custom range
+        const startYear = dateRange.startDate.getFullYear();
+        const endYear = dateRange.endDate.getFullYear();
+        for (let y = startYear; y <= endYear; y++) {
+          const yearStart = new Date(y, 0, 1, 0, 0, 0, 0);
+          const yearEnd = new Date(y + 1, 0, 1, 0, 0, 0, 0);
+          labels.push(String(y));
+          const yearTx = filteredTransactions.filter(t => {
+            const dt = new Date(t.date);
+            return dt >= yearStart && dt < yearEnd;
+          });
+          income.push(yearTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
+          expense.push(yearTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
+        }
+      }
+
       setSeries({ labels, income, expense });
 
-      // Use filtered transactions for category breakdown
-      const start = dateRange.startDate.toISOString();
-      const end = dateRange.endDate.toISOString();
-      const cat = await getCategoriesBreakdown(user.id, start, end);
+      // Categories breakdown for the current custom range (local compute)
+      const incomeMap: Record<string, number> = {};
+      const expenseMap: Record<string, number> = {};
+      filteredTransactions.forEach((t) => {
+        const key = t.category || 'Other';
+        const amt = Math.abs(t.amount);
+        if (t.type === 'income') {
+          incomeMap[key] = (incomeMap[key] || 0) + amt;
+        } else if (t.type === 'expense') {
+          expenseMap[key] = (expenseMap[key] || 0) + amt;
+        }
+      });
+      const cat = { income: incomeMap, expense: expenseMap };
       setCategories(cat);
-      
-      Logger.info('ReportsScreen', `Categories loaded for range: ${start} to ${end}`, { 
+
+      Logger.info('ReportsScreen', `Categories loaded for range: ${start.toISOString()} to ${end.toISOString()}`, {
         incomeCategories: Object.keys(cat.income).length,
-        expenseCategories: Object.keys(cat.expense).length 
+        expenseCategories: Object.keys(cat.expense).length,
       });
     } catch (e) {
       // swallow and show empty
@@ -135,12 +201,13 @@ export default function ReportsScreen() {
       if (showLoading) setLoading(false);
       setRefreshing(false);
     }
-  }, [user?.id, period, rangeCount, dateRange]);
+  }, [user?.id, period, dateRange, filteredTransactions]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    loadData(false);
-  }, [loadData]);
+    // Explicitly refetch from Supabase, then compute via effect
+    refetchTransactions();
+  }, [refetchTransactions]);
 
   useEffect(() => {
     loadData();
@@ -155,12 +222,7 @@ export default function ReportsScreen() {
     }
   }, [dateRange]);
 
-  // Realtime refresh
-  useRealtimeTransactions(user?.id, async () => {
-    if (!user?.id) return;
-    await invalidateUserCaches(user.id);
-    loadData(false);
-  });
+  // Realtime handled centrally in DateFilterContext
 
   // Reset current week when period changes
   useEffect(() => {

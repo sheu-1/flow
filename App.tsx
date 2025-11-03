@@ -278,11 +278,11 @@ export default function App() {
     >
       <CurrencyProvider>
         <ThemeProvider>
-          <DateFilterProvider>
-            <AuthProvider>
+          <AuthProvider>
+            <DateFilterProvider>
               <AppContainer />
-            </AuthProvider>
-          </DateFilterProvider>
+            </DateFilterProvider>
+          </AuthProvider>
         </ThemeProvider>
       </CurrencyProvider>
     </ErrorBoundary>

@@ -2,12 +2,11 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../hooks/useAuth';
 import { useThemeColors } from '../theme/ThemeProvider';
-import { getTransactions, getAggregatesByPeriod } from '../services/TransactionService';
 import { notificationService } from '../services/NotificationService';
-import { Transaction, AggregatePeriod } from '../types';
+import { AggregatePeriod } from '../types';
 import { AnimatedCircleMetric } from '../components/AnimatedCircleMetric';
 import { AnimatedPieChart } from '../components/AnimatedPieChart';
 import { UnifiedPeriodSelector } from '../components/UnifiedPeriodSelector';
@@ -19,18 +18,14 @@ import { FinancialHealthScore } from '../components/FinancialHealthScore';
 import { SmartInsights } from '../components/SmartInsights';
 import { SavingsGoals } from '../components/SavingsGoals';
 import { spacing, fontSize, borderRadius } from '../theme/colors';
-import { useRealtimeTransactions } from '../hooks/useRealtimeTransactions';
-import { invalidateUserCaches } from '../services/TransactionService';
 import { useDateFilterContext } from '../contexts/DateFilterContext';
-import { useFilteredTransactions } from '../hooks/useFilteredTransactions';
-import { getSubscriptionStatus, shouldShowSubscriptionPrompt, getTrialMessage } from '../services/SubscriptionManager';
+import { getSubscriptionStatus, shouldShowSubscriptionPrompt } from '../services/SubscriptionManager';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 
 // Enable detailed logging
 console.log('🚀 DashboardScreen loading...');
 
 export default function DashboardScreen() {
-  const [aggregates, setAggregates] = useState<any[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('daily');
   const [refreshing, setRefreshing] = useState(false);
   const colors = useThemeColors();
@@ -50,10 +45,10 @@ export default function DashboardScreen() {
     setPreset,
     setCustomRange,
     resetFilter,
+    transactions: filteredTransactions,
+    loading: transactionsLoading,
+    refetch: refetchTransactions,
   } = useDateFilterContext();
-
-  // Use filtered transactions hook - fetches from Supabase with date filter
-  const { transactions: filteredTransactions, loading: transactionsLoading, refetch: refetchTransactions } = useFilteredTransactions();
 
   const formattedRange = useMemo(() => {
     const formatDate = (date: Date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -96,15 +91,7 @@ export default function DashboardScreen() {
     try {
       // Refetch transactions with current filter
       await refetchTransactions();
-      
-      // Fetch aggregates
-      const aggregates = await getAggregatesByPeriod(user.id, selectedPeriod, 30).catch(err => {
-        console.warn('Failed to load aggregates:', err);
-        return [];
-      });
-      
-      setAggregates(aggregates);
-      
+
       try {
         // Check for spending notifications
         await notificationService.checkWeeklySpending(user.id);
@@ -113,11 +100,10 @@ export default function DashboardScreen() {
       }
     } catch (error) {
       console.error('Dashboard refresh error:', error);
-      setAggregates([]);
     } finally {
       setRefreshing(false);
     }
-  }, [user?.id, selectedPeriod, refetchTransactions]);
+  }, [user?.id, refetchTransactions]);
 
   // Listen for notification updates
   useEffect(() => {
@@ -128,17 +114,7 @@ export default function DashboardScreen() {
     return unsubscribe;
   }, []);
 
-  // Initial load
-  React.useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  // Realtime updates
-  useRealtimeTransactions(user?.id, async () => {
-    if (!user?.id) return;
-    await invalidateUserCaches(user.id);
-    refresh();
-  });
+  // Initial load handled by DateFilterContext; no screen-level realtime/refetch
 
   // Show loading indicator when filters change
   useEffect(() => {
@@ -173,11 +149,7 @@ export default function DashboardScreen() {
     }
   }, [user?.id, navigation]);
 
-  useFocusEffect(
-    useCallback(() => {
-      refresh();
-    }, [refresh])
-  );
+  // Avoid on-focus refetch to prevent duplicate loads; context keeps data fresh
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
