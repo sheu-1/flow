@@ -63,22 +63,29 @@ export function parseTransactionFromSms(body: string, dateStr?: string): ParsedT
     return null;
   }
 
-  // Filter 3: Handle Fuliza - only log access fee
-  const fulizaMatch = body.match(/Fuliza M-PESA.*Access Fee charged.*Ksh\s?([0-9,.]+)/i);
-  if (fulizaMatch) {
-    const feeStr = fulizaMatch[1]?.replace(/,/g, '');
-    const fee = feeStr ? parseFloat(feeStr) : null;
-    if (fee && fee > 0) {
-      return {
-        amount: fee,
-        type: 'debit',
-        sender: 'Fuliza Fee',
-        reference: parseReference(body),
-        message: body,
-        dateISO: dateStr ? new Date(dateStr).toISOString() : undefined,
-      };
+  // Filter 3: Handle Fuliza - strictly only log the Access Fee, ignore outstanding/principal amounts
+  if (/fuliza/i.test(body)) {
+    // Examples to match:
+    // - "Access Fee charged Ksh 0.10"
+    // - "Access Fee of KES 0.10"
+    // - "Access Fee is Ksh. 0.10"
+    const feeMatch = body.match(/access\s*fee(?:\s*charged)?(?:\s*(?:is|of))?[^0-9]*(?:Ksh\.?|KES|KSH)\s*([0-9,]+(?:\.[0-9]{1,2})?)/i);
+    if (feeMatch) {
+      const feeStr = feeMatch[1]?.replace(/,/g, '');
+      const fee = feeStr ? parseFloat(feeStr) : null;
+      if (fee && fee > 0) {
+        return {
+          amount: fee,
+          type: 'debit',
+          sender: 'Fuliza Fee',
+          reference: parseReference(body),
+          message: body,
+          dateISO: dateStr ? new Date(dateStr).toISOString() : undefined,
+        };
+      }
     }
-    return null; // Ignore if no valid fee
+    // If it's a Fuliza message and we didn't find a valid Access Fee, skip creating any transaction
+    return null;
   }
 
   const amount = parseAmount(body);

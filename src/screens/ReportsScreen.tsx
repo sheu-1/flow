@@ -37,11 +37,12 @@ export default function ReportsScreen() {
   const [barTooltip, setBarTooltip] = useState<{ label: string; income: number; expense: number; index: number } | null>(null);
   const [showMetricsExplanation, setShowMetricsExplanation] = useState(false);
   const chartScrollRef = useRef<ScrollView>(null);
-  
+  const [windowRange, setWindowRange] = useState<{ start: Date; end: Date } | null>(null);
+
   // Shared values for toggle animation
   const incomeOpacity = useSharedValue(1);
   const expenseOpacity = useSharedValue(0);
-  
+
   // Date filtering from shared context
   const {
     dateRange,
@@ -69,38 +70,7 @@ export default function ReportsScreen() {
     return 5; // Last 5 years
   }, [period]);
 
-  // Sync period changes to date filter
-  useEffect(() => {
-    // Auto-set date range based on period
-    const now = new Date();
-    let start: Date;
-    let shouldUpdate = false;
-    switch (period) {
-      case 'daily':
-        start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-        shouldUpdate = true;
-        break;
-      case 'weekly':
-        const weekOffset = now.getDay();
-        start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - weekOffset, 0, 0, 0);
-        shouldUpdate = true;
-        break;
-      case 'monthly':
-        start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
-        shouldUpdate = true;
-        break;
-      case 'yearly':
-        start = new Date(now.getFullYear(), 0, 1, 0, 0, 0);
-        shouldUpdate = true;
-        break;
-      default:
-        return;
-    }
-    if (shouldUpdate && start) {
-      setCustomRange(start, now);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [period]);
+  // Do not override custom date range when the period tab changes.
 
   const loadData = useCallback(async (showLoading = true) => {
     if (!user?.id) return;
@@ -117,27 +87,79 @@ export default function ReportsScreen() {
         return nd;
       };
 
-      // Bucketing by selected period
+      // Bucketing by selected period using an active window derived from the custom range
       const labels: string[] = [];
       const income: number[] = [];
       const expense: number[] = [];
 
-      if (period === 'daily' || period === 'weekly') {
-        // Per-day buckets across the custom range
-        const days = Math.max(1, Math.ceil((addDays(end, 1).getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
-        for (let i = 0; i < days; i++) {
-          const dayStart = addDays(start, i);
+      // Define the active window used for stats and categories
+      let wStart = new Date(start);
+      let wEnd = new Date(end);
+
+      if (period === 'daily') {
+        // 24 hourly buckets for the last day in range
+        const dayStart = new Date(end);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(end);
+        dayEnd.setHours(23, 59, 59, 999);
+
+        // Clamp to custom range
+        wStart = dayStart < start ? start : dayStart;
+        wEnd = dayEnd > end ? end : dayEnd;
+
+        for (let h = 0; h < 24; h++) {
+          const hStart = new Date(dayStart);
+          hStart.setHours(h, 0, 0, 0);
+          const hEnd = new Date(dayStart);
+          hEnd.setHours(h + 1, 0, 0, 0);
+
+          const bucketStart = hStart < wStart ? wStart : hStart;
+          const bucketEnd = hEnd > wEnd ? wEnd : hEnd;
+
+          labels.push(`${h}:00`);
+          if (bucketEnd <= bucketStart) {
+            income.push(0); expense.push(0);
+          } else {
+            const hourTx = filteredTransactions.filter(t => {
+              const dt = new Date(t.date);
+              return dt >= bucketStart && dt < bucketEnd;
+            });
+            income.push(hourTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
+            expense.push(hourTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
+          }
+        }
+      } else if (period === 'weekly') {
+        // 7 day buckets ending at range end, clamped to custom range
+        const weekEnd = new Date(end);
+        weekEnd.setHours(23, 59, 59, 999);
+        const weekStart = new Date(weekEnd);
+        weekStart.setHours(0, 0, 0, 0);
+        weekStart.setDate(weekStart.getDate() - 6);
+
+        wStart = weekStart < start ? start : weekStart;
+        wEnd = weekEnd > end ? end : weekEnd;
+
+        for (let i = 0; i < 7; i++) {
+          const dayStart = new Date(weekStart);
+          dayStart.setDate(weekStart.getDate() + i);
           dayStart.setHours(0, 0, 0, 0);
-          const dayEnd = addDays(dayStart, 1);
+          const dayEnd = new Date(dayStart);
+          dayEnd.setDate(dayStart.getDate() + 1);
+
+          const bucketStart = dayStart < wStart ? wStart : dayStart;
+          const bucketEnd = dayEnd > wEnd ? wEnd : dayEnd;
 
           labels.push(dayStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-
-          const dayTx = filteredTransactions.filter(t => {
-            const dt = new Date(t.date);
-            return dt >= dayStart && dt < dayEnd;
-          });
-          income.push(dayTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
-          expense.push(dayTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
+          if (bucketEnd <= bucketStart) {
+            income.push(0); expense.push(0);
+          } else {
+            const dayTx = filteredTransactions.filter(t => {
+              const dt = new Date(t.date);
+              return dt >= bucketStart && dt < bucketEnd;
+            });
+            income.push(dayTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
+            expense.push(dayTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
+          }
         }
       } else if (period === 'monthly') {
         // Per-month buckets across the custom range
@@ -155,6 +177,7 @@ export default function ReportsScreen() {
           expense.push(monthTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
           cursor.setMonth(cursor.getMonth() + 1);
         }
+        wStart = start; wEnd = end;
       } else {
         // yearly: per-year buckets across the custom range
         const startYear = dateRange.startDate.getFullYear();
@@ -170,14 +193,18 @@ export default function ReportsScreen() {
           income.push(yearTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
           expense.push(yearTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
         }
+        wStart = start; wEnd = end;
       }
 
       setSeries({ labels, income, expense });
+      setWindowRange({ start: wStart, end: wEnd });
 
-      // Categories breakdown for the current custom range (local compute)
+      // Categories breakdown within the active window (local compute)
       const incomeMap: Record<string, number> = {};
       const expenseMap: Record<string, number> = {};
       filteredTransactions.forEach((t) => {
+        const dt = new Date(t.date);
+        if (dt < wStart || dt > wEnd) return;
         const key = t.category || 'Other';
         const amt = Math.abs(t.amount);
         if (t.type === 'income') {
@@ -232,13 +259,13 @@ export default function ReportsScreen() {
   // Auto-scroll to current period when data loads or period changes
   useEffect(() => {
     if (series.labels.length === 0) return;
-    
+
     const scrollToCurrentPeriod = () => {
       if (!chartScrollRef.current) return;
-      
+
       let scrollToIndex = 0;
       const now = new Date();
-      
+
       if (period === 'daily') {
         // Scroll to current hour
         scrollToIndex = now.getHours();
@@ -249,17 +276,17 @@ export default function ReportsScreen() {
         // Scroll to current year (last item in 5-year view)
         scrollToIndex = 4; // Current year is the last in the array
       }
-      
+
       // Calculate scroll position (approximate bar width + gap)
       const barWidth = period === 'daily' ? 66 : 50; // Adjust based on bar group width
       const scrollX = scrollToIndex * barWidth;
-      
+
       // Delay to ensure layout is complete
       setTimeout(() => {
         chartScrollRef.current?.scrollTo({ x: scrollX, animated: true });
       }, 300);
     };
-    
+
     scrollToCurrentPeriod();
   }, [series.labels.length, period]);
 
@@ -270,176 +297,76 @@ export default function ReportsScreen() {
     return Object.entries(currentCategories).sort(([, a], [, b]) => (b as number) - (a as number));
   }, [categories, categoryView]);
 
-  // Calculate period data from filtered transactions (like Dashboard) for all periods
-  const currentWeekData = useMemo(() => {
-    const now = new Date();
-    const labels: string[] = [];
-    const income: number[] = [];
-    const expense: number[] = [];
-    
-    if (period === 'daily') {
-      // Daily: 24 hours of today
-      const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-      
-      for (let hour = 0; hour < 24; hour++) {
-        const hourStart = new Date(dayStart);
-        hourStart.setHours(hour, 0, 0, 0);
-        const hourEnd = new Date(hourStart);
-        hourEnd.setHours(hour + 1, 0, 0, 0);
-        
-        const hourTransactions = filteredTransactions.filter(t => {
-          const txDate = new Date(t.date);
-          return txDate >= hourStart && txDate < hourEnd;
-        });
-        
-        labels.push(`${hour}h`);
-        income.push(hourTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + Math.abs(t.amount), 0));
-        expense.push(hourTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + Math.abs(t.amount), 0));
-      }
-    } else if (period === 'weekly') {
-      // Weekly: Current week (Sun-Sat)
-      const offset = now.getDay();
-      const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset - (currentWeek * 7), 0, 0, 0, 0);
-      
-      for (let day = 0; day < 7; day++) {
-        const dayStart = new Date(weekStart);
-        dayStart.setDate(weekStart.getDate() + day);
-        const dayEnd = new Date(dayStart);
-        dayEnd.setDate(dayStart.getDate() + 1);
-        
-        const dayTransactions = filteredTransactions.filter(t => {
-          const txDate = new Date(t.date);
-          return txDate >= dayStart && txDate < dayEnd;
-        });
-        
-        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        labels.push(days[dayStart.getDay()]);
-        income.push(dayTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + Math.abs(t.amount), 0));
-        expense.push(dayTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + Math.abs(t.amount), 0));
-      }
-    } else if (period === 'monthly') {
-      // Monthly: 12 months of current year
-      const yearStart = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      
-      for (let month = 0; month < 12; month++) {
-        const monthStart = new Date(now.getFullYear(), month, 1, 0, 0, 0, 0);
-        const monthEnd = new Date(now.getFullYear(), month + 1, 0, 23, 59, 59, 999);
-        
-        const monthTransactions = filteredTransactions.filter(t => {
-          const txDate = new Date(t.date);
-          return txDate >= monthStart && txDate <= monthEnd;
-        });
-        
-        labels.push(monthNames[month]);
-        income.push(monthTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + Math.abs(t.amount), 0));
-        expense.push(monthTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + Math.abs(t.amount), 0));
-      }
-    } else if (period === 'yearly') {
-      // Yearly: Last 5 years
-      for (let i = 4; i >= 0; i--) {
-        const year = now.getFullYear() - i;
-        const yearStart = new Date(year, 0, 1, 0, 0, 0, 0);
-        const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
-        
-        const yearTransactions = filteredTransactions.filter(t => {
-          const txDate = new Date(t.date);
-          return txDate >= yearStart && txDate <= yearEnd;
-        });
-        
-        labels.push(year.toString());
-        income.push(yearTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + Math.abs(t.amount), 0));
-        expense.push(yearTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + Math.abs(t.amount), 0));
-      }
-    }
-    
-    return { labels, income, expense };
-  }, [period, currentWeek, filteredTransactions]);
+  // Use the already-built series (from filteredTransactions + dateRange)
+  const periodData = useMemo(() => {
+    return { labels: series.labels, income: series.income, expense: series.expense };
+  }, [series]);
 
   // Compute summary stats from the current period data
   // Count = number of individual transactions, Max = highest transaction
   const incomeStats = useMemo(() => {
-    const arr = currentWeekData.income || [];
+    const arr = periodData.income || [];
     // Filter out non-finite values, zeros, and nulls
     const positiveValues = arr.filter((n) => Number.isFinite(n) && n > 0);
-    
+
     // For sum and avg, include all valid values (including zeros)
     const validForSum = arr.filter((n) => Number.isFinite(n));
     const sum = validForSum.reduce((a, b) => a + b, 0);
     const avg = validForSum.length ? sum / validForSum.length : 0;
-    
-    // Count individual income transactions
-    const count = filteredTransactions.filter(t => t.type === 'income').length;
-    
+
+    // Count individual income transactions within active window
+    const count = windowRange
+      ? filteredTransactions.filter(t => {
+          if (t.type !== 'income') return false;
+          const dt = new Date(t.date);
+          return dt >= windowRange.start && dt <= windowRange.end;
+        }).length
+      : 0;
+
     // Max only considers actual positive transactions
     const max = positiveValues.length ? Math.max(...positiveValues) : 0;
-    
+
     return { sum, avg, count, max };
-  }, [currentWeekData.income, filteredTransactions]);
+  }, [periodData.income, filteredTransactions, windowRange]);
 
   const expenseStats = useMemo(() => {
-    const arr = currentWeekData.expense || [];
+    const arr = periodData.expense || [];
     // Filter out non-finite values, zeros, and nulls
     const positiveValues = arr.filter((n) => Number.isFinite(n) && n > 0);
-    
+
     // For sum and avg, include all valid values (including zeros)
     const validForSum = arr.filter((n) => Number.isFinite(n));
     const sum = validForSum.reduce((a, b) => a + b, 0);
     const avg = validForSum.length ? sum / validForSum.length : 0;
-    
-    // Count individual expense transactions
-    const count = filteredTransactions.filter(t => t.type === 'expense').length;
-    
+
+    // Count individual expense transactions within active window
+    const count = windowRange
+      ? filteredTransactions.filter(t => {
+          if (t.type !== 'expense') return false;
+          const dt = new Date(t.date);
+          return dt >= windowRange.start && dt <= windowRange.end;
+        }).length
+      : 0;
+
     // Max only considers actual positive transactions
     const max = positiveValues.length ? Math.max(...positiveValues) : 0;
-    
+
     return { sum, avg, count, max };
-  }, [currentWeekData.expense, filteredTransactions]);
+  }, [periodData.expense, filteredTransactions, windowRange]);
 
   // Get current stats based on selected view
   const currentStats = useMemo(() => {
     return statsView === 'income' ? incomeStats : expenseStats;
   }, [statsView, incomeStats, expenseStats]);
 
-  // Calculate transaction count based on selected period
-  const calculatePeriodTransactionCount = useCallback(() => {
-    const now = new Date();
-    let startDate: Date;
-    let endDate: Date;
-
-    switch (period) {
-      case 'daily':
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-        endDate = new Date(startDate);
-        endDate.setDate(endDate.getDate() + 1);
-        break;
-      case 'weekly':
-        const offset = now.getDay();
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset, 0, 0, 0, 0);
-        endDate = new Date(startDate);
-        endDate.setDate(endDate.getDate() + 7);
-        break;
-      case 'monthly':
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-        break;
-      case 'yearly':
-        startDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
-        endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
-        break;
-      default:
-        startDate = new Date(0);
-        endDate = now;
-    }
-
+  // Calculate transaction count based on the active window
+  const transactionCount = useMemo(() => {
+    if (!windowRange) return 0;
     return filteredTransactions.filter(t => {
-      const txDate = new Date(t.date);
-      return txDate >= startDate && txDate <= endDate;
+      const dt = new Date(t.date);
+      return dt >= windowRange.start && dt <= windowRange.end;
     }).length;
-  }, [period, filteredTransactions]);
-
-  // Replace the existing transactionCount calculation with:
-  const transactionCount = calculatePeriodTransactionCount();
+  }, [filteredTransactions, windowRange]);
 
   // Calculate dynamic period total based on selected view
   const periodTotal = useMemo(() => {
@@ -786,10 +713,10 @@ export default function ReportsScreen() {
               {period === 'weekly' ? (
                 <View style={styles.chartBarsWrapper}>
                   <View style={styles.chartBars}>
-                    {currentWeekData.labels.map((label, index) => {
-                      const income = currentWeekData.income[index] || 0;
-                      const expense = currentWeekData.expense[index] || 0;
-                      const maxValue = Math.max(...currentWeekData.income, ...currentWeekData.expense);
+                    {series.labels.map((label, index) => {
+                      const income = series.income[index] || 0;
+                      const expense = series.expense[index] || 0;
+                      const maxValue = Math.max(...series.income, ...series.expense);
                       const incomeHeight = maxValue > 0 ? (income / maxValue) * 120 : 0;
                       const expenseHeight = maxValue > 0 ? (expense / maxValue) * 120 : 0;
                       
@@ -836,62 +763,30 @@ export default function ReportsScreen() {
                   </View>
                 </View>
               ) : (
-                <ScrollView ref={chartScrollRef} horizontal showsHorizontalScrollIndicator={false} style={styles.chartScroll}>
-                  <View style={styles.chartBarsScrollable}>
-                    {currentWeekData.labels.map((label, index) => {
-                      const income = currentWeekData.income[index] || 0;
-                      const expense = currentWeekData.expense[index] || 0;
-                      const maxValue = Math.max(...currentWeekData.income, ...currentWeekData.expense);
-                      const incomeHeight = maxValue > 0 ? (income / maxValue) * 120 : 0;
-                      const expenseHeight = maxValue > 0 ? (expense / maxValue) * 120 : 0;
-                      
-                      // Format labels based on period
-                      let displayLabel = label;
-                      if (period === 'daily') {
-                        // For daily: show hour format (0h, 1h, 2h, etc.)
-                        displayLabel = `${index}h`;
-                      } else if (period === 'monthly') {
-                        // For monthly: show month abbreviations (Jan, Feb, etc.)
-                        displayLabel = label.length > 3 ? label.substring(0, 3) : label;
-                      } else if (period === 'yearly') {
-                        // For yearly: show year
-                        displayLabel = label;
-                      }
-                      
+                /* For non-weekly periods: horizontal scroll */
+                <ScrollView
+                  horizontal
+                  ref={chartScrollRef}
+                  showsHorizontalScrollIndicator={false}
+                >
+                  <View style={styles.chartBars}>
+                    {series.labels.map((label, index) => {
+                      const income = series.income[index] || 0;
+                      const expense = series.expense[index] || 0;
+                      const maxValue = Math.max(...series.income, ...series.expense);
+                      const incomeHeight = maxValue > 0 ? (income / maxValue) * 140 : 0;
+                      const expenseHeight = maxValue > 0 ? (expense / maxValue) * 140 : 0;
+
                       return (
                         <TouchableOpacity
-                          key={index}
-                          onPress={() => setBarTooltip({ label: displayLabel, income, expense, index })}
-                          activeOpacity={0.7}
+                          key={`${label}-${index}`}
+                          activeOpacity={0.8}
+                          onPress={() => setBarTooltip({ label, income, expense, index })}
+                          style={styles.barGroup}
                         >
-                          <Animated.View style={styles.barGroup} entering={FadeInUp.delay(index * 30).springify()}>
-                            <View style={styles.barContainer}>
-                              <Animated.View 
-                                style={[
-                                  styles.bar, 
-                                  { 
-                                    height: incomeHeight, 
-                                    backgroundColor: colors.success 
-                                  }
-                                ]} 
-                                entering={FadeInUp.delay(index * 30 + 100).springify()}
-                              />
-                              <Animated.View 
-                                style={[
-                                  styles.bar, 
-                                  { 
-                                    height: expenseHeight, 
-                                    backgroundColor: colors.danger, 
-                                    marginLeft: 4 
-                                  }
-                                ]}
-                                entering={FadeInUp.delay(index * 30 + 150).springify()}
-                              />
-                            </View>
-                            <Text style={[styles.barLabel, { color: colors.textSecondary }]} numberOfLines={1}>
-                              {displayLabel}
-                            </Text>
-                          </Animated.View>
+                          <View style={[styles.bar, { height: incomeHeight, backgroundColor: colors.success }]} />
+                          <View style={[styles.bar, { height: expenseHeight, backgroundColor: colors.danger }]} />
+                          <Text style={[styles.barLabel, { color: colors.textSecondary }]}>{label}</Text>
                         </TouchableOpacity>
                       );
                     })}

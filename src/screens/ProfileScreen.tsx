@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Alert, Switch, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Alert, Switch, Platform, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { spacing, fontSize, borderRadius } from '../theme/colors';
 import { useThemeColors, useTheme } from '../theme/ThemeProvider';
@@ -11,6 +11,7 @@ import EditProfileModal from '../components/EditProfileModal';
 import ChangePasswordModal from '../components/ChangePasswordModal';
 import ExportDataModal from '../components/ExportDataModal';
 import { supabase } from '../services/SupabaseClient';
+import { submitFeedback } from '../services/FeedbackService';
 import { Transaction } from '../types';
 
 export default function ProfileScreen() {
@@ -25,6 +26,9 @@ export default function ProfileScreen() {
   const [showExportData, setShowExportData] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loadingTransactions, setLoadingTransactions] = useState(false);
+  const [feedbackVisible, setFeedbackVisible] = useState(false);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [submittingFeedback, setSubmittingFeedback] = useState(false);
 
   // Check SMS permission status and load transactions on mount
   useEffect(() => {
@@ -49,6 +53,33 @@ export default function ProfileScreen() {
       console.error('Error loading transactions:', error);
     } finally {
       setLoadingTransactions(false);
+    }
+  };
+
+  const handleFeedback = async () => {
+    if (!user?.id) {
+      Alert.alert('Not signed in', 'Please sign in to send feedback.');
+      return;
+    }
+    setFeedbackText('');
+    setFeedbackVisible(true);
+  };
+
+  const submitFeedbackNow = async () => {
+    if (!user?.id) return;
+    const message = feedbackText.trim();
+    if (!message) {
+      setFeedbackVisible(false);
+      return;
+    }
+    setSubmittingFeedback(true);
+    const res = await submitFeedback(user.id, message);
+    setSubmittingFeedback(false);
+    setFeedbackVisible(false);
+    if (res.success) {
+      Alert.alert('Thanks!', 'Your feedback has been submitted.');
+    } else {
+      Alert.alert('Error', res.error?.message || 'Failed to submit feedback.');
     }
   };
 
@@ -126,6 +157,15 @@ export default function ProfileScreen() {
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.actionItem, { backgroundColor: colors.surface }]}
+            onPress={handleFeedback}
+          >
+            <Ionicons name="chatbox-outline" size={20} color={colors.primary} style={styles.actionIcon} />
+            <Text style={[styles.actionText, { color: colors.text }]}>Send Feedback</Text>
+            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
           <Text style={[styles.title, { color: colors.text }]}>Profile</Text>
           <View style={{ width: 24 }} />
@@ -285,6 +325,41 @@ export default function ProfileScreen() {
         onClose={() => setShowExportData(false)}
         transactions={transactions}
       />
+
+      {/* Feedback Modal */}
+      <Modal
+        visible={feedbackVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFeedbackVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { backgroundColor: colors.surface }] }>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Send Feedback</Text>
+            <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>Tell us what you think. Your feedback helps improve the app.</Text>
+            <TextInput
+              value={feedbackText}
+              onChangeText={setFeedbackText}
+              multiline
+              placeholder="Type your feedback here"
+              placeholderTextColor={colors.textSecondary}
+              style={[styles.textInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={[styles.modalButton, { backgroundColor: colors.border }]} onPress={() => setFeedbackVisible(false)} disabled={submittingFeedback}>
+                <Text style={[styles.modalButtonText, { color: colors.text }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalButton, { backgroundColor: colors.primary }]} onPress={submitFeedbackNow} disabled={submittingFeedback}>
+                {submittingFeedback ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={[styles.modalButtonText, { color: '#fff' }]}>Send</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

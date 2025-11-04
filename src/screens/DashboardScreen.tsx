@@ -58,32 +58,7 @@ export default function DashboardScreen() {
     return `${formatDate(dateRange.startDate)} - ${formatDate(dateRange.endDate)}`;
   }, [dateRange]);
 
-  // Sync period changes to date filter
-  useEffect(() => {
-    // Auto-set date range based on period
-    const now = new Date();
-    let start: Date;
-    switch (selectedPeriod) {
-      case 'daily':
-        start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-        setCustomRange(start, now);
-        break;
-      case 'weekly':
-        const weekOffset = now.getDay();
-        start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - weekOffset, 0, 0, 0);
-        setCustomRange(start, now);
-        break;
-      case 'monthly':
-        start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
-        setCustomRange(start, now);
-        break;
-      case 'yearly':
-        start = new Date(now.getFullYear(), 0, 1, 0, 0, 0);
-        setCustomRange(start, now);
-        break;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPeriod]);
+  // Do not override custom date range when the period tab changes.
 
   const refresh = useCallback(async () => {
     if (!user?.id) return;
@@ -157,38 +132,58 @@ export default function DashboardScreen() {
   }, [refresh]);
 
   const calculatePeriodStats = () => {
-    const now = new Date();
-    let startDate: Date;
-    let endDate: Date;
-    let periodLabel: string;
+    // Use the custom date range as bounds, but compute the selected period window anchored to the range end
+    const rangeStart = new Date(dateRange.startDate);
+    rangeStart.setHours(0, 0, 0, 0);
+    const rangeEnd = new Date(dateRange.endDate);
+    rangeEnd.setHours(23, 59, 59, 999);
+
+    let startDate = new Date(rangeStart);
+    let endDate = new Date(rangeEnd);
+    let periodLabel = '';
+
+    const fmt = (d: Date, withYear = true) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: withYear ? 'numeric' : undefined });
 
     switch (selectedPeriod) {
-      case 'daily':
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-        endDate = new Date(startDate);
-        endDate.setDate(endDate.getDate() + 1);
-        periodLabel = 'Today';
+      case 'daily': {
+        // Last day within the range (end of range)
+        startDate = new Date(rangeEnd);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(rangeEnd);
+        endDate.setHours(23, 59, 59, 999);
+        periodLabel = fmt(startDate);
         break;
-      case 'weekly':
-        const offset = now.getDay();
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset, 0, 0, 0, 0);
-        endDate = new Date(startDate);
-        endDate.setDate(endDate.getDate() + 7);
-        periodLabel = 'This Week';
+      }
+      case 'weekly': {
+        // Last 7 days ending at rangeEnd, clamped to rangeStart
+        const weekStart = new Date(rangeEnd);
+        weekStart.setHours(0, 0, 0, 0);
+        weekStart.setDate(weekStart.getDate() - 6);
+        startDate = weekStart < rangeStart ? rangeStart : weekStart;
+        endDate = rangeEnd;
+        periodLabel = `${fmt(startDate, false)} - ${fmt(endDate)}`;
         break;
-      case 'monthly':
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-        periodLabel = 'This Month';
+      }
+      case 'monthly': {
+        // Month containing rangeEnd, clamped to the custom range
+        const mStart = new Date(rangeEnd.getFullYear(), rangeEnd.getMonth(), 1, 0, 0, 0, 0);
+        const mEnd = new Date(rangeEnd.getFullYear(), rangeEnd.getMonth() + 1, 0, 23, 59, 59, 999);
+        startDate = mStart < rangeStart ? rangeStart : mStart;
+        endDate = mEnd > rangeEnd ? rangeEnd : mEnd;
+        periodLabel = mStart.toLocaleString('default', { month: 'short', year: 'numeric' });
         break;
-      case 'yearly':
-        startDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
-        endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
-        periodLabel = 'This Year';
+      }
+      case 'yearly': {
+        // Year containing rangeEnd, clamped to the custom range
+        const yStart = new Date(rangeEnd.getFullYear(), 0, 1, 0, 0, 0, 0);
+        const yEnd = new Date(rangeEnd.getFullYear(), 11, 31, 23, 59, 59, 999);
+        startDate = yStart < rangeStart ? rangeStart : yStart;
+        endDate = yEnd > rangeEnd ? rangeEnd : yEnd;
+        periodLabel = String(rangeEnd.getFullYear());
         break;
+      }
     }
 
-    // Use filteredTransactions to respect date filters and get accurate counts
     const periodTransactions = filteredTransactions.filter(t => {
       const txDate = new Date(t.date);
       return txDate >= startDate && txDate <= endDate;
@@ -207,7 +202,7 @@ export default function DashboardScreen() {
       moneyOut,
       netBalance: moneyIn - moneyOut,
       periodLabel,
-      transactionCount: periodTransactions.length // Accurate count of transactions in period
+      transactionCount: periodTransactions.length
     };
   };
 

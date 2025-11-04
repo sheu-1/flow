@@ -21,6 +21,8 @@ import { Transaction } from '../types';
 import { useAuth } from '../hooks/useAuth';
 import { getTransactions, createTransaction, updateTransaction, deleteTransaction, invalidateUserCaches } from '../services/TransactionService';
 import { useRealtimeTransactions } from '../hooks/useRealtimeTransactions';
+import ExportDataModal from '../components/ExportDataModal';
+import { useDateFilterContext } from '../contexts/DateFilterContext';
 
 const ITEMS_PER_PAGE = 100;
 
@@ -37,6 +39,10 @@ function TransactionsScreen() {
   const [totalTransactions, setTotalTransactions] = useState(0);
   const [showPagination, setShowPagination] = useState(true);
   const paginationOpacity = useSharedValue(1);
+  const [showExport, setShowExport] = useState(false);
+
+  // Use globally filtered transactions for CSV export (respects custom date filters)
+  const { transactions: filteredTransactionsForExport } = useDateFilterContext();
 
   const refresh = useCallback(async (showLoading = true, page = currentPage) => {
     if (!user?.id) return;
@@ -201,12 +207,20 @@ function TransactionsScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: colors.text }]}>Transactions</Text>
-        <TouchableOpacity
-          style={[styles.addButton, { backgroundColor: colors.primary }]}
-          onPress={() => setModalVisible(true)}
-        >
-          <Ionicons name="add" size={24} color={colors.text} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity
+            style={[styles.addButton, { backgroundColor: colors.surface, marginRight: 8 }]}
+            onPress={() => setShowExport(true)}
+          >
+            <Ionicons name="download-outline" size={22} color={colors.text} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.addButton, { backgroundColor: colors.primary }]}
+            onPress={() => setModalVisible(true)}
+          >
+            <Ionicons name="add" size={24} color={colors.text} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {loading ? (
@@ -240,6 +254,13 @@ function TransactionsScreen() {
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
         onAdd={handleAddTransaction}
+      />
+
+      {/* Export Data Modal - uses globally filtered transactions */}
+      <ExportDataModal
+        visible={showExport}
+        onClose={() => setShowExport(false)}
+        transactions={filteredTransactionsForExport}
       />
 
       {/* Category Picker */}
