@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Image, StyleSheet, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, StatusBar } from 'react-native';
 
 interface SplashScreenProps {
   onFinish: () => void;
@@ -17,12 +17,8 @@ export default function SplashScreen({ onFinish }: SplashScreenProps) {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#FFFFFF" />
-      <Image 
-        source={require('../../assets/splash.png')} 
-        style={styles.image}
-        resizeMode="contain"
-      />
+      <StatusBar barStyle="light-content" backgroundColor="#0B0F13" />
+      <Text style={styles.title}>Cash Flow Tracker</Text>
     </View>
   );
 }
@@ -30,12 +26,14 @@ export default function SplashScreen({ onFinish }: SplashScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0B0F13',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  image: {
-    width: '100%',
-    height: '100%',
+  title: {
+    color: '#FFFFFF',
+    fontSize: 28,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
 });
