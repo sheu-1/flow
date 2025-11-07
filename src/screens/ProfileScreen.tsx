@@ -158,15 +158,6 @@ export default function ProfileScreen() {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={[styles.actionItem, { backgroundColor: colors.surface }]}
-            onPress={handleFeedback}
-          >
-            <Ionicons name="chatbox-outline" size={20} color={colors.primary} style={styles.actionIcon} />
-            <Text style={[styles.actionText, { color: colors.text }]}>Send Feedback</Text>
-            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
           <Text style={[styles.title, { color: colors.text }]}>Profile</Text>
           <View style={{ width: 24 }} />
         </View>
@@ -285,6 +276,15 @@ export default function ProfileScreen() {
           >
             <Ionicons name="download-outline" size={20} color={colors.primary} style={styles.actionIcon} />
             <Text style={[styles.actionText, { color: colors.text }]}>Export Data</Text>
+            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.actionItem, { backgroundColor: colors.surface }]}
+            onPress={handleFeedback}
+          >
+            <Ionicons name="chatbox-outline" size={20} color={colors.primary} style={styles.actionIcon} />
+            <Text style={[styles.actionText, { color: colors.text }]}>Send Feedback</Text>
             <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
@@ -471,6 +471,48 @@ const styles = StyleSheet.create({
   },
   signOutText: {
     color: '#fff',
+    fontSize: fontSize.md,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCard: {
+    width: '85%',
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+  },
+  modalTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: 'bold',
+    marginBottom: spacing.xs,
+  },
+  modalSubtitle: {
+    fontSize: fontSize.sm,
+    marginBottom: spacing.md,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    minHeight: 100,
+    textAlignVertical: 'top',
+    marginBottom: spacing.md,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  modalButton: {
+    flex: 1,
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+  },
+  modalButtonText: {
     fontSize: fontSize.md,
     fontWeight: '600',
   },

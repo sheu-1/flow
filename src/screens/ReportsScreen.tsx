@@ -19,6 +19,7 @@ import { useDateFilterContext } from '../contexts/DateFilterContext';
 import { Transaction } from '../types';
 import { Logger } from '../utils/Logger';
 // Using DateFilterContext for filtered transactions
+import supabase from '../lib/supabase';
 
 export default function ReportsScreen() {
   const colors = useThemeColors();
@@ -97,103 +98,113 @@ export default function ReportsScreen() {
       let wEnd = new Date(end);
 
       if (period === 'daily') {
-        // 24 hourly buckets for the last day in range
+        // Daily: 24 hourly buckets for the last day in range (matching Dashboard logic)
         const dayStart = new Date(end);
         dayStart.setHours(0, 0, 0, 0);
         const dayEnd = new Date(end);
         dayEnd.setHours(23, 59, 59, 999);
 
-        // Clamp to custom range
-        wStart = dayStart < start ? start : dayStart;
-        wEnd = dayEnd > end ? end : dayEnd;
+        wStart = dayStart;
+        wEnd = dayEnd;
 
+        // Filter transactions for this specific day
+        const dayTransactions = filteredTransactions.filter(t => {
+          const dt = new Date(t.date);
+          return dt >= dayStart && dt <= dayEnd;
+        });
+
+        // Create 24 hourly buckets
         for (let h = 0; h < 24; h++) {
           const hStart = new Date(dayStart);
           hStart.setHours(h, 0, 0, 0);
           const hEnd = new Date(dayStart);
-          hEnd.setHours(h + 1, 0, 0, 0);
-
-          const bucketStart = hStart < wStart ? wStart : hStart;
-          const bucketEnd = hEnd > wEnd ? wEnd : hEnd;
+          hEnd.setHours(h, 59, 59, 999);
 
           labels.push(`${h}:00`);
-          if (bucketEnd <= bucketStart) {
-            income.push(0); expense.push(0);
-          } else {
-            const hourTx = filteredTransactions.filter(t => {
-              const dt = new Date(t.date);
-              return dt >= bucketStart && dt < bucketEnd;
-            });
-            income.push(hourTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
-            expense.push(hourTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
-          }
+
+          const hourTx = dayTransactions.filter(t => {
+            const dt = new Date(t.date);
+            return dt >= hStart && dt <= hEnd;
+          });
+
+          income.push(hourTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
+          expense.push(hourTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
         }
       } else if (period === 'weekly') {
-        // 7 day buckets ending at range end, clamped to custom range
-        const weekEnd = new Date(end);
-        weekEnd.setHours(23, 59, 59, 999);
-        const weekStart = new Date(weekEnd);
+        // Weekly: Last 7 days ending at rangeEnd, clamped to rangeStart (matching Dashboard)
+        const weekStart = new Date(end);
         weekStart.setHours(0, 0, 0, 0);
         weekStart.setDate(weekStart.getDate() - 6);
-
+        
         wStart = weekStart < start ? start : weekStart;
-        wEnd = weekEnd > end ? end : weekEnd;
+        wEnd = end;
 
+        // Create 7 day buckets for the week
         for (let i = 0; i < 7; i++) {
           const dayStart = new Date(weekStart);
           dayStart.setDate(weekStart.getDate() + i);
           dayStart.setHours(0, 0, 0, 0);
           const dayEnd = new Date(dayStart);
-          dayEnd.setDate(dayStart.getDate() + 1);
+          dayEnd.setHours(23, 59, 59, 999);
 
-          const bucketStart = dayStart < wStart ? wStart : dayStart;
-          const bucketEnd = dayEnd > wEnd ? wEnd : dayEnd;
+          // Day name for label
+          const dayName = dayStart.toLocaleDateString('en-US', { weekday: 'short' });
+          labels.push(dayName);
 
-          labels.push(dayStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-          if (bucketEnd <= bucketStart) {
-            income.push(0); expense.push(0);
-          } else {
-            const dayTx = filteredTransactions.filter(t => {
-              const dt = new Date(t.date);
-              return dt >= bucketStart && dt < bucketEnd;
-            });
-            income.push(dayTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
-            expense.push(dayTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
-          }
+          const dayTx = filteredTransactions.filter(t => {
+            const dt = new Date(t.date);
+            return dt >= dayStart && dt <= dayEnd;
+          });
+
+          income.push(dayTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
+          expense.push(dayTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
         }
       } else if (period === 'monthly') {
-        // Per-month buckets across the custom range
-        const cursor = new Date(start.getFullYear(), start.getMonth(), 1, 0, 0, 0, 0);
-        const endCursor = new Date(end.getFullYear(), end.getMonth(), 1, 0, 0, 0, 0);
-        while (cursor <= endCursor) {
-          const monthStart = new Date(cursor);
-          const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1, 0, 0, 0, 0);
-          labels.push(monthStart.toLocaleString('default', { month: 'short', year: 'numeric' }));
-          const monthTx = filteredTransactions.filter(t => {
+        // Monthly: Month containing rangeEnd, clamped to the custom range (matching Dashboard)
+        const mStart = new Date(end.getFullYear(), end.getMonth(), 1, 0, 0, 0, 0);
+        const mEnd = new Date(end.getFullYear(), end.getMonth() + 1, 0, 23, 59, 59, 999);
+        
+        wStart = mStart < start ? start : mStart;
+        wEnd = mEnd > end ? end : mEnd;
+        
+        // Create daily buckets for the month
+        const daysInMonth = mEnd.getDate();
+        for (let d = 1; d <= daysInMonth; d++) {
+          const dayStart = new Date(mStart.getFullYear(), mStart.getMonth(), d, 0, 0, 0, 0);
+          const dayEnd = new Date(mStart.getFullYear(), mStart.getMonth(), d, 23, 59, 59, 999);
+          
+          labels.push(dayStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+          
+          const dayTx = filteredTransactions.filter(t => {
             const dt = new Date(t.date);
-            return dt >= monthStart && dt < monthEnd;
+            return dt >= dayStart && dt <= dayEnd;
           });
-          income.push(monthTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
-          expense.push(monthTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
-          cursor.setMonth(cursor.getMonth() + 1);
+          
+          income.push(dayTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
+          expense.push(dayTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
         }
-        wStart = start; wEnd = end;
       } else {
-        // yearly: per-year buckets across the custom range
-        const startYear = dateRange.startDate.getFullYear();
-        const endYear = dateRange.endDate.getFullYear();
-        for (let y = startYear; y <= endYear; y++) {
+        // Yearly: Show from 2024 onward to current year
+        const currentYear = new Date().getFullYear();
+        const startYear = 2024;
+        
+        for (let y = startYear; y <= currentYear; y++) {
           const yearStart = new Date(y, 0, 1, 0, 0, 0, 0);
-          const yearEnd = new Date(y + 1, 0, 1, 0, 0, 0, 0);
+          const yearEnd = new Date(y, 11, 31, 23, 59, 59, 999);
+          
           labels.push(String(y));
+          
           const yearTx = filteredTransactions.filter(t => {
             const dt = new Date(t.date);
-            return dt >= yearStart && dt < yearEnd;
+            return dt >= yearStart && dt <= yearEnd;
           });
+          
           income.push(yearTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
           expense.push(yearTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
         }
-        wStart = start; wEnd = end;
+        
+        wStart = new Date(startYear, 0, 1, 0, 0, 0, 0);
+        wEnd = new Date(currentYear, 11, 31, 23, 59, 59, 999);
       }
 
       setSeries({ labels, income, expense });
@@ -480,95 +491,102 @@ export default function ReportsScreen() {
 
         {!loading && series.labels.length > 0 ? (
           <View>
-            {/* Animated Circular Stats Cards */}
-            <View style={styles.circularStatsContainer}>
-              {/* For Daily/Weekly: Show Min, Avg, Max */}
-              {(period === 'daily' || period === 'weekly') ? (
-                <>
-                  <Animated.View entering={FadeInUp.delay(50).springify()}>
-                    <AnimatedCircleMetric
-                      value={currentStats.count}
-                      label="Count"
-                      type="count"
-                      period={period}
-                      showCurrency={false}
-                      size={100}
-                    />
-                  </Animated.View>
-                  
-                  <Animated.View entering={FadeInUp.delay(100).springify()}>
-                    <AnimatedCircleMetric
-                      value={currentStats.avg}
-                      label="Avg"
-                      type="average"
-                      period={period}
-                      maxValue={currentStats.max}
-                      size={100}
-                    />
-                  </Animated.View>
-                  
-                  <Animated.View entering={FadeInUp.delay(150).springify()}>
-                    <AnimatedCircleMetric
-                      value={currentStats.max}
-                      label="Max"
-                      type="max"
-                      period={period}
-                      maxValue={currentStats.max}
-                      size={100}
-                      colorOverride={statsView === 'income' ? colors.success : colors.danger}
-                    />
-                  </Animated.View>
-                </>
-              ) : (
-                /* For Monthly/Yearly: Show Count, Avg, Max */
-                <>
-                  <Animated.View entering={FadeInUp.delay(50).springify()}>
-                    <AnimatedCircleMetric
-                      value={currentStats.count}
-                      label="Count"
-                      type="count"
-                      period={period}
-                      showCurrency={false}
-                      size={100}
-                    />
-                  </Animated.View>
-                  
-                  <Animated.View entering={FadeInUp.delay(100).springify()}>
-                    <AnimatedCircleMetric
-                      value={currentStats.avg}
-                      label="Avg"
-                      type="average"
-                      period={period}
-                      maxValue={currentStats.max}
-                      size={100}
-                    />
-                  </Animated.View>
-                  
-                  <Animated.View entering={FadeInUp.delay(150).springify()}>
-                    <AnimatedCircleMetric
-                      value={currentStats.max}
-                      label="Max"
-                      type="max"
-                      period={period}
-                      maxValue={currentStats.max}
-                      size={100}
-                      colorOverride={statsView === 'income' ? colors.success : colors.danger}
-                    />
-                  </Animated.View>
-                </>
-              )}
+            {/* Money In Stats */}
+            <View style={{ paddingHorizontal: spacing.md }}>
+              <Text style={[styles.statsSubtitle, { color: colors.success }]}>Money In</Text>
+              <View style={styles.circularStatsContainer}>
+                <Animated.View entering={FadeInUp.delay(50).springify()}>
+                  <AnimatedCircleMetric
+                    value={incomeStats.count}
+                    label="Count"
+                    type="count"
+                    period={period}
+                    showCurrency={false}
+                    size={100}
+                  />
+                </Animated.View>
+                
+                <Animated.View entering={FadeInUp.delay(100).springify()}>
+                  <AnimatedCircleMetric
+                    value={incomeStats.avg}
+                    label="Avg"
+                    type="average"
+                    period={period}
+                    maxValue={incomeStats.max}
+                    size={100}
+                  />
+                </Animated.View>
+                
+                <Animated.View entering={FadeInUp.delay(150).springify()}>
+                  <AnimatedCircleMetric
+                    value={incomeStats.max}
+                    label="Max"
+                    type="max"
+                    period={period}
+                    maxValue={incomeStats.max}
+                    size={100}
+                    colorOverride={colors.success}
+                  />
+                </Animated.View>
+              </View>
+            </View>
+
+            {/* Money Out Stats */}
+            <View style={{ paddingHorizontal: spacing.md, marginTop: spacing.md }}>
+              <Text style={[styles.statsSubtitle, { color: colors.danger }]}>Money Out</Text>
+              <View style={styles.circularStatsContainer}>
+                <Animated.View entering={FadeInUp.delay(200).springify()}>
+                  <AnimatedCircleMetric
+                    value={expenseStats.count}
+                    label="Count"
+                    type="count"
+                    period={period}
+                    showCurrency={false}
+                    size={100}
+                  />
+                </Animated.View>
+                
+                <Animated.View entering={FadeInUp.delay(250).springify()}>
+                  <AnimatedCircleMetric
+                    value={expenseStats.avg}
+                    label="Avg"
+                    type="average"
+                    period={period}
+                    maxValue={expenseStats.max}
+                    size={100}
+                  />
+                </Animated.View>
+                
+                <Animated.View entering={FadeInUp.delay(300).springify()}>
+                  <AnimatedCircleMetric
+                    value={expenseStats.max}
+                    label="Max"
+                    type="max"
+                    period={period}
+                    maxValue={expenseStats.max}
+                    size={100}
+                    colorOverride={colors.danger}
+                  />
+                </Animated.View>
+              </View>
             </View>
             
-            {/* Period Total - Dynamic based on selected period */}
-            <View style={{ paddingHorizontal: spacing.md }}>
+            {/* Period Total - Styled like Dashboard Net Balance */}
             <Animated.View 
-              entering={FadeInUp.delay(200).springify()}
-              style={[styles.periodTotalCard, { backgroundColor: colors.surface }]}
+              entering={FadeInUp.delay(350).springify()}
+              style={[
+                styles.periodTotalCard, 
+                { 
+                  backgroundColor: colors.surface,
+                  borderWidth: 2,
+                  borderColor: statsView === 'income' ? colors.success : colors.danger,
+                }
+              ]}
             >
               <View style={styles.periodTotalContent}>
                 <Ionicons 
-                  name="calendar-outline" 
-                  size={24} 
+                  name="analytics-outline" 
+                  size={32} 
                   color={statsView === 'income' ? colors.success : colors.danger} 
                 />
                 <View style={styles.periodTotalText}>
@@ -581,7 +599,6 @@ export default function ReportsScreen() {
                 </View>
               </View>
             </Animated.View>
-            </View>
 
             {/* Metrics Explanation - moved below circles */}
             <View style={{ paddingHorizontal: spacing.md }}>
@@ -697,6 +714,17 @@ export default function ReportsScreen() {
             
             {/* Simple bar chart: Money In vs Money Out */}
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Money In vs Money Out</Text>
+            
+            {/* Date Range Display for Weekly View */}
+            {period === 'weekly' && windowRange && (
+              <View style={[styles.weekDateRange, { backgroundColor: colors.surface }]}>
+                <Ionicons name="calendar-outline" size={20} color={colors.primary} />
+                <Text style={[styles.weekDateRangeText, { color: colors.text }]}>
+                  {windowRange.start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {windowRange.end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </Text>
+              </View>
+            )}
+            
             <View style={styles.chartContainer}>
               <View style={styles.chartLegend}>
                 <View style={styles.legendItem}>
@@ -763,30 +791,55 @@ export default function ReportsScreen() {
                   </View>
                 </View>
               ) : (
-                /* For non-weekly periods: horizontal scroll */
+                /* For non-weekly periods: horizontal scroll with clustered bars */
                 <ScrollView
                   horizontal
                   ref={chartScrollRef}
                   showsHorizontalScrollIndicator={false}
+                  style={styles.chartScroll}
                 >
-                  <View style={styles.chartBars}>
+                  <View style={styles.chartBarsScrollable}>
                     {series.labels.map((label, index) => {
                       const income = series.income[index] || 0;
                       const expense = series.expense[index] || 0;
                       const maxValue = Math.max(...series.income, ...series.expense);
-                      const incomeHeight = maxValue > 0 ? (income / maxValue) * 140 : 0;
-                      const expenseHeight = maxValue > 0 ? (expense / maxValue) * 140 : 0;
+                      const incomeHeight = maxValue > 0 ? (income / maxValue) * 120 : 0;
+                      const expenseHeight = maxValue > 0 ? (expense / maxValue) * 120 : 0;
 
                       return (
                         <TouchableOpacity
                           key={`${label}-${index}`}
-                          activeOpacity={0.8}
                           onPress={() => setBarTooltip({ label, income, expense, index })}
-                          style={styles.barGroup}
+                          activeOpacity={0.7}
                         >
-                          <View style={[styles.bar, { height: incomeHeight, backgroundColor: colors.success }]} />
-                          <View style={[styles.bar, { height: expenseHeight, backgroundColor: colors.danger }]} />
-                          <Text style={[styles.barLabel, { color: colors.textSecondary }]}>{label}</Text>
+                          <Animated.View style={styles.barGroup} entering={FadeInUp.delay(index * 30).springify()}>
+                            <View style={styles.barContainer}>
+                              <Animated.View 
+                                style={[
+                                  styles.bar, 
+                                  { 
+                                    height: incomeHeight, 
+                                    backgroundColor: colors.success 
+                                  }
+                                ]} 
+                                entering={FadeInUp.delay(index * 30 + 100).springify()}
+                              />
+                              <Animated.View 
+                                style={[
+                                  styles.bar, 
+                                  { 
+                                    height: expenseHeight, 
+                                    backgroundColor: colors.danger, 
+                                    marginLeft: 2 
+                                  }
+                                ]}
+                                entering={FadeInUp.delay(index * 30 + 150).springify()}
+                              />
+                            </View>
+                            <Text style={[styles.barLabel, { color: colors.textSecondary }]} numberOfLines={1}>
+                              {label}
+                            </Text>
+                          </Animated.View>
                         </TouchableOpacity>
                       );
                     })}
@@ -1193,11 +1246,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.md,
   },
-  weekNavigation: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
   navButton: {
     padding: spacing.xs,
     borderRadius: borderRadius.sm,
@@ -1281,6 +1329,12 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     lineHeight: 16,
   },
+  statsSubtitle: {
+    fontSize: fontSize.md,
+    fontWeight: '700',
+    marginBottom: spacing.xs,
+    marginTop: spacing.sm,
+  },
   circularStatsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -1290,14 +1344,15 @@ const styles = StyleSheet.create({
   },
   periodTotalCard: {
     marginHorizontal: spacing.md,
-    marginTop: spacing.md,
+    marginTop: spacing.sm,
+    marginBottom: spacing.lg,
     borderRadius: borderRadius.lg,
     padding: spacing.lg,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
   },
   periodTotalContent: {
     flexDirection: 'row',
@@ -1408,5 +1463,19 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     flex: 1,
     lineHeight: 16,
+  },
+  weekDateRange: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.md,
+    marginBottom: spacing.sm,
+    gap: spacing.xs,
+  },
+  weekDateRangeText: {
+    fontSize: fontSize.md,
+    fontWeight: '600',
   },
 });
