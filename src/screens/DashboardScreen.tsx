@@ -306,7 +306,48 @@ export default function DashboardScreen() {
           </Animated.View>
         </View>
 
-        {/* Metrics Insights Section */}
+        {/* Net Balance Card */}
+        <Animated.View 
+          entering={FadeInUp.delay(200).springify()}
+          style={[
+            styles.netBalanceCard, 
+            { 
+              backgroundColor: colors.surface,
+              borderWidth: 2,
+              borderColor: netBalance >= 0 ? colors.success : colors.danger,
+            }
+          ]}
+        >
+          <View style={styles.netBalanceContent}>
+            <Ionicons 
+              name="analytics-outline" 
+              size={32} 
+              color={netBalance >= 0 ? colors.success : colors.danger} 
+            />
+            <View style={styles.netBalanceText}>
+              <Text style={[styles.netBalanceLabel, { color: colors.textSecondary }]}>
+                Net Balance • {periodLabel}
+              </Text>
+              <Text style={[styles.netBalanceAmount, { color: netBalance >= 0 ? colors.success : colors.danger }]}>
+                {netBalance >= 0 ? '+' : ''}{(moneyIn - moneyOut).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </Text>
+            </View>
+          </View>
+          
+          {/* Insight Summary inside Net Balance Card */}
+          <View style={[styles.netBalanceInsight, { backgroundColor: (netBalance >= 0 ? colors.success : colors.danger) + '15', borderTopColor: colors.border }]}>
+            <Ionicons name="bulb-outline" size={16} color={netBalance >= 0 ? colors.success : colors.danger} />
+            <Text style={[styles.netBalanceInsightText, { color: colors.text }]}>
+              {netBalance > 0 
+                ? `${Math.abs(netBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} surplus this period`
+                : netBalance < 0
+                ? `${Math.abs(netBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} deficit this period`
+                : 'Balanced income and expenses'}
+            </Text>
+          </View>
+        </Animated.View>
+
+        {/* Metrics Insights Section - Moved below Net Balance */}
         <TouchableOpacity
           style={[styles.insightsCard, { backgroundColor: colors.surface }]}
           onPress={() => setShowMetricsInsights(!showMetricsInsights)}
@@ -378,35 +419,6 @@ export default function DashboardScreen() {
           </Animated.View>
         )}
         </TouchableOpacity>
-        
-        {/* Net Balance Card */}
-        <Animated.View 
-          entering={FadeInUp.delay(200).springify()}
-          style={[
-            styles.netBalanceCard, 
-            { 
-              backgroundColor: colors.surface,
-              borderWidth: 2,
-              borderColor: netBalance >= 0 ? colors.success : colors.danger,
-            }
-          ]}
-        >
-          <View style={styles.netBalanceContent}>
-            <Ionicons 
-              name="analytics-outline" 
-              size={32} 
-              color={netBalance >= 0 ? colors.success : colors.danger} 
-            />
-            <View style={styles.netBalanceText}>
-              <Text style={[styles.netBalanceLabel, { color: colors.textSecondary }]}>
-                Net Balance • {periodLabel}
-              </Text>
-              <Text style={[styles.netBalanceAmount, { color: netBalance >= 0 ? colors.success : colors.danger }]}>
-                {netBalance >= 0 ? '+' : ''}{(moneyIn - moneyOut).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </Text>
-            </View>
-          </View>
-        </Animated.View>
 
         <AnimatedPieChart moneyIn={moneyIn} moneyOut={moneyOut} />
 
@@ -604,6 +616,19 @@ const styles = StyleSheet.create({
   netBalanceAmount: {
     fontSize: fontSize.xxl,
     fontWeight: 'bold',
+  },
+  netBalanceInsight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+  },
+  netBalanceInsightText: {
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    flex: 1,
   },
   section: {
     marginTop: spacing.lg,

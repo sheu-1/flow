@@ -1,5 +1,6 @@
 import { supabase } from './SupabaseClient';
 import type { ParsedTransaction } from '../utils/SMSParser';
+import { getCategoryIcon, getCategoryColor } from './CategoryService';
 
 export type EnhancedSupabaseInsertPayload = {
   user_id: string;
@@ -139,53 +140,7 @@ function determineCategoryFromSms(parsed: ParsedTransaction, type: 'income' | 'e
   return 'Other';
 }
 
-/**
- * Get appropriate icon for category
- */
-function getCategoryIcon(categoryName: string, type: 'income' | 'expense'): string {
-  const name = categoryName.toLowerCase();
-  
-  if (type === 'income') {
-    if (name.includes('salary')) return 'card';
-    if (name.includes('mobile') || name.includes('mpesa')) return 'phone-portrait';
-    return 'trending-up';
-  }
-
-  // Expense icons
-  if (name.includes('food') || name.includes('dining')) return 'restaurant';
-  if (name.includes('transport')) return 'car';
-  if (name.includes('shop')) return 'bag';
-  if (name.includes('airtime') || name.includes('data')) return 'phone-portrait';
-  if (name.includes('cash') || name.includes('withdraw')) return 'cash';
-  if (name.includes('bill') || name.includes('utilities')) return 'receipt';
-  if (name.includes('medical') || name.includes('health')) return 'medical';
-  if (name.includes('mobile') || name.includes('mpesa')) return 'phone-portrait';
-  
-  return 'ellipse';
-}
-
-/**
- * Get appropriate color for category
- */
-function getCategoryColor(categoryName: string, type: 'income' | 'expense'): string {
-  const name = categoryName.toLowerCase();
-  
-  if (type === 'income') {
-    return '#2ECC71'; // Green for income
-  }
-
-  // Expense colors
-  if (name.includes('food')) return '#FF6B6B';
-  if (name.includes('transport')) return '#4ECDC4';
-  if (name.includes('shop')) return '#45B7D1';
-  if (name.includes('airtime')) return '#9B59B6';
-  if (name.includes('cash')) return '#E67E22';
-  if (name.includes('bill')) return '#FFEAA7';
-  if (name.includes('medical')) return '#DDA0DD';
-  if (name.includes('mobile')) return '#3498DB';
-  
-  return '#95A5A6'; // Default gray
-}
+// Category icon and color functions moved to CategoryService.ts
 
 /**
  * Detect payment method from SMS content

@@ -131,18 +131,36 @@ export default function ReportsScreen() {
           expense.push(hourTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
         }
       } else if (period === 'weekly') {
-        // Weekly: Last 7 days ending at rangeEnd, clamped to rangeStart (matching Dashboard)
-        const weekStart = new Date(end);
-        weekStart.setHours(0, 0, 0, 0);
-        weekStart.setDate(weekStart.getDate() - 6);
+        // Weekly: Sunday-Saturday weeks, 4 weeks per month with navigation
+        const today = new Date();
+        const currentMonth = today.getMonth();
+        const currentYear = today.getFullYear();
         
-        wStart = weekStart < start ? start : weekStart;
-        wEnd = end;
+        // Get first day of current month
+        const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
+        
+        // Find the Sunday of the week containing the first day of the month
+        const firstSunday = new Date(firstDayOfMonth);
+        const dayOfWeek = firstDayOfMonth.getDay();
+        const daysToSunday = -dayOfWeek; // 0 for Sunday, -1 for Monday, etc.
+        firstSunday.setDate(firstDayOfMonth.getDate() + daysToSunday);
+        firstSunday.setHours(0, 0, 0, 0);
+        
+        // Calculate the start of the selected week (0-3 for 4 weeks)
+        const weekStartDate = new Date(firstSunday);
+        weekStartDate.setDate(firstSunday.getDate() + (currentWeek * 7));
+        
+        const weekEndDate = new Date(weekStartDate);
+        weekEndDate.setDate(weekStartDate.getDate() + 6);
+        weekEndDate.setHours(23, 59, 59, 999);
+        
+        wStart = weekStartDate;
+        wEnd = weekEndDate;
 
-        // Create 7 day buckets for the week
+        // Create 7 day buckets (Sun-Sat)
         for (let i = 0; i < 7; i++) {
-          const dayStart = new Date(weekStart);
-          dayStart.setDate(weekStart.getDate() + i);
+          const dayStart = new Date(weekStartDate);
+          dayStart.setDate(weekStartDate.getDate() + i);
           dayStart.setHours(0, 0, 0, 0);
           const dayEnd = new Date(dayStart);
           dayEnd.setHours(23, 59, 59, 999);
@@ -160,28 +178,25 @@ export default function ReportsScreen() {
           expense.push(dayTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
         }
       } else if (period === 'monthly') {
-        // Monthly: Month containing rangeEnd, clamped to the custom range (matching Dashboard)
-        const mStart = new Date(end.getFullYear(), end.getMonth(), 1, 0, 0, 0, 0);
-        const mEnd = new Date(end.getFullYear(), end.getMonth() + 1, 0, 23, 59, 59, 999);
+        // Monthly: January to December (12 months)
+        const currentYear = end.getFullYear();
         
-        wStart = mStart < start ? start : mStart;
-        wEnd = mEnd > end ? end : mEnd;
-        
-        // Create daily buckets for the month
-        const daysInMonth = mEnd.getDate();
-        for (let d = 1; d <= daysInMonth; d++) {
-          const dayStart = new Date(mStart.getFullYear(), mStart.getMonth(), d, 0, 0, 0, 0);
-          const dayEnd = new Date(mStart.getFullYear(), mStart.getMonth(), d, 23, 59, 59, 999);
-          
-          labels.push(dayStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-          
-          const dayTx = filteredTransactions.filter(t => {
+        wStart = new Date(currentYear, 0, 1, 0, 0, 0, 0); // Jan 1
+        wEnd = new Date(currentYear, 11, 31, 23, 59, 59, 999); // Dec 31
+
+        // Bucket by months (Jan-Dec)
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        for (let m = 0; m < 12; m++) {
+          const monthStart = new Date(currentYear, m, 1, 0, 0, 0, 0);
+          const monthEnd = new Date(currentYear, m + 1, 0, 23, 59, 59, 999);
+
+          labels.push(monthNames[m]);
+          const monthTx = filteredTransactions.filter(t => {
             const dt = new Date(t.date);
-            return dt >= dayStart && dt <= dayEnd;
+            return dt >= monthStart && dt <= monthEnd;
           });
-          
-          income.push(dayTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
-          expense.push(dayTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
+          income.push(monthTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
+          expense.push(monthTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
         }
       } else {
         // Yearly: Show from 2024 onward to current year
@@ -491,13 +506,15 @@ export default function ReportsScreen() {
 
         {!loading && series.labels.length > 0 ? (
           <View>
-            {/* Money In Stats */}
+            {/* Dynamic Stats - 3 circles that adjust based on toggle */}
             <View style={{ paddingHorizontal: spacing.md }}>
-              <Text style={[styles.statsSubtitle, { color: colors.success }]}>Money In</Text>
+              <Text style={[styles.statsSubtitle, { color: statsView === 'income' ? colors.success : colors.danger }]}>
+                {statsView === 'income' ? 'Money In' : 'Money Out'}
+              </Text>
               <View style={styles.circularStatsContainer}>
                 <Animated.View entering={FadeInUp.delay(50).springify()}>
                   <AnimatedCircleMetric
-                    value={incomeStats.count}
+                    value={currentStats.count}
                     label="Count"
                     type="count"
                     period={period}
@@ -508,64 +525,24 @@ export default function ReportsScreen() {
                 
                 <Animated.View entering={FadeInUp.delay(100).springify()}>
                   <AnimatedCircleMetric
-                    value={incomeStats.avg}
+                    value={currentStats.avg}
                     label="Avg"
                     type="average"
                     period={period}
-                    maxValue={incomeStats.max}
+                    maxValue={currentStats.max}
                     size={100}
                   />
                 </Animated.View>
                 
                 <Animated.View entering={FadeInUp.delay(150).springify()}>
                   <AnimatedCircleMetric
-                    value={incomeStats.max}
+                    value={currentStats.max}
                     label="Max"
                     type="max"
                     period={period}
-                    maxValue={incomeStats.max}
+                    maxValue={currentStats.max}
                     size={100}
-                    colorOverride={colors.success}
-                  />
-                </Animated.View>
-              </View>
-            </View>
-
-            {/* Money Out Stats */}
-            <View style={{ paddingHorizontal: spacing.md, marginTop: spacing.md }}>
-              <Text style={[styles.statsSubtitle, { color: colors.danger }]}>Money Out</Text>
-              <View style={styles.circularStatsContainer}>
-                <Animated.View entering={FadeInUp.delay(200).springify()}>
-                  <AnimatedCircleMetric
-                    value={expenseStats.count}
-                    label="Count"
-                    type="count"
-                    period={period}
-                    showCurrency={false}
-                    size={100}
-                  />
-                </Animated.View>
-                
-                <Animated.View entering={FadeInUp.delay(250).springify()}>
-                  <AnimatedCircleMetric
-                    value={expenseStats.avg}
-                    label="Avg"
-                    type="average"
-                    period={period}
-                    maxValue={expenseStats.max}
-                    size={100}
-                  />
-                </Animated.View>
-                
-                <Animated.View entering={FadeInUp.delay(300).springify()}>
-                  <AnimatedCircleMetric
-                    value={expenseStats.max}
-                    label="Max"
-                    type="max"
-                    period={period}
-                    maxValue={expenseStats.max}
-                    size={100}
-                    colorOverride={colors.danger}
+                    colorOverride={statsView === 'income' ? colors.success : colors.danger}
                   />
                 </Animated.View>
               </View>
@@ -715,16 +692,6 @@ export default function ReportsScreen() {
             {/* Simple bar chart: Money In vs Money Out */}
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Money In vs Money Out</Text>
             
-            {/* Date Range Display for Weekly View */}
-            {period === 'weekly' && windowRange && (
-              <View style={[styles.weekDateRange, { backgroundColor: colors.surface }]}>
-                <Ionicons name="calendar-outline" size={20} color={colors.primary} />
-                <Text style={[styles.weekDateRangeText, { color: colors.text }]}>
-                  {windowRange.start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {windowRange.end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                </Text>
-              </View>
-            )}
-            
             <View style={styles.chartContainer}>
               <View style={styles.chartLegend}>
                 <View style={styles.legendItem}>
@@ -790,7 +757,42 @@ export default function ReportsScreen() {
                     })}
                   </View>
                 </View>
-              ) : (
+              ) : null}
+              
+              {/* Week Navigation Below Bars - Weekly Only */}
+              {period === 'weekly' && windowRange && (
+                <View style={styles.weekNavigationBelow}>
+                  <TouchableOpacity
+                    onPress={() => setCurrentWeek(prev => Math.max(prev - 1, 0))}
+                    disabled={currentWeek <= 0}
+                    style={styles.weekNavButtonSimple}
+                  >
+                    <Ionicons 
+                      name="chevron-back" 
+                      size={28} 
+                      color={currentWeek <= 0 ? colors.textSecondary : colors.text} 
+                    />
+                  </TouchableOpacity>
+                  <View style={styles.weekNavCenterSimple}>
+                    <Text style={[styles.weekNavDateRangeSimple, { color: colors.text }]}>
+                      {windowRange.start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {windowRange.end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setCurrentWeek(prev => Math.min(prev + 1, 3))}
+                    disabled={currentWeek >= 3}
+                    style={styles.weekNavButtonSimple}
+                  >
+                    <Ionicons 
+                      name="chevron-forward" 
+                      size={28} 
+                      color={currentWeek >= 3 ? colors.textSecondary : colors.text} 
+                    />
+                  </TouchableOpacity>
+                </View>
+              )}
+              
+              {period !== 'weekly' ? (
                 /* For non-weekly periods: horizontal scroll with clustered bars */
                 <ScrollView
                   horizontal
@@ -845,7 +847,7 @@ export default function ReportsScreen() {
                     })}
                   </View>
                 </ScrollView>
-              )}
+              ) : null}
               
               {/* Dynamic Tooltip */}
               {barTooltip && (
@@ -940,70 +942,72 @@ export default function ReportsScreen() {
               </View>
             )}
 
-            {/* Category breakdown - show Income and Expense groups */}
+            {/* Category breakdown - filtered by statsView toggle */}
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Categories by Type</Text>
-
-              {/* Money In Categories */}
               <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                Money In Categories
+                {statsView === 'income' ? 'Money In Categories' : 'Money Out Categories'}
               </Text>
-              {Object.keys(categories.income).length > 0 ? (
-                (() => {
-                  const incomeSorted = Object.entries(categories.income).sort((a, b) => (b[1] as number) - (a[1] as number));
-                  const maxIncome = Math.max(...incomeSorted.map(([, v]) => v as number), 1);
-                  return incomeSorted.map(([cat, amount], idx) => (
-                    <Animated.View key={`inc-${cat}`} style={[styles.categoryItem, { backgroundColor: colors.card }]} entering={FadeInUp.delay(idx * 25).springify()}> 
-                      <View style={styles.categoryInfo}>
-                        <Text style={[styles.categoryName, { color: colors.text }]}>{cat}</Text>
-                        <Text style={[styles.categoryAmount, { color: colors.success }]}>
-                          {formatCurrency(amount as number)}
-                        </Text>
-                      </View>
-                      <View style={[styles.categoryBar, { backgroundColor: colors.surface }]}> 
-                        <Animated.View 
-                          entering={FadeInUp.delay(idx * 25 + 100).springify()}
-                          style={[styles.categoryBarFill, { width: `${((amount as number) / maxIncome) * 100}%`, backgroundColor: colors.success }]} 
-                        />
-                      </View>
-                    </Animated.View>
-                  ));
-                })()
-              ) : (
-                <View style={styles.emptyState}>
-                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No money in for this period</Text>
-                </View>
-              )}
 
-              {/* Money Out Categories */}
-              <Text style={[styles.sectionTitle, { color: colors.text, marginTop: spacing.md }]}> 
-                Money Out Categories
-              </Text>
-              {Object.keys(categories.expense).length > 0 ? (
-                (() => {
-                  const expenseSorted = Object.entries(categories.expense).sort((a, b) => (b[1] as number) - (a[1] as number));
-                  const maxExpense = Math.max(...expenseSorted.map(([, v]) => v as number), 1);
-                  return expenseSorted.map(([cat, amount], idx) => (
-                    <Animated.View key={`exp-${cat}`} style={[styles.categoryItem, { backgroundColor: colors.card }]} entering={FadeInUp.delay(idx * 25).springify()}> 
-                      <View style={styles.categoryInfo}>
-                        <Text style={[styles.categoryName, { color: colors.text }]}>{cat}</Text>
-                        <Text style={[styles.categoryAmount, { color: colors.danger }]}>
-                          {formatCurrency(amount as number)}
-                        </Text>
-                      </View>
-                      <View style={[styles.categoryBar, { backgroundColor: colors.surface }]}> 
-                        <Animated.View 
-                          entering={FadeInUp.delay(idx * 25 + 100).springify()}
-                          style={[styles.categoryBarFill, { width: `${((amount as number) / maxExpense) * 100}%`, backgroundColor: colors.danger }]} 
-                        />
-                      </View>
-                    </Animated.View>
-                  ));
-                })()
+              {statsView === 'income' ? (
+                /* Money In Categories */
+                Object.keys(categories.income).length > 0 ? (
+                  (() => {
+                    const incomeSorted = Object.entries(categories.income).sort((a, b) => (b[1] as number) - (a[1] as number));
+                    const maxIncome = Math.max(...incomeSorted.map(([, v]) => v as number), 1);
+                    return incomeSorted.map(([cat, amount], idx) => (
+                      <Animated.View key={`inc-${cat}`} style={styles.categoryItemHorizontal} entering={FadeInUp.delay(idx * 25).springify()}> 
+                        <View style={styles.categoryBarContainer}>
+                          <Text style={[styles.categoryNameLeft, { color: colors.text }]}>{cat}</Text>
+                          <View style={styles.categoryBarWrapper}>
+                            <View style={[styles.categoryBarBackground, { backgroundColor: colors.surface }]}>
+                              <Animated.View 
+                                entering={FadeInUp.delay(idx * 25 + 100).springify()}
+                                style={[styles.categoryBarFillHorizontal, { width: `${((amount as number) / maxIncome) * 100}%`, backgroundColor: colors.success }]} 
+                              />
+                            </View>
+                            <Text style={[styles.categoryValueRight, { color: colors.success }]}>
+                              {(amount as number).toFixed(0)}
+                            </Text>
+                          </View>
+                        </View>
+                      </Animated.View>
+                    ));
+                  })()
+                ) : (
+                  <View style={styles.emptyState}>
+                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No money in for this period</Text>
+                  </View>
+                )
               ) : (
-                <View style={styles.emptyState}>
-                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No money out for this period</Text>
-                </View>
+                /* Money Out Categories */
+                Object.keys(categories.expense).length > 0 ? (
+                  (() => {
+                    const expenseSorted = Object.entries(categories.expense).sort((a, b) => (b[1] as number) - (a[1] as number));
+                    const maxExpense = Math.max(...expenseSorted.map(([, v]) => v as number), 1);
+                    return expenseSorted.map(([cat, amount], idx) => (
+                      <Animated.View key={`exp-${cat}`} style={styles.categoryItemHorizontal} entering={FadeInUp.delay(idx * 25).springify()}> 
+                        <View style={styles.categoryBarContainer}>
+                          <Text style={[styles.categoryNameLeft, { color: colors.text }]}>{cat}</Text>
+                          <View style={styles.categoryBarWrapper}>
+                            <View style={[styles.categoryBarBackground, { backgroundColor: colors.surface }]}>
+                              <Animated.View 
+                                entering={FadeInUp.delay(idx * 25 + 100).springify()}
+                                style={[styles.categoryBarFillHorizontal, { width: `${((amount as number) / maxExpense) * 100}%`, backgroundColor: colors.danger }]} 
+                              />
+                            </View>
+                            <Text style={[styles.categoryValueRight, { color: colors.danger }]}>
+                              {(amount as number).toFixed(0)}
+                            </Text>
+                          </View>
+                        </View>
+                      </Animated.View>
+                    ));
+                  })()
+                ) : (
+                  <View style={styles.emptyState}>
+                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No money out for this period</Text>
+                  </View>
+                )
               )}
             </View>
           </View>
@@ -1110,12 +1114,16 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
     padding: spacing.md,
     marginBottom: spacing.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   categoryInfo: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.sm,
   },
   categoryName: {
     fontSize: fontSize.md,
@@ -1132,6 +1140,39 @@ const styles = StyleSheet.create({
   categoryBarFill: {
     height: '100%',
     borderRadius: 2,
+  },
+  categoryItemHorizontal: {
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.md,
+  },
+  categoryBarContainer: {
+    gap: spacing.xs,
+  },
+  categoryNameLeft: {
+    fontSize: fontSize.sm,
+    fontWeight: '500',
+    marginBottom: spacing.xs,
+  },
+  categoryBarWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  categoryBarBackground: {
+    flex: 1,
+    height: 24,
+    borderRadius: borderRadius.sm,
+    overflow: 'hidden',
+  },
+  categoryBarFillHorizontal: {
+    height: '100%',
+    borderRadius: borderRadius.sm,
+  },
+  categoryValueRight: {
+    fontSize: fontSize.sm,
+    fontWeight: '700',
+    minWidth: 40,
+    textAlign: 'right',
   },
   emptyState: {
     alignItems: 'center',
@@ -1464,17 +1505,51 @@ const styles = StyleSheet.create({
     flex: 1,
     lineHeight: 16,
   },
-  weekDateRange: {
+  weekNavigation: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.sm,
+    justifyContent: 'space-between',
+    paddingVertical: spacing.md,
     paddingHorizontal: spacing.md,
     borderRadius: borderRadius.md,
     marginBottom: spacing.sm,
-    gap: spacing.xs,
+    marginHorizontal: spacing.md,
   },
-  weekDateRangeText: {
+  weekNavButton: {
+    padding: spacing.xs,
+    borderRadius: borderRadius.sm,
+  },
+  weekNavButtonDisabled: {
+    opacity: 0.3,
+  },
+  weekNavCenter: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  weekNavMonth: {
+    fontSize: fontSize.lg,
+    fontWeight: '700',
+  },
+  weekNavDateRange: {
+    fontSize: fontSize.sm,
+    marginTop: spacing.xs,
+  },
+  weekNavigationBelow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+  },
+  weekNavButtonSimple: {
+    padding: spacing.xs,
+  },
+  weekNavCenterSimple: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  weekNavDateRangeSimple: {
     fontSize: fontSize.md,
     fontWeight: '600',
   },

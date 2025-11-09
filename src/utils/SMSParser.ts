@@ -53,17 +53,37 @@ function parseSender(body: string): string | null {
 }
 
 export function parseTransactionFromSms(body: string, dateStr?: string): ParsedTransaction | null {
-  // Filter 1: Ignore Okoa Jahazi messages
+  // Filter 1: Ignore failed transactions (insufficient funds, failed, etc.)
+  if (/failed|insufficient funds|transaction failed|not successful|could not be completed/i.test(body)) {
+    return null;
+  }
+
+  // Filter 2: Ignore Okoa Jahazi messages
   if (/OKOA\s+JAHAZI/i.test(body)) {
     return null;
   }
 
-  // Filter 2: Ignore data bundle messages
+  // Filter 3: Ignore data bundle messages
   if (/you have received.*MB.*data|data valid for the next hour|airtime reward/i.test(body)) {
     return null;
   }
 
-  // Filter 3: Handle Fuliza - strictly only log the Access Fee, ignore outstanding/principal amounts
+  // Filter 4: Handle recharge/airtime purchases as debit (money out)
+  if (/recharge.*successful|airtime.*successful|recharge of/i.test(body)) {
+    const amount = parseAmount(body);
+    if (amount && amount > 0) {
+      return {
+        amount,
+        type: 'debit',
+        sender: 'Airtime Recharge',
+        reference: parseReference(body),
+        message: body,
+        dateISO: dateStr ? new Date(dateStr).toISOString() : undefined,
+      };
+    }
+  }
+
+  // Filter 5: Handle Fuliza - strictly only log the Access Fee, ignore outstanding/principal amounts
   if (/fuliza/i.test(body)) {
     // Examples to match:
     // - "Access Fee charged Ksh 0.10"

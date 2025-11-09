@@ -1,4 +1,7 @@
 import { getAggregatesByPeriod } from './TransactionService';
+import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
+import { supabase } from './SupabaseClient';
 
 export interface SpendingNotification {
   id: string;
@@ -147,6 +150,117 @@ class NotificationService {
   clearAll() {
     this.notifications = [];
     this.notifyListeners();
+  }
+
+  /**
+   * Schedule daily notification at 11:55 PM
+   * Shows total Money In and Money Out for the day
+   */
+  async scheduleDailyNotification(userId: string): Promise<void> {
+    try {
+      // Request permissions
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') {
+        console.log('Notification permissions not granted');
+        return;
+      }
+
+      // Cancel any existing daily notifications
+      await Notifications.cancelAllScheduledNotificationsAsync();
+
+      // Configure notification handler
+      Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: true,
+        }),
+      });
+
+      // Schedule daily notification at 11:55 PM
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Daily Summary',
+          body: 'Calculating your daily transactions...',
+          data: { type: 'daily_summary', userId },
+        },
+        trigger: {
+          hour: 23,
+          minute: 55,
+          repeats: true,
+        },
+      });
+
+      console.log('Daily notification scheduled for 11:55 PM');
+    } catch (error) {
+      console.error('Error scheduling daily notification:', error);
+    }
+  }
+
+  /**
+   * Get today's Money In and Money Out totals
+   */
+  async getDailySummary(userId: string): Promise<{ moneyIn: number; moneyOut: number }> {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('type, amount')
+        .eq('user_id', userId)
+        .gte('date', today.toISOString())
+        .lt('date', tomorrow.toISOString());
+
+      if (error) throw error;
+
+      const moneyIn = data
+        ?.filter(t => t.type === 'income')
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0) || 0;
+
+      const moneyOut = data
+        ?.filter(t => t.type === 'expense')
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0) || 0;
+
+      return { moneyIn, moneyOut };
+    } catch (error) {
+      console.error('Error getting daily summary:', error);
+      return { moneyIn: 0, moneyOut: 0 };
+    }
+  }
+
+  /**
+   * Send daily summary notification with actual data
+   */
+  async sendDailySummaryNotification(userId: string): Promise<void> {
+    try {
+      const { moneyIn, moneyOut } = await this.getDailySummary(userId);
+
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: '📊 Daily Summary',
+          body: `You received ₵${moneyIn.toFixed(2)} and spent ₵${moneyOut.toFixed(2)} today.`,
+          data: { type: 'daily_summary', moneyIn, moneyOut },
+        },
+        trigger: null, // Send immediately
+      });
+    } catch (error) {
+      console.error('Error sending daily summary notification:', error);
+    }
+  }
+
+  /**
+   * Cancel all scheduled notifications
+   */
+  async cancelDailyNotifications(): Promise<void> {
+    try {
+      await Notifications.cancelAllScheduledNotificationsAsync();
+      console.log('All scheduled notifications cancelled');
+    } catch (error) {
+      console.error('Error cancelling notifications:', error);
+    }
   }
 }
 
