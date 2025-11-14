@@ -7,7 +7,7 @@
 
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import { DateRange, getPresetDateRanges } from '../utils/dateFilter';
-import { Transaction } from '../types';
+import { Transaction, AggregatePeriod } from '../types';
 import { getTransactions, invalidateUserCaches } from '../services/TransactionService';
 import { useAuth } from '../hooks/useAuth';
 import { useRealtimeTransactions } from '../hooks/useRealtimeTransactions';
@@ -30,8 +30,10 @@ export type PresetRange =
 interface DateFilterContextValue {
   dateRange: DateRange;
   selectedPreset: PresetRange;
+  selectedPeriod: AggregatePeriod;
   setDateRange: (range: DateRange) => void;
   setPreset: (preset: PresetRange) => void;
+  setPeriod: (period: AggregatePeriod) => void;
   setCustomRange: (startDate: Date, endDate: Date) => void;
   resetFilter: () => void;
   transactions: Transaction[];
@@ -48,6 +50,7 @@ export const DateFilterProvider: React.FC<{ children: ReactNode }> = ({ children
   
   const [dateRange, setDateRange] = useState<DateRange>(presets.allTime);
   const [selectedPreset, setSelectedPreset] = useState<PresetRange>('allTime');
+  const [selectedPeriod, setSelectedPeriod] = useState<AggregatePeriod>('daily');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -66,6 +69,10 @@ export const DateFilterProvider: React.FC<{ children: ReactNode }> = ({ children
     const customRange: DateRange = { startDate, endDate };
     setDateRange(customRange);
     setSelectedPreset('custom');
+  }, []);
+
+  const setPeriod = useCallback((period: AggregatePeriod) => {
+    setSelectedPeriod(period);
   }, []);
 
   const resetFilter = useCallback(() => {
@@ -115,8 +122,10 @@ export const DateFilterProvider: React.FC<{ children: ReactNode }> = ({ children
   const value: DateFilterContextValue = {
     dateRange,
     selectedPreset,
+    selectedPeriod,
     setDateRange,
     setPreset,
+    setPeriod,
     setCustomRange,
     resetFilter,
     transactions,

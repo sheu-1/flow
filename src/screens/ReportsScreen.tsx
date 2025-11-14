@@ -25,7 +25,6 @@ export default function ReportsScreen() {
   const colors = useThemeColors();
   const { user } = useAuth();
   const { formatCurrency } = useCurrency();
-  const [period, setPeriod] = useState<AggregatePeriod>('daily');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [series, setSeries] = useState<{ labels: string[]; income: number[]; expense: number[] }>({ labels: [], income: [], expense: [] });
@@ -48,7 +47,9 @@ export default function ReportsScreen() {
   const {
     dateRange,
     selectedPreset,
+    selectedPeriod: period,
     setPreset,
+    setPeriod,
     setCustomRange,
     resetFilter,
     transactions: filteredTransactions,
@@ -131,24 +132,18 @@ export default function ReportsScreen() {
           expense.push(hourTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
         }
       } else if (period === 'weekly') {
-        // Weekly: Sunday-Saturday weeks, 4 weeks per month with navigation
+        // Weekly: Sunday-Saturday weeks, default to current week containing today
         const today = new Date();
-        const currentMonth = today.getMonth();
-        const currentYear = today.getFullYear();
         
-        // Get first day of current month
-        const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
+        // Find the Sunday of the week containing today
+        const currentSunday = new Date(today);
+        const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+        currentSunday.setDate(today.getDate() - dayOfWeek); // Go back to Sunday
+        currentSunday.setHours(0, 0, 0, 0);
         
-        // Find the Sunday of the week containing the first day of the month
-        const firstSunday = new Date(firstDayOfMonth);
-        const dayOfWeek = firstDayOfMonth.getDay();
-        const daysToSunday = -dayOfWeek; // 0 for Sunday, -1 for Monday, etc.
-        firstSunday.setDate(firstDayOfMonth.getDate() + daysToSunday);
-        firstSunday.setHours(0, 0, 0, 0);
-        
-        // Calculate the start of the selected week (0-3 for 4 weeks)
-        const weekStartDate = new Date(firstSunday);
-        weekStartDate.setDate(firstSunday.getDate() + (currentWeek * 7));
+        // Calculate the start of the selected week (0 = current week, 1 = previous week, etc.)
+        const weekStartDate = new Date(currentSunday);
+        weekStartDate.setDate(currentSunday.getDate() - (currentWeek * 7));
         
         const weekEndDate = new Date(weekStartDate);
         weekEndDate.setDate(weekStartDate.getDate() + 6);
@@ -178,25 +173,32 @@ export default function ReportsScreen() {
           expense.push(dayTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
         }
       } else if (period === 'monthly') {
-        // Monthly: January to December (12 months)
+        // Monthly: Days of current month
+        const currentMonth = end.getMonth();
         const currentYear = end.getFullYear();
         
-        wStart = new Date(currentYear, 0, 1, 0, 0, 0, 0); // Jan 1
-        wEnd = new Date(currentYear, 11, 31, 23, 59, 59, 999); // Dec 31
+        // Get first and last day of current month
+        const monthStart = new Date(currentYear, currentMonth, 1, 0, 0, 0, 0);
+        const monthEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59, 999);
+        
+        wStart = monthStart;
+        wEnd = monthEnd;
 
-        // Bucket by months (Jan-Dec)
-        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        for (let m = 0; m < 12; m++) {
-          const monthStart = new Date(currentYear, m, 1, 0, 0, 0, 0);
-          const monthEnd = new Date(currentYear, m + 1, 0, 23, 59, 59, 999);
+        // Get number of days in current month
+        const daysInMonth = monthEnd.getDate();
+        
+        // Bucket by days of the month
+        for (let d = 1; d <= daysInMonth; d++) {
+          const dayStart = new Date(currentYear, currentMonth, d, 0, 0, 0, 0);
+          const dayEnd = new Date(currentYear, currentMonth, d, 23, 59, 59, 999);
 
-          labels.push(monthNames[m]);
-          const monthTx = filteredTransactions.filter(t => {
+          labels.push(String(d));
+          const dayTx = filteredTransactions.filter(t => {
             const dt = new Date(t.date);
-            return dt >= monthStart && dt <= monthEnd;
+            return dt >= dayStart && dt <= dayEnd;
           });
-          income.push(monthTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
-          expense.push(monthTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
+          income.push(dayTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
+          expense.push(dayTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
         }
       } else {
         // Yearly: Show from 2024 onward to current year
@@ -419,11 +421,6 @@ export default function ReportsScreen() {
     opacity: expenseOpacity.value,
   }));
 
-  // Calculate total number of weeks available
-  const totalWeeks = useMemo(() => {
-    if (period !== 'weekly') return 1;
-    return Math.ceil(series.labels.length / 7);
-  }, [series.labels.length, period]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -763,14 +760,13 @@ export default function ReportsScreen() {
               {period === 'weekly' && windowRange && (
                 <View style={styles.weekNavigationBelow}>
                   <TouchableOpacity
-                    onPress={() => setCurrentWeek(prev => Math.max(prev - 1, 0))}
-                    disabled={currentWeek <= 0}
+                    onPress={() => setCurrentWeek(prev => prev + 1)}
                     style={styles.weekNavButtonSimple}
                   >
                     <Ionicons 
                       name="chevron-back" 
                       size={28} 
-                      color={currentWeek <= 0 ? colors.textSecondary : colors.text} 
+                      color={colors.text} 
                     />
                   </TouchableOpacity>
                   <View style={styles.weekNavCenterSimple}>
@@ -779,14 +775,14 @@ export default function ReportsScreen() {
                     </Text>
                   </View>
                   <TouchableOpacity
-                    onPress={() => setCurrentWeek(prev => Math.min(prev + 1, 3))}
-                    disabled={currentWeek >= 3}
+                    onPress={() => setCurrentWeek(prev => Math.max(prev - 1, 0))}
+                    disabled={currentWeek <= 0}
                     style={styles.weekNavButtonSimple}
                   >
                     <Ionicons 
                       name="chevron-forward" 
                       size={28} 
-                      color={currentWeek >= 3 ? colors.textSecondary : colors.text} 
+                      color={currentWeek <= 0 ? colors.textSecondary : colors.text} 
                     />
                   </TouchableOpacity>
                 </View>
@@ -896,51 +892,6 @@ export default function ReportsScreen() {
               )}
             </View>
 
-            {/* Week Navigation - Enhanced with date ranges */}
-            {period === 'weekly' && totalWeeks > 1 && (
-              <View style={styles.weekSelectorContainer}>
-                <View style={styles.weekSelectorHeader}>
-                  <TouchableOpacity 
-                    onPress={() => setCurrentWeek(Math.min(currentWeek + 1, totalWeeks - 1))}
-                    disabled={currentWeek >= totalWeeks - 1}
-                    style={[styles.navButton, { opacity: currentWeek >= totalWeeks - 1 ? 0.3 : 1 }]}
-                  >
-                    <Ionicons name="chevron-back" size={24} color={colors.text} />
-                  </TouchableOpacity>
-                  
-                  <View style={styles.weekIndicatorContainer}>
-                    {(() => {
-                      // Calculate date range for current week
-                      const now = new Date();
-                      const offset = now.getDay();
-                      const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset - (currentWeek * 7), 0, 0, 0, 0);
-                      const weekEnd = new Date(weekStart);
-                      weekEnd.setDate(weekStart.getDate() + 6);
-                      
-                      const formatDate = (date: Date) => {
-                        const month = date.toLocaleString('default', { month: 'short' });
-                        const day = date.getDate();
-                        return `${month} ${day}`;
-                      };
-                      
-                      return (
-                        <Text style={[styles.weekIndicator, { color: colors.text }]}>
-                          {formatDate(weekStart)} – {formatDate(weekEnd)}
-                        </Text>
-                      );
-                    })()}
-                  </View>
-                  
-                  <TouchableOpacity 
-                    onPress={() => setCurrentWeek(Math.max(currentWeek - 1, 0))}
-                    disabled={currentWeek <= 0}
-                    style={[styles.navButton, { opacity: currentWeek <= 0 ? 0.3 : 1 }]}
-                  >
-                    <Ionicons name="chevron-forward" size={24} color={colors.text} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
 
             {/* Category breakdown - filtered by statsView toggle */}
             <View style={styles.section}>

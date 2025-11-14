@@ -26,7 +26,6 @@ import Animated, { FadeInUp } from 'react-native-reanimated';
 console.log('🚀 DashboardScreen loading...');
 
 export default function DashboardScreen() {
-  const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('daily');
   const [refreshing, setRefreshing] = useState(false);
   const colors = useThemeColors();
   const { user } = useAuth();
@@ -42,7 +41,9 @@ export default function DashboardScreen() {
   const {
     dateRange,
     selectedPreset,
+    selectedPeriod,
     setPreset,
+    setPeriod,
     setCustomRange,
     resetFilter,
     transactions: filteredTransactions,
@@ -253,7 +254,7 @@ export default function DashboardScreen() {
           <View style={styles.stickyContent}>
             <UnifiedPeriodSelector
               selectedPeriod={selectedPeriod}
-              onPeriodChange={setSelectedPeriod}
+              onPeriodChange={setPeriod}
               onOpenDetailedSelector={() => setShowDetailedPeriodSelector(true)}
               removeMargin
             />
