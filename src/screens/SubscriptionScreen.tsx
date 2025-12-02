@@ -113,6 +113,7 @@ export default function SubscriptionScreen() {
           // Check if trial has been used
           const status = await getSubscriptionStatus(user.id);
           setTrialUsed(status.trialEnded || !status.isTrial);
+          
           // Don't allow free trial selection if already used
           if (status.trialEnded || !status.isTrial) {
             setSelectedPlan('daily'); // Default to daily plan
@@ -126,9 +127,26 @@ export default function SubscriptionScreen() {
   }, [user]);
 
   const handleClose = () => {
-    // Only allow closing for existing users, not new users
+    // In development, always allow closing: go back if possible, else reset to MainTabs
+    if (__DEV__) {
+      // @ts-ignore - navigation type may not expose canGoBack in this hook typing
+      if (typeof navigation.canGoBack === 'function' && navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'MainTabs' as never }],
+        });
+      }
+      return;
+    }
+
+    // Production: Only allow closing for existing users, and only if we can go back
     if (!isNewUser) {
-      navigation.goBack();
+      // @ts-ignore
+      if (typeof navigation.canGoBack === 'function' && navigation.canGoBack()) {
+        navigation.goBack();
+      }
     }
   };
 
@@ -209,7 +227,7 @@ export default function SubscriptionScreen() {
     {
       id: 'daily' as SubscriptionPlan,
       title: 'Daily Plan',
-      price: '$0.50',
+      price: '$0.25',
       period: 'day',
       features: [
         'Everything in Free Trial',
@@ -322,7 +340,11 @@ export default function SubscriptionScreen() {
             onPress={handleSubscribe}
           >
             <Text style={styles.subscribeButtonText}>
-              {isNewUser && selectedPlan === 'free' ? 'Start Free Trial' : selectedPlan === 'free' ? 'Continue with Free Trial' : 'Subscribe Now'}
+              {isNewUser && selectedPlan === 'free'
+                ? 'Start Free Trial'
+                : selectedPlan === 'free'
+                  ? 'Continue with Free Trial'
+                  : 'Subscribe Now'}
             </Text>
           </TouchableOpacity>
 

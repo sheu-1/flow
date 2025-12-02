@@ -68,6 +68,19 @@ export function parseTransactionFromSms(body: string, dateStr?: string): ParsedT
     return null;
   }
 
+  // Filter 4: Ignore transfers between M-Pesa and M-Shwari (internal savings transfers)
+  if (/m[-\s]?pesa/i.test(body) && /m\s*shwari|mshwari/i.test(body)) {
+    return null;
+  }
+
+  // Filter 5: Ignore mini-statement style messages that bundle multiple transactions
+  // Example pattern: multiple square-bracketed segments with semicolon-delimited fields and a final
+  // "Transaction cost" summary line.
+  const bracketSegments = body.match(/\[[^\]]*\]/g);
+  if (bracketSegments && bracketSegments.length >= 2 && /Transaction cost,?\s*Ksh/i.test(body)) {
+    return null;
+  }
+
   // Filter 4: Handle recharge/airtime purchases as debit (money out)
   if (/recharge.*successful|airtime.*successful|recharge of/i.test(body)) {
     const amount = parseAmount(body);

@@ -156,12 +156,18 @@ export default function DashboardScreen() {
         break;
       }
       case 'weekly': {
-        // Last 7 days ending at rangeEnd, clamped to rangeStart
         const weekStart = new Date(rangeEnd);
         weekStart.setHours(0, 0, 0, 0);
-        weekStart.setDate(weekStart.getDate() - 6);
+        const dayOfWeek = weekStart.getDay();
+        const diffToMonday = (dayOfWeek + 6) % 7; // 0 if Monday, 1 if Tuesday, ..., 6 if Sunday
+        weekStart.setDate(weekStart.getDate() - diffToMonday);
+
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekEnd.getDate() + 6); // 7-day window Monday-Sunday
+        weekEnd.setHours(23, 59, 59, 999);
+
         startDate = weekStart < rangeStart ? rangeStart : weekStart;
-        endDate = rangeEnd;
+        endDate = weekEnd > rangeEnd ? rangeEnd : weekEnd;
         periodLabel = `${fmt(startDate, false)} - ${fmt(endDate)}`;
         break;
       }

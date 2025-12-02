@@ -79,7 +79,7 @@ export const TransactionCard: React.FC<TransactionCardProps> = ({ transaction, o
               styles.amount,
               { color: transaction.type === 'income' ? colors.success : colors.danger }
             ]}>
-              {transaction.type === 'income' ? '+' : '-'}{formatCurrency(transaction.amount)}
+              {transaction.type === 'income' ? '+' : '-'}{transaction.amount.toFixed(2)}
             </Text>
             <Text style={[styles.date, { color: colors.textSecondary }]}>{formatDate(typeof transaction.date === 'string' ? new Date(transaction.date) : transaction.date)}</Text>
           </View>

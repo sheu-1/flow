@@ -13,6 +13,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { spacing, borderRadius, fontSize } from '../theme/colors';
 import { useThemeColors } from '../theme/ThemeProvider';
 import { mockCategories } from '../data/mockData';
+import { ReceiptScannerModal } from './ReceiptScannerModal';
+import { ReceiptData } from '../services/ReceiptScanService';
 
 interface AddTransactionModalProps {
   visible: boolean;
@@ -35,6 +37,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   const [description, setDescription] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [type, setType] = useState<'income' | 'expense'>('income');
+  const [showReceiptScanner, setShowReceiptScanner] = useState(false);
 
   const handleSubmit = () => {
     if (!amount || !description || !selectedCategory) {
@@ -63,6 +66,14 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
     onClose();
   };
 
+  const handleReceiptScanned = (data: ReceiptData) => {
+    setAmount(data.amount.toString());
+    setDescription(data.merchant);
+    setType('expense'); // Receipts are typically for expenses
+    setSelectedCategory('Shopping'); // Simple categorization for all receipts
+    setShowReceiptScanner(false);
+  };
+
   const filteredCategories = mockCategories.filter(cat => 
     (type === 'income' && cat.color === colors.success) ||
     (type === 'expense' && cat.color === colors.danger)
@@ -76,12 +87,25 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
             <Ionicons name="close" size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={[styles.title, { color: colors.text }]}>Add Transaction</Text>
-          <TouchableOpacity onPress={handleSubmit}>
-            <Text style={[styles.saveButton, { color: colors.primary }]}>Save</Text>
+          <TouchableOpacity 
+            style={[styles.scanButton, { backgroundColor: colors.primary }]}
+            onPress={() => setShowReceiptScanner(true)}
+          >
+            <Ionicons name="camera" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
 
         <ScrollView style={styles.content}>
+          {/* Receipt Scan Indicator */}
+          {amount && description && type === 'expense' && (
+            <View style={[styles.receiptIndicator, { backgroundColor: colors.success + '20', borderColor: colors.success }]}>
+              <Ionicons name="camera" size={16} color={colors.success} />
+              <Text style={[styles.receiptIndicatorText, { color: colors.success }]}>
+                Data auto-filled from receipt scan
+              </Text>
+            </View>
+          )}
+
           <View style={[styles.typeSelector, { backgroundColor: colors.surface }]}>
             <TouchableOpacity
               style={[styles.typeButton, type === 'income' && styles.typeButtonActive]}
@@ -105,8 +129,8 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
             <Text style={[styles.label, { color: colors.textSecondary }]}>Amount</Text>
             <TextInput
               style={[styles.input, { backgroundColor: colors.surface, color: colors.text }]}
-              value={amount}
-              onChangeText={setAmount}
+              value={amount.replace(/[^0-9.]/g, '')}
+              onChangeText={(text) => setAmount(text.replace(/[^0-9.]/g, ''))}
               placeholder="0.00"
               placeholderTextColor={colors.textMuted}
               keyboardType="numeric"
@@ -145,8 +169,25 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
               </View>
             </ScrollView>
           </View>
+
+          {/* Save Button */}
+          <TouchableOpacity 
+            style={[styles.saveButtonBottom, { backgroundColor: colors.primary }]}
+            onPress={handleSubmit}
+          >
+            <Text style={[styles.saveButtonBottomText, { color: '#fff' }]}>
+              Save Transaction
+            </Text>
+          </TouchableOpacity>
         </ScrollView>
       </View>
+
+      {/* Receipt Scanner Modal */}
+      <ReceiptScannerModal
+        visible={showReceiptScanner}
+        onClose={() => setShowReceiptScanner(false)}
+        onReceiptScanned={handleReceiptScanned}
+      />
     </Modal>
   );
 };
@@ -169,6 +210,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fff',
   },
+  scanButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   saveButton: {
     fontSize: fontSize.md,
     color: '#2563EB',
@@ -177,6 +225,20 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: spacing.md,
+  },
+  receiptIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    marginBottom: spacing.md,
+    gap: spacing.xs,
+  },
+  receiptIndicatorText: {
+    fontSize: fontSize.sm,
+    fontWeight: '500',
   },
   typeSelector: {
     flexDirection: 'row',
@@ -235,5 +297,17 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginTop: spacing.xs,
     textAlign: 'center',
+  },
+  saveButtonBottom: {
+    marginTop: spacing.lg,
+    marginHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  saveButtonBottomText: {
+    fontSize: fontSize.md,
+    fontWeight: 'bold',
   },
 });

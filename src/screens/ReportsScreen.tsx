@@ -132,45 +132,66 @@ export default function ReportsScreen() {
           expense.push(hourTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
         }
       } else if (period === 'weekly') {
-        // Weekly: Sunday-Saturday weeks, default to current week containing today
-        const today = new Date();
-        
-        // Find the Sunday of the week containing today
-        const currentSunday = new Date(today);
-        const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
-        currentSunday.setDate(today.getDate() - dayOfWeek); // Go back to Sunday
-        currentSunday.setHours(0, 0, 0, 0);
-        
-        // Calculate the start of the selected week (0 = current week, 1 = previous week, etc.)
-        const weekStartDate = new Date(currentSunday);
-        weekStartDate.setDate(currentSunday.getDate() - (currentWeek * 7));
-        
-        const weekEndDate = new Date(weekStartDate);
-        weekEndDate.setDate(weekStartDate.getDate() + 6);
-        weekEndDate.setHours(23, 59, 59, 999);
-        
-        wStart = weekStartDate;
-        wEnd = weekEndDate;
+        // Weekly: ISO-style weeks (Monday-Sunday), showing current week + last 3 weeks
+        // Define the overall start/end from the selected dateRange
+        const rangeStart = new Date(start);
+        rangeStart.setHours(0, 0, 0, 0);
+        const rangeEnd = new Date(end);
+        rangeEnd.setHours(23, 59, 59, 999);
 
-        // Create 7 day buckets (Sun-Sat)
+        // Base on "today" so that current week always reflects the real current week
+        const today = new Date();
+        const baseEnd = new Date(today);
+        baseEnd.setHours(23, 59, 59, 999);
+
+        // Find Monday of the current week
+        const baseStart = new Date(baseEnd);
+        const dayOfWeek = baseStart.getDay(); // 0 = Sunday, 1 = Monday, ...
+        const diffToMonday = (dayOfWeek + 6) % 7; // 0 if Monday, 1 if Tuesday, ..., 6 if Sunday
+        baseStart.setDate(baseStart.getDate() - diffToMonday);
+        baseStart.setHours(0, 0, 0, 0);
+
+        // Active window for stats/categories = week selected by currentWeek (0 = current, 1 = previous, etc.)
+        const activeWeekStart = new Date(baseStart);
+        activeWeekStart.setDate(baseStart.getDate() - currentWeek * 7);
+        activeWeekStart.setHours(0, 0, 0, 0);
+        const activeWeekEnd = new Date(activeWeekStart);
+        activeWeekEnd.setDate(activeWeekStart.getDate() + 6);
+        activeWeekEnd.setHours(23, 59, 59, 999);
+
+        // Clamp the active window to the selected dateRange
+        wStart = activeWeekStart < rangeStart ? rangeStart : activeWeekStart;
+        wEnd = activeWeekEnd > rangeEnd ? rangeEnd : activeWeekEnd;
+
+        // Build 7 daily buckets for the active week only (MondaySunday)
         for (let i = 0; i < 7; i++) {
-          const dayStart = new Date(weekStartDate);
-          dayStart.setDate(weekStartDate.getDate() + i);
+          const dayStart = new Date(activeWeekStart);
+          dayStart.setDate(activeWeekStart.getDate() + i);
           dayStart.setHours(0, 0, 0, 0);
           const dayEnd = new Date(dayStart);
           dayEnd.setHours(23, 59, 59, 999);
 
-          // Day name for label
-          const dayName = dayStart.toLocaleDateString('en-US', { weekday: 'short' });
-          labels.push(dayName);
+          // Label by weekday (Mon, Tue, ...)
+          const dayLabel = dayStart.toLocaleDateString('en-US', {
+            weekday: 'short',
+          });
+          labels.push(dayLabel);
 
-          const dayTx = filteredTransactions.filter(t => {
+          const dayTx = filteredTransactions.filter((t) => {
             const dt = new Date(t.date);
             return dt >= dayStart && dt <= dayEnd;
           });
 
-          income.push(dayTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
-          expense.push(dayTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
+          income.push(
+            dayTx
+              .filter((t) => t.type === 'income')
+              .reduce((s, t) => s + Math.abs(t.amount), 0)
+          );
+          expense.push(
+            dayTx
+              .filter((t) => t.type === 'expense')
+              .reduce((s, t) => s + Math.abs(t.amount), 0)
+          );
         }
       } else if (period === 'monthly') {
         // Monthly: Days of current month
@@ -701,92 +722,125 @@ export default function ReportsScreen() {
                 </View>
               </View>
               
-              {/* Conditional wrapper: ScrollView for daily/monthly/yearly, fixed View for weekly */}
+              {/* Weekly: horizontally scrollable over current week + last 3 weeks */}
               {period === 'weekly' ? (
-                <View style={styles.chartBarsWrapper}>
-                  <View style={styles.chartBars}>
-                    {series.labels.map((label, index) => {
-                      const income = series.income[index] || 0;
-                      const expense = series.expense[index] || 0;
-                      const maxValue = Math.max(...series.income, ...series.expense);
-                      const incomeHeight = maxValue > 0 ? (income / maxValue) * 120 : 0;
-                      const expenseHeight = maxValue > 0 ? (expense / maxValue) * 120 : 0;
-                      
-                      // Use the correctly calculated label from currentWeekData
-                      const displayLabel = label;
-                    
-                      return (
-                        <TouchableOpacity
-                          key={index}
-                          onPress={() => setBarTooltip({ label: displayLabel, income, expense, index })}
-                          activeOpacity={0.7}
-                        >
-                          <Animated.View style={styles.barGroupWeekly} entering={FadeInUp.delay(index * 30).springify()}>
-                            <View style={styles.barContainer}>
-                              <Animated.View 
-                                style={[
-                                  styles.barWeekly, 
-                                  { 
-                                    height: incomeHeight, 
-                                    backgroundColor: colors.success 
-                                  }
-                                ]} 
-                                entering={FadeInUp.delay(index * 30 + 100).springify()}
-                              />
-                              <Animated.View 
-                                style={[
-                                  styles.barWeekly, 
-                                  { 
-                                    height: expenseHeight, 
-                                    backgroundColor: colors.danger, 
-                                    marginLeft: 2 
-                                  }
-                                ]}
-                                entering={FadeInUp.delay(index * 30 + 150).springify()}
-                              />
-                            </View>
-                            <Text style={[styles.barLabel, { color: colors.textSecondary }]} numberOfLines={1}>
-                              {displayLabel}
-                            </Text>
-                          </Animated.View>
-                        </TouchableOpacity>
-                      );
-                    })}
+                <ScrollView
+                  horizontal
+                  ref={chartScrollRef}
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.chartScroll}
+                >
+                  <View style={styles.chartBarsWrapper}>
+                    <View style={styles.chartBars}>
+                      {series.labels.map((label, index) => {
+                        const income = series.income[index] || 0;
+                        const expense = series.expense[index] || 0;
+                        const maxValue = Math.max(...series.income, ...series.expense);
+                        const incomeHeight = maxValue > 0 ? (income / maxValue) * 120 : 0;
+                        const expenseHeight = maxValue > 0 ? (expense / maxValue) * 120 : 0;
+
+                        const displayLabel = label;
+
+                        return (
+                          <TouchableOpacity
+                            key={index}
+                            onPress={() => setBarTooltip({ label: displayLabel, income, expense, index })}
+                            activeOpacity={0.7}
+                          >
+                            <Animated.View style={styles.barGroup} entering={FadeInUp.delay(index * 30).springify()}>
+                              <View style={styles.barContainer}>
+                                <Animated.View
+                                  style={[
+                                    styles.bar,
+                                    {
+                                      height: incomeHeight,
+                                      backgroundColor: colors.success,
+                                    },
+                                  ]}
+                                  entering={FadeInUp.delay(index * 30 + 100).springify()}
+                                />
+                                <Animated.View
+                                  style={[
+                                    styles.bar,
+                                    {
+                                      height: expenseHeight,
+                                      backgroundColor: colors.danger,
+                                      marginLeft: 2,
+                                    },
+                                  ]}
+                                  entering={FadeInUp.delay(index * 30 + 150).springify()}
+                                />
+                              </View>
+                              <Text style={[styles.barLabel, { color: colors.textSecondary }]} numberOfLines={1}>
+                                {displayLabel}
+                              </Text>
+                            </Animated.View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
                   </View>
-                </View>
+                </ScrollView>
               ) : null}
               
               {/* Week Navigation Below Bars - Weekly Only */}
-              {period === 'weekly' && windowRange && (
-                <View style={styles.weekNavigationBelow}>
-                  <TouchableOpacity
-                    onPress={() => setCurrentWeek(prev => prev + 1)}
-                    style={styles.weekNavButtonSimple}
-                  >
-                    <Ionicons 
-                      name="chevron-back" 
-                      size={28} 
-                      color={colors.text} 
-                    />
-                  </TouchableOpacity>
-                  <View style={styles.weekNavCenterSimple}>
-                    <Text style={[styles.weekNavDateRangeSimple, { color: colors.text }]}>
-                      {windowRange.start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {windowRange.end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    </Text>
+              {period === 'weekly' && windowRange && (() => {
+                // Calculate max weeks that can be navigated back within current month
+                const today = new Date();
+                const currentMonth = today.getMonth();
+                const currentYear = today.getFullYear();
+                
+                // Find the Sunday of the week containing today
+                const currentSunday = new Date(today);
+                const dayOfWeek = today.getDay();
+                currentSunday.setDate(today.getDate() - dayOfWeek);
+                currentSunday.setHours(0, 0, 0, 0);
+                
+                // Get the first day of current month
+                const monthStart = new Date(currentYear, currentMonth, 1, 0, 0, 0, 0);
+                
+                // Calculate how many weeks back we can go within the current month
+                let maxWeeksBack = 0;
+                let testWeekStart = new Date(currentSunday);
+                
+                while (testWeekStart >= monthStart) {
+                  maxWeeksBack++;
+                  testWeekStart.setDate(testWeekStart.getDate() - 7);
+                }
+                maxWeeksBack = Math.max(0, maxWeeksBack - 1); // Subtract 1 because we include current week
+                
+                return (
+                  <View style={styles.weekNavigationBelow}>
+                    <TouchableOpacity
+                      onPress={() => setCurrentWeek(prev => Math.min(prev + 1, maxWeeksBack))}
+                      disabled={currentWeek >= maxWeeksBack}
+                      style={styles.weekNavButtonSimple}
+                    >
+                      <Ionicons 
+                        name="chevron-back" 
+                        size={28} 
+                        color={currentWeek >= maxWeeksBack ? colors.textSecondary : colors.text} 
+                      />
+                    </TouchableOpacity>
+                    <View style={styles.weekNavCenterSimple}>
+                      <Text style={[styles.weekNavDateRangeSimple, { color: colors.text }]}>
+                        {windowRange.start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {windowRange.end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => setCurrentWeek(prev => Math.max(prev - 1, 0))}
+                      disabled={currentWeek <= 0}
+                      style={styles.weekNavButtonSimple}
+                    >
+                      <Ionicons 
+                        name="chevron-forward" 
+                        size={28} 
+                        color={currentWeek <= 0 ? colors.textSecondary : colors.text} 
+                      />
+                    </TouchableOpacity>
                   </View>
-                  <TouchableOpacity
-                    onPress={() => setCurrentWeek(prev => Math.max(prev - 1, 0))}
-                    disabled={currentWeek <= 0}
-                    style={styles.weekNavButtonSimple}
-                  >
-                    <Ionicons 
-                      name="chevron-forward" 
-                      size={28} 
-                      color={currentWeek <= 0 ? colors.textSecondary : colors.text} 
-                    />
-                  </TouchableOpacity>
-                </View>
-              )}
+                );
+              })()}
               
               {period !== 'weekly' ? (
                 /* For non-weekly periods: horizontal scroll with clustered bars */

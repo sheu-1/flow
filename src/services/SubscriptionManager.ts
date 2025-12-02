@@ -51,13 +51,13 @@ export async function getSubscriptionStatus(userId: string): Promise<Subscriptio
 
     // Check free trial status
     const trialStatus = await getTrialStatus(userId);
-    
+
     return {
       isActive: !trialStatus.ended,
       isTrial: true,
       trialEnded: trialStatus.ended,
       daysRemaining: trialStatus.daysRemaining,
-      plan: 'free',
+      plan: 'free_trial',
       expiresAt: null,
     };
   } catch (error) {
@@ -140,3 +140,21 @@ export function getTrialMessage(daysRemaining: number): string {
     return `${daysRemaining} days left in your free trial`;
   }
 }
+
+/**
+ * Get trial status description
+ */
+export function getTrialStatusDescription(status: SubscriptionStatus): string {
+  if (!status.isTrial) {
+    return 'Subscription active';
+  }
+  
+  if (status.trialEnded) {
+    return 'Free trial ended';
+  } else {
+    const daysRemaining = status.daysRemaining;
+    return `${daysRemaining} days left in your free trial`;
+  }
+}
+
+// Daily rewarded access via ads has been removed.
