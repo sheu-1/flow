@@ -214,7 +214,10 @@ export default function DashboardScreen() {
   };
 
   const { moneyIn, moneyOut, netBalance, periodLabel, transactionCount } = calculatePeriodStats();
-  const recentTransactions = filteredTransactions.slice(0, 5);
+  const recentTransactions = filteredTransactions.slice(0, 5).map((t) => ({
+    ...t,
+    description: (t as any).description || (t as any).sender || t.category || '',
+  }));
   
   const avgTransaction = transactionCount > 0 ? (Math.abs(moneyIn) + Math.abs(moneyOut)) / transactionCount : 0;
   const maxAmount = Math.max(moneyIn, moneyOut);

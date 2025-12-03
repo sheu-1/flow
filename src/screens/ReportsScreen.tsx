@@ -194,32 +194,41 @@ export default function ReportsScreen() {
           );
         }
       } else if (period === 'monthly') {
-        // Monthly: Days of current month
-        const currentMonth = end.getMonth();
+        // Monthly: Months of the current year (Jan–Dec), cumulative per month
         const currentYear = end.getFullYear();
-        
-        // Get first and last day of current month
-        const monthStart = new Date(currentYear, currentMonth, 1, 0, 0, 0, 0);
-        const monthEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59, 999);
-        
-        wStart = monthStart;
-        wEnd = monthEnd;
+        const currentMonth = end.getMonth();
 
-        // Get number of days in current month
-        const daysInMonth = monthEnd.getDate();
-        
-        // Bucket by days of the month
-        for (let d = 1; d <= daysInMonth; d++) {
-          const dayStart = new Date(currentYear, currentMonth, d, 0, 0, 0, 0);
-          const dayEnd = new Date(currentYear, currentMonth, d, 23, 59, 59, 999);
+        // Active window for categories/stats = current month only
+        const activeMonthStart = new Date(currentYear, currentMonth, 1, 0, 0, 0, 0);
+        const activeMonthEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59, 999);
 
-          labels.push(String(d));
-          const dayTx = filteredTransactions.filter(t => {
+        wStart = activeMonthStart;
+        wEnd = activeMonthEnd;
+
+        // Bucket by months of the year (still show full year in the chart)
+        for (let m = 0; m < 12; m++) {
+          const monthStart = new Date(currentYear, m, 1, 0, 0, 0, 0);
+          const monthEnd = new Date(currentYear, m + 1, 0, 23, 59, 59, 999);
+
+          // 3-letter month label: Jan, Feb, Mar, ...
+          const monthLabel = monthStart.toLocaleDateString('en-US', { month: 'short' });
+          labels.push(monthLabel);
+
+          const monthTx = filteredTransactions.filter((t) => {
             const dt = new Date(t.date);
-            return dt >= dayStart && dt <= dayEnd;
+            return dt >= monthStart && dt <= monthEnd;
           });
-          income.push(dayTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
-          expense.push(dayTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
+
+          income.push(
+            monthTx
+              .filter((t) => t.type === 'income')
+              .reduce((s, t) => s + Math.abs(t.amount), 0)
+          );
+          expense.push(
+            monthTx
+              .filter((t) => t.type === 'expense')
+              .reduce((s, t) => s + Math.abs(t.amount), 0)
+          );
         }
       } else {
         // Yearly: Show from 2024 onward to current year
@@ -277,7 +286,7 @@ export default function ReportsScreen() {
       if (showLoading) setLoading(false);
       setRefreshing(false);
     }
-  }, [user?.id, period, dateRange, filteredTransactions]);
+  }, [user?.id, period, dateRange, filteredTransactions, currentWeek]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -354,7 +363,18 @@ export default function ReportsScreen() {
   // Compute summary stats from the current period data
   // Count = number of individual transactions, Max = highest transaction
   const incomeStats = useMemo(() => {
-    const arr = periodData.income || [];
+    let arr = periodData.income || [];
+
+    // For monthly period, focus stats on the current month only
+    if (period === 'monthly' && windowRange) {
+      const monthIndex = windowRange.start.getMonth();
+      if (monthIndex >= 0 && monthIndex < arr.length) {
+        arr = [arr[monthIndex]];
+      } else {
+        arr = [];
+      }
+    }
+
     // Filter out non-finite values, zeros, and nulls
     const positiveValues = arr.filter((n) => Number.isFinite(n) && n > 0);
 
@@ -374,12 +394,22 @@ export default function ReportsScreen() {
 
     // Max only considers actual positive transactions
     const max = positiveValues.length ? Math.max(...positiveValues) : 0;
-
     return { sum, avg, count, max };
-  }, [periodData.income, filteredTransactions, windowRange]);
+  }, [period, periodData.income, filteredTransactions, windowRange]);
 
   const expenseStats = useMemo(() => {
-    const arr = periodData.expense || [];
+    let arr = periodData.expense || [];
+
+    // For monthly period, focus stats on the current month only
+    if (period === 'monthly' && windowRange) {
+      const monthIndex = windowRange.start.getMonth();
+      if (monthIndex >= 0 && monthIndex < arr.length) {
+        arr = [arr[monthIndex]];
+      } else {
+        arr = [];
+      }
+    }
+
     // Filter out non-finite values, zeros, and nulls
     const positiveValues = arr.filter((n) => Number.isFinite(n) && n > 0);
 
@@ -399,9 +429,8 @@ export default function ReportsScreen() {
 
     // Max only considers actual positive transactions
     const max = positiveValues.length ? Math.max(...positiveValues) : 0;
-
     return { sum, avg, count, max };
-  }, [periodData.expense, filteredTransactions, windowRange]);
+  }, [period, periodData.expense, filteredTransactions, windowRange]);
 
   // Get current stats based on selected view
   const currentStats = useMemo(() => {
@@ -722,65 +751,58 @@ export default function ReportsScreen() {
                 </View>
               </View>
               
-              {/* Weekly: horizontally scrollable over current week + last 3 weeks */}
+              {/* Weekly: show all 7 days within the view (no horizontal scroll) */}
               {period === 'weekly' ? (
-                <ScrollView
-                  horizontal
-                  ref={chartScrollRef}
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.chartScroll}
-                >
-                  <View style={styles.chartBarsWrapper}>
-                    <View style={styles.chartBars}>
-                      {series.labels.map((label, index) => {
-                        const income = series.income[index] || 0;
-                        const expense = series.expense[index] || 0;
-                        const maxValue = Math.max(...series.income, ...series.expense);
-                        const incomeHeight = maxValue > 0 ? (income / maxValue) * 120 : 0;
-                        const expenseHeight = maxValue > 0 ? (expense / maxValue) * 120 : 0;
+                <View style={styles.chartBarsWrapper}>
+                  <View style={styles.chartBars}>
+                    {series.labels.map((label, index) => {
+                      const income = series.income[index] || 0;
+                      const expense = series.expense[index] || 0;
+                      const maxValue = Math.max(...series.income, ...series.expense);
+                      const incomeHeight = maxValue > 0 ? (income / maxValue) * 120 : 0;
+                      const expenseHeight = maxValue > 0 ? (expense / maxValue) * 120 : 0;
 
-                        const displayLabel = label;
+                      const displayLabel = label;
 
-                        return (
-                          <TouchableOpacity
-                            key={index}
-                            onPress={() => setBarTooltip({ label: displayLabel, income, expense, index })}
-                            activeOpacity={0.7}
-                          >
-                            <Animated.View style={styles.barGroup} entering={FadeInUp.delay(index * 30).springify()}>
-                              <View style={styles.barContainer}>
-                                <Animated.View
-                                  style={[
-                                    styles.bar,
-                                    {
-                                      height: incomeHeight,
-                                      backgroundColor: colors.success,
-                                    },
-                                  ]}
-                                  entering={FadeInUp.delay(index * 30 + 100).springify()}
-                                />
-                                <Animated.View
-                                  style={[
-                                    styles.bar,
-                                    {
-                                      height: expenseHeight,
-                                      backgroundColor: colors.danger,
-                                      marginLeft: 2,
-                                    },
-                                  ]}
-                                  entering={FadeInUp.delay(index * 30 + 150).springify()}
-                                />
-                              </View>
-                              <Text style={[styles.barLabel, { color: colors.textSecondary }]} numberOfLines={1}>
-                                {displayLabel}
-                              </Text>
-                            </Animated.View>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
+                      return (
+                        <TouchableOpacity
+                          key={index}
+                          onPress={() => setBarTooltip({ label: displayLabel, income, expense, index })}
+                          activeOpacity={0.7}
+                        >
+                          <Animated.View style={styles.barGroupWeekly} entering={FadeInUp.delay(index * 30).springify()}>
+                            <View style={styles.barContainer}>
+                              <Animated.View
+                                style={[
+                                  styles.bar,
+                                  {
+                                    height: incomeHeight,
+                                    backgroundColor: colors.success,
+                                  },
+                                ]}
+                                entering={FadeInUp.delay(index * 30 + 100).springify()}
+                              />
+                              <Animated.View
+                                style={[
+                                  styles.bar,
+                                  {
+                                    height: expenseHeight,
+                                    backgroundColor: colors.danger,
+                                    marginLeft: 2,
+                                  },
+                                ]}
+                                entering={FadeInUp.delay(index * 30 + 150).springify()}
+                              />
+                            </View>
+                            <Text style={[styles.barLabel, { color: colors.textSecondary }]} numberOfLines={1}>
+                              {displayLabel}
+                            </Text>
+                          </Animated.View>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
-                </ScrollView>
+                </View>
               ) : null}
               
               {/* Week Navigation Below Bars - Weekly Only */}
