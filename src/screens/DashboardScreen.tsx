@@ -377,55 +377,50 @@ export default function DashboardScreen() {
             style={styles.insightsDropdown}
             entering={FadeInUp.springify()}
           >
-            <View style={styles.insightRow}>
-              <View style={styles.insightInfo}>
-                <Ionicons name="trending-up" size={16} color={colors.success} />
-                <Text style={[styles.insightLabel, { color: colors.text }]}>Money In</Text>
+            {/* Pill row */}
+            <View style={styles.insightsPillRow}>
+              {/* Money In pill */}
+              <View style={[styles.insightPill, { backgroundColor: colors.success + '15' }]}> 
+                <View style={styles.insightPillHeader}>
+                  <Ionicons name="trending-up" size={16} color={colors.success} />
+                  <Text style={[styles.insightPillLabel, { color: colors.textSecondary }]}>Money In</Text>
+                </View>
+                <Text style={[styles.insightPillValue, { color: colors.success }]}>
+                  {moneyIn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </Text>
               </View>
-              <Text style={[styles.insightValue, { color: colors.success }]}>
-                {moneyIn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </Text>
-            </View>
-            <Text style={[styles.insightDescription, { color: colors.textSecondary }]}>
-              Total income received during {periodLabel.toLowerCase()}
-            </Text>
 
-            <View style={[styles.insightRow, { marginTop: spacing.md }]}>
-              <View style={styles.insightInfo}>
-                <Ionicons name="receipt" size={16} color={colors.primary} />
-                <Text style={[styles.insightLabel, { color: colors.text }]}>Transaction Count</Text>
+              {/* Transaction Count pill */}
+              <View style={[styles.insightPill, { backgroundColor: colors.primary + '15' }]}> 
+                <View style={styles.insightPillHeader}>
+                  <Ionicons name="receipt" size={16} color={colors.primary} />
+                  <Text style={[styles.insightPillLabel, { color: colors.textSecondary }]}>Transactions</Text>
+                </View>
+                <Text style={[styles.insightPillValue, { color: colors.primary }]}>
+                  {transactionCount}
+                </Text>
               </View>
-              <Text style={[styles.insightValue, { color: colors.primary }]}>
-                {transactionCount}
-              </Text>
-            </View>
-            <Text style={[styles.insightDescription, { color: colors.textSecondary }]}>
-              Total number of transactions in {periodLabel.toLowerCase()}
-            </Text>
 
-            <View style={[styles.insightRow, { marginTop: spacing.md }]}>
-              <View style={styles.insightInfo}>
-                <Ionicons name="trending-down" size={16} color={colors.danger} />
-                <Text style={[styles.insightLabel, { color: colors.text }]}>Money Out</Text>
+              {/* Money Out pill */}
+              <View style={[styles.insightPill, { backgroundColor: colors.danger + '15' }]}> 
+                <View style={styles.insightPillHeader}>
+                  <Ionicons name="trending-down" size={16} color={colors.danger} />
+                  <Text style={[styles.insightPillLabel, { color: colors.textSecondary }]}>Money Out</Text>
+                </View>
+                <Text style={[styles.insightPillValue, { color: colors.danger }]}>
+                  {moneyOut.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </Text>
               </View>
-              <Text style={[styles.insightValue, { color: colors.danger }]}>
-                {moneyOut.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </Text>
             </View>
-            <Text style={[styles.insightDescription, { color: colors.textSecondary }]}>
-              Total expenses incurred during {periodLabel.toLowerCase()}
-            </Text>
 
-            <View style={[styles.tip, { backgroundColor: colors.primary + '15' }]}>
-              <Ionicons name="bulb" size={16} color={colors.primary} />
-              <Text style={[styles.tipText, { color: colors.primary }]}>
-                {netBalance > 0 
-                  ? `Great job! You have a positive cash flow of ${Math.abs(netBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} for ${periodLabel.toLowerCase()}.`
-                  : netBalance < 0
-                  ? `Your expenses exceed income by ${Math.abs(netBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Consider reducing spending.`
-                  : 'Your income and expenses are balanced.'}
-              </Text>
-            </View>
+            {/* Short summary line */}
+            <Text style={[styles.insightSummary, { color: colors.textSecondary }]}>
+              {netBalance > 0
+                ? `Positive cash flow of ${Math.abs(netBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} this ${periodLabel.toLowerCase()}.`
+                : netBalance < 0
+                ? `Negative cash flow of ${Math.abs(netBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} this ${periodLabel.toLowerCase()}.`
+                : `Balanced income and expenses this ${periodLabel.toLowerCase()}.`}
+            </Text>
           </Animated.View>
         )}
         </TouchableOpacity>
@@ -598,10 +593,11 @@ const styles = StyleSheet.create({
   },
   netBalanceCard: {
     marginHorizontal: spacing.md,
-    marginTop: spacing.sm,
-    marginBottom: spacing.lg,
+    marginTop: spacing.xs,
+    marginBottom: spacing.md,
     borderRadius: borderRadius.lg,
-    padding: spacing.lg,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.15,
@@ -611,28 +607,28 @@ const styles = StyleSheet.create({
   netBalanceContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   netBalanceText: {
     flex: 1,
   },
   netBalanceLabel: {
-    fontSize: fontSize.sm,
+    fontSize: fontSize.xs,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: spacing.xs,
   },
   netBalanceAmount: {
-    fontSize: fontSize.xxl,
+    fontSize: fontSize.xl,
     fontWeight: 'bold',
   },
   netBalanceInsight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    marginTop: spacing.md,
-    paddingTop: spacing.md,
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
     borderTopWidth: 1,
   },
   netBalanceInsightText: {
@@ -686,6 +682,37 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     borderTopWidth: 1,
     borderTopColor: 'rgba(0,0,0,0.1)',
+  },
+  insightsPillRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  insightPill: {
+    flex: 1,
+    borderRadius: borderRadius.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+  },
+  insightPillHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.xs,
+  },
+  insightPillLabel: {
+    fontSize: fontSize.xs,
+    fontWeight: '600',
+    marginLeft: spacing.xs,
+  },
+  insightPillValue: {
+    fontSize: fontSize.md,
+    fontWeight: '700',
+  },
+  insightSummary: {
+    fontSize: fontSize.xs,
+    lineHeight: 16,
   },
   insightRow: {
     flexDirection: 'row',

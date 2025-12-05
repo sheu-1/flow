@@ -27,7 +27,8 @@
       },
       "permissions": [
         "READ_SMS",
-        "RECEIVE_SMS"
+        "RECEIVE_SMS",
+        "RECEIVE_BOOT_COMPLETED"
       ],
       "package": "com.alexsheunda.cashflowtracker"
     },

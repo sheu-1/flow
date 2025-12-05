@@ -23,20 +23,47 @@ type SmsAndroidModule = {
 
 let subscription: { remove: () => void } | null = null;
 let lastSeenTimestamp = 0;
-const LAST_SEEN_KEY = 'sms_last_seen_ts_v1';
+let lastSeenUserId: string | undefined;
+const LAST_SEEN_BASE_KEY = 'sms_last_seen_ts_v1';
 
-async function loadLastSeen() {
+function getLastSeenKey(userId?: string) {
+  return userId ? `${LAST_SEEN_BASE_KEY}:${userId}` : LAST_SEEN_BASE_KEY;
+}
+
+async function loadLastSeen(userId?: string) {
   try {
-    const raw = await AsyncStorage.getItem(LAST_SEEN_KEY);
+    const key = getLastSeenKey(userId);
+    const raw = await AsyncStorage.getItem(key);
     const n = raw ? Number(raw) : 0;
     if (Number.isFinite(n) && n > 0) lastSeenTimestamp = n;
+    lastSeenUserId = userId;
   } catch {}
 }
 
-async function saveLastSeen(ts: number) {
+async function saveLastSeen(ts: number, userId?: string) {
   try {
     lastSeenTimestamp = Math.max(lastSeenTimestamp, ts);
-    await AsyncStorage.setItem(LAST_SEEN_KEY, String(lastSeenTimestamp));
+    const key = getLastSeenKey(userId);
+    await AsyncStorage.setItem(key, String(lastSeenTimestamp));
+    lastSeenUserId = userId;
+  } catch {}
+}
+
+export async function getLastSeenForUser(userId?: string): Promise<number> {
+  try {
+    const key = getLastSeenKey(userId);
+    const raw = await AsyncStorage.getItem(key);
+    const n = raw ? Number(raw) : 0;
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export async function setLastSeenForUser(ts: number, userId?: string): Promise<void> {
+  try {
+    const key = getLastSeenKey(userId);
+    await AsyncStorage.setItem(key, String(ts));
   } catch {}
 }
 
@@ -107,8 +134,9 @@ export async function startSmsListener(onMessage?: (raw: RawSms) => void): Promi
     return;
   }
 
-  // Ensure we resume from last persisted timestamp
-  await loadLastSeen();
+  const { data } = await supabase.auth.getUser();
+  const userId = data.user?.id;
+  await loadLastSeen(userId);
 
   // Try broadcast listener
   try {
@@ -121,7 +149,7 @@ export async function startSmsListener(onMessage?: (raw: RawSms) => void): Promi
           onMessage?.(raw);
           await processSmsAndSave(raw);
           const ts = Number(raw.date) || Date.now();
-          await saveLastSeen(ts);
+          await saveLastSeen(ts, userId);
         } catch (e) {
           console.warn('[SMS] process failed', e);
         }
@@ -138,7 +166,7 @@ export async function startSmsListener(onMessage?: (raw: RawSms) => void): Promi
             onMessage?.(sms);
             await processSmsAndSave(sms);
             const ts = Number(sms.date) || Date.now();
-            await saveLastSeen(ts);
+            await saveLastSeen(ts, userId);
           } catch (e) { console.warn('[SMS] catch-up failed', e); }
         }
       } catch {}
@@ -166,7 +194,7 @@ export async function startSmsListener(onMessage?: (raw: RawSms) => void): Promi
           if (ts <= lastSeenTimestamp) continue;
           onMessage?.(sms);
           await processSmsAndSave(sms);
-          await saveLastSeen(ts);
+          await saveLastSeen(ts, userId);
         }
       } catch (e) {
         console.warn('[SMS] polling failed', e);

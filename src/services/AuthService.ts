@@ -1,6 +1,7 @@
 import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { AppState } from 'react-native';
 import { Session, User, AuthChangeEvent } from '@supabase/supabase-js';
 import { makeRedirectUri } from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
@@ -8,6 +9,7 @@ import Constants from 'expo-constants';
 import { supabase, pingSupabase } from './SupabaseClient';
 import { PermissionService } from './PermissionService';
 import { startSmsListener, stopSmsListener } from './SmsService';
+import { registerBackgroundSmsTask, unregisterBackgroundSmsTask } from './BackgroundSms';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -271,7 +273,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLoading(false);
         clearTimeout(timeoutId);
 
-        // Start persistent SMS listener when already authenticated
         if (session?.user && !smsStarted) {
           try {
             startSmsListener();
@@ -279,6 +280,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } catch (e) {
             console.warn('[Auth] Failed to start SMS listener:', e);
           }
+          try { await registerBackgroundSmsTask(); } catch {}
         }
       } catch (e) {
         console.error('[Auth] init error:', e);
@@ -303,19 +305,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLoading(false);
         try { clearTimeout(timeoutId); } catch {}
         
-        // Initialize SMS permissions on first login
         if (event === 'SIGNED_IN' && newSession?.user) {
           try {
             await PermissionService.initializeSmsPermissions();
-            // Start persistent SMS ingestion
             try { startSmsListener(); smsStarted = true; } catch {}
           } catch (error) {
             console.warn('Failed to initialize SMS permissions:', error);
           }
+          try { await registerBackgroundSmsTask(); } catch {}
         }
 
         if (event === 'SIGNED_OUT') {
           try { stopSmsListener(); smsStarted = false; } catch {}
+          try { await unregisterBackgroundSmsTask(); } catch {}
         }
       }
     );
@@ -328,6 +330,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try { stopSmsListener(); } catch {}
     };
   }, []);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && user) {
+        try { startSmsListener(); } catch {}
+      }
+    });
+    return () => {
+      try { sub.remove(); } catch {}
+    };
+  }, [user]);
 
   const value: AuthContextValue = {
     session,
@@ -350,6 +363,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } catch (error) {
             console.warn('Failed to initialize SMS permissions:', error);
           }
+          try { await registerBackgroundSmsTask(); } catch {}
         }
         
         return { success: true };
@@ -398,6 +412,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } catch (error) {
             console.warn('Failed to initialize SMS permissions:', error);
           }
+          try { await registerBackgroundSmsTask(); } catch {}
         }
         
         return {};
@@ -415,6 +430,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (error) throw error;
         setSession(null);
         setUser(null);
+        try { await unregisterBackgroundSmsTask(); } catch {}
       } finally {
         setLoading(false);
       }

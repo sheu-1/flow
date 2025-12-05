@@ -41,32 +41,37 @@ export const AnimatedPieChart: React.FC<AnimatedPieChartProps> = ({ moneyIn, mon
       entering={FadeInUp.delay(100).springify()}
       style={[styles.container, { backgroundColor: colors.card }]}
     >
-      <Text style={[styles.title, { color: colors.text }]}>Money Flow Distribution</Text>
-      
-      <View style={styles.chartContainer}>
-        <AnimatedDonut moneyIn={moneyIn} moneyOut={moneyOut} total={total} formatter={formatCurrency} />
-      </View>
+      <Text style={[styles.title, { color: colors.text }]}>Cash Flow Distribution</Text>
 
-      <View style={styles.legend}>
-        <Animated.View entering={FadeInUp.delay(200).springify()} style={styles.legendItem}>
-          <View style={[styles.legendColor, { backgroundColor: colors.success }]} />
-          <View style={styles.legendText}>
-            <Text style={[styles.legendLabel, { color: colors.textSecondary }]}>Money In</Text>
-            <Text style={[styles.legendValue, { color: colors.text }]}>
-              {formatCurrency(moneyIn)} ({moneyInPercentage.toFixed(1)}%)
-            </Text>
-          </View>
-        </Animated.View>
-        
-        <Animated.View entering={FadeInUp.delay(250).springify()} style={styles.legendItem}>
-          <View style={[styles.legendColor, { backgroundColor: colors.danger }]} />
-          <View style={styles.legendText}>
-            <Text style={[styles.legendLabel, { color: colors.textSecondary }]}>Money Out</Text>
-            <Text style={[styles.legendValue, { color: colors.text }]}>
-              {formatCurrency(moneyOut)} ({moneyOutPercentage.toFixed(1)}%)
-            </Text>
-          </View>
-        </Animated.View>
+      <View style={styles.chartContainer}>
+        <AnimatedDonut
+          moneyIn={moneyIn}
+          moneyOut={moneyOut}
+          total={total}
+          formatter={formatCurrency}
+        />
+
+        <View style={styles.legend}>
+          <Animated.View entering={FadeInUp.delay(200).springify()} style={styles.legendItem}>
+            <View style={[styles.legendColor, { backgroundColor: colors.success }]} />
+            <View style={styles.legendText}>
+              <Text style={[styles.legendLabel, { color: colors.textSecondary }]}>Money In</Text>
+              <Text style={[styles.legendValue, { color: colors.text }]}>
+                {formatCurrency(moneyIn)} ({moneyInPercentage.toFixed(1)}%)
+              </Text>
+            </View>
+          </Animated.View>
+
+          <Animated.View entering={FadeInUp.delay(250).springify()} style={styles.legendItem}>
+            <View style={[styles.legendColor, { backgroundColor: colors.danger }]} />
+            <View style={styles.legendText}>
+              <Text style={[styles.legendLabel, { color: colors.textSecondary }]}>Money Out</Text>
+              <Text style={[styles.legendValue, { color: colors.text }]}>
+                {formatCurrency(moneyOut)} ({moneyOutPercentage.toFixed(1)}%)
+              </Text>
+            </View>
+          </Animated.View>
+        </View>
       </View>
     </Animated.View>
   );
@@ -84,8 +89,9 @@ function AnimatedDonut({
   formatter: (n: number) => string;
 }) {
   const colors = useThemeColors();
-  const size = 160;
-  const strokeWidth = 18;
+  // Slightly smaller donut to save more vertical space on dashboard
+  const size = 130;
+  const strokeWidth = 14;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
 
@@ -206,28 +212,32 @@ function AnimatedDonut({
 const styles = StyleSheet.create({
   container: {
     borderRadius: borderRadius.lg,
-    padding: spacing.lg,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
     marginHorizontal: spacing.md,
-    marginVertical: spacing.sm,
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
   },
   title: {
-    fontSize: fontSize.lg,
+    fontSize: fontSize.sm,
     fontWeight: '600',
-    textAlign: 'center',
-    marginBottom: spacing.lg,
+    textAlign: 'left',
+    marginBottom: spacing.sm,
   },
   chartContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.lg,
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
   },
   centerCircle: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'absolute',
-    top: 35,
+    top: 28,
   },
   totalLabel: {
     fontSize: fontSize.xs,
@@ -238,7 +248,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   legend: {
-    gap: spacing.md,
+    flex: 1,
+    marginLeft: spacing.md,
+    gap: spacing.sm,
   },
   legendItem: {
     flexDirection: 'row',
