@@ -46,9 +46,10 @@ export async function initializePaystackPayment(
     // Prepare request body
     const requestBody: any = {
       email,
-      amount, // Amount in kobo (e.g., 50 kobo = $0.50)
+      amount, // Amount in smallest currency unit (e.g., KES cents)
       reference,
-      currency: paymentMethod === 'mobile_money' ? 'KES' : 'USD', // KES for M-Pesa, USD for cards
+      // Force KES for all flows to match merchant configuration
+      currency: 'KES',
       metadata: {
         plan,
         userId,

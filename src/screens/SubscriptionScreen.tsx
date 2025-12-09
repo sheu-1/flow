@@ -8,6 +8,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../services/SupabaseClient';
 import { getSubscriptionStatus } from '../services/SubscriptionManager';
+import { initializePaystackPayment } from '../services/PaystackService';
 
 type SubscriptionPlan = 'free' | 'daily' | 'monthly' | 'yearly';
 
@@ -198,15 +199,32 @@ export default function SubscriptionScreen() {
 
     // Convert price to KES (Kenyan Shillings) - assuming $1 = 130 KES
     const priceInUSD = parseFloat(plan.price.replace('$', ''));
-    const priceInKES = priceInUSD * 130; // Convert to KES
-    const amountInCents = Math.round(priceInKES * 100); // Convert to cents
+    const priceInKES = priceInUSD * 130;
+    const amountInCents = Math.round(priceInKES * 100);
 
-    // Navigate to payment method selection
-    navigation.navigate('PaymentMethod' as never, {
-      plan: selectedPlan,
-      amount: amountInCents,
-      planTitle: plan.title,
-    } as never);
+    try {
+      const result = await initializePaystackPayment({
+        email: user.email,
+        amount: amountInCents,
+        plan: selectedPlan,
+        userId: user.id,
+        paymentMethod: 'card',
+      });
+
+      if (result.success && result.authorization_url && result.reference) {
+        navigation.navigate('PaymentWebView' as never, {
+          url: result.authorization_url,
+          reference: result.reference,
+          plan: selectedPlan,
+          amount: amountInCents,
+        } as never);
+      } else {
+        Alert.alert('Payment Failed', result.message || 'Please try again.');
+      }
+    } catch (error: any) {
+      console.error('Payment initialization error:', error);
+      Alert.alert('Error', error?.message || 'Failed to start payment. Please try again.');
+    }
   };
 
   const plans = [

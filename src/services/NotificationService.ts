@@ -114,8 +114,8 @@ class NotificationService {
           type: isIncrease ? 'spending_increase' : 'spending_decrease',
           title: isIncrease ? '📈 Spending Alert' : '📉 Spending Reduced',
           message: isIncrease 
-            ? `You spent ${Math.abs(spendingChange).toFixed(1)}% more this week ($${currentWeekSpending.toFixed(2)}) compared to last week ($${previousWeekSpending.toFixed(2)})`
-            : `Great job! You spent ${Math.abs(spendingChange).toFixed(1)}% less this week ($${currentWeekSpending.toFixed(2)}) compared to last week ($${previousWeekSpending.toFixed(2)})`,
+            ? `You spent ${Math.abs(spendingChange).toFixed(1)}% more this week (${currentWeekSpending.toFixed(2)}) compared to last week (${previousWeekSpending.toFixed(2)})`
+            : `Great job! You spent ${Math.abs(spendingChange).toFixed(1)}% less this week (${currentWeekSpending.toFixed(2)}) compared to last week (${previousWeekSpending.toFixed(2)})`,
           data: {
             currentWeekSpending,
             previousWeekSpending,
@@ -131,8 +131,8 @@ class NotificationService {
           type: 'income_change',
           title: isIncrease ? '💰 Income Boost' : '💸 Income Drop',
           message: isIncrease 
-            ? `Your income increased by ${Math.abs(incomeChange).toFixed(1)}% this week ($${currentWeekIncome.toFixed(2)}) compared to last week ($${previousWeekIncome.toFixed(2)})`
-            : `Your income decreased by ${Math.abs(incomeChange).toFixed(1)}% this week ($${currentWeekIncome.toFixed(2)}) compared to last week ($${previousWeekIncome.toFixed(2)})`,
+            ? `Your income increased by ${Math.abs(incomeChange).toFixed(1)}% this week (${currentWeekIncome.toFixed(2)}) compared to last week (${previousWeekIncome.toFixed(2)})`
+            : `Your income decreased by ${Math.abs(incomeChange).toFixed(1)}% this week (${currentWeekIncome.toFixed(2)}) compared to last week (${previousWeekIncome.toFixed(2)})`,
           data: {
             currentWeekIncome,
             previousWeekIncome,
@@ -174,6 +174,8 @@ class NotificationService {
           shouldShowAlert: true,
           shouldPlaySound: true,
           shouldSetBadge: true,
+          shouldShowBanner: true,
+          shouldShowList: true,
         }),
       });
 
@@ -188,6 +190,7 @@ class NotificationService {
           hour: 23,
           minute: 55,
           repeats: true,
+          type: Notifications.TriggerType.CALENDAR,
         },
       });
 
@@ -241,7 +244,7 @@ class NotificationService {
       await Notifications.scheduleNotificationAsync({
         content: {
           title: '📊 Daily Summary',
-          body: `You received ₵${moneyIn.toFixed(2)} and spent ₵${moneyOut.toFixed(2)} today.`,
+          body: `You received ${moneyIn.toFixed(2)} and spent ${moneyOut.toFixed(2)} today.`,
           data: { type: 'daily_summary', moneyIn, moneyOut },
         },
         trigger: null, // Send immediately
