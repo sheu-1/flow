@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Alert, ActivityIndicator, Text } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, StyleSheet, Alert, ActivityIndicator, Text, Animated } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -26,81 +26,131 @@ export default function PaymentWebViewScreen() {
   const colors = useThemeColors();
   const [loading, setLoading] = useState(true);
   const [verifying, setVerifying] = useState(false);
+  const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const { url, reference, plan, amount } = route.params;
 
-  const handleNavigationStateChange = async (navState: any) => {
-    console.log('Navigation state changed:', navState.url);
+  // Soft pulsing animation to draw attention to the confirm button
+  useEffect(() => {
+    if (verifying) {
+      scaleAnim.stopAnimation();
+      scaleAnim.setValue(1);
+      return;
+    }
 
-    // Check if redirected to callback URL or success page
-    if (
-      navState.url.includes('cashflowtracker://payment/callback') ||
-      navState.url.includes('success') ||
-      navState.url.includes('payment/success')
-    ) {
-      setVerifying(true);
+    const pulse = () => {
+      Animated.sequence([
+        Animated.timing(scaleAnim, {
+          toValue: 1.05,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+      ]).start(({ finished }) => {
+        if (finished && !verifying) {
+          pulse();
+        }
+      });
+    };
 
-      try {
-        // Extract reference from URL if available
-        let paymentReference = reference;
-        if (navState.url.includes('reference=')) {
-          const urlParams = new URLSearchParams(navState.url.split('?')[1]);
+    pulse();
+
+    return () => {
+      scaleAnim.stopAnimation();
+      scaleAnim.setValue(1);
+    };
+  }, [verifying, scaleAnim]);
+
+  const verifyAndComplete = async (maybeUrl?: string) => {
+    if (verifying) return;
+    setVerifying(true);
+
+    try {
+      let paymentReference = reference;
+
+      // Optionally extract reference from URL if provided
+      if (maybeUrl && maybeUrl.includes('reference=')) {
+        try {
+          const urlParams = new URLSearchParams(maybeUrl.split('?')[1] || '');
           paymentReference = urlParams.get('reference') || reference;
+        } catch {
+          paymentReference = reference;
         }
+      }
 
-        console.log('Verifying payment with reference:', paymentReference);
+      console.log('Verifying payment with reference:', paymentReference);
 
-        // Verify payment with Paystack
-        const result = await verifyPaystackPayment(paymentReference);
+      // Verify payment with Paystack
+      const result = await verifyPaystackPayment(paymentReference);
 
-        if (result.success) {
-          Alert.alert(
-            'Payment Successful! 🎉',
-            `Your ${plan} subscription has been activated successfully.`,
-            [
-              {
-                text: 'Continue',
-                onPress: () => {
-                  navigation.reset({
-                    index: 0,
-                    routes: [{ name: 'MainTabs' as never }],
-                  });
-                },
-              },
-            ]
-          );
-        } else {
-          Alert.alert(
-            'Payment Verification Failed',
-            result.message || 'Unable to verify your payment. Please contact support.',
-            [
-              {
-                text: 'Try Again',
-                onPress: () => navigation.goBack(),
-              },
-              {
-                text: 'Cancel',
-                onPress: () => navigation.goBack(),
-                style: 'cancel',
-              },
-            ]
-          );
-        }
-      } catch (error: any) {
-        console.error('Payment verification error:', error);
+      if (result.success) {
         Alert.alert(
-          'Verification Error',
-          'Failed to verify payment. Please contact support if money was deducted.',
+          'Payment Successful! 🎉',
+          `Your ${plan} subscription has been activated successfully.`,
           [
             {
-              text: 'OK',
-              onPress: () => navigation.goBack(),
+              text: 'Continue',
+              onPress: () => {
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: 'MainTabs' as never }],
+                });
+              },
             },
           ]
         );
-      } finally {
-        setVerifying(false);
+      } else {
+        Alert.alert(
+          'Payment Verification Failed',
+          result.message || 'Unable to verify your payment. Please contact support.',
+          [
+            {
+              text: 'Try Again',
+              onPress: () => navigation.goBack(),
+            },
+            {
+              text: 'Cancel',
+              onPress: () => navigation.goBack(),
+              style: 'cancel',
+            },
+          ]
+        );
       }
+    } catch (error: any) {
+      console.error('Payment verification error:', error);
+      Alert.alert(
+        'Verification Error',
+        'Failed to verify payment. Please contact support if money was deducted.',
+        [
+          {
+            text: 'OK',
+            onPress: () => navigation.goBack(),
+          },
+        ]
+      );
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleNavigationStateChange = async (navState: any) => {
+    const currentUrl: string = navState?.url || '';
+    console.log('Navigation state changed:', currentUrl);
+
+    // Check if redirected to callback URL or a success URL from Paystack
+    const isCallbackUrl =
+      currentUrl.includes('cashflowtracker://payment/callback') ||
+      currentUrl.includes('status=success') ||
+      currentUrl.includes('payment/success') ||
+      // Paystack usually appends ?reference=... on successful completion
+      currentUrl.includes('reference=');
+
+    if (isCallbackUrl) {
+      await verifyAndComplete(currentUrl);
     }
   };
 
@@ -146,7 +196,18 @@ export default function PaymentWebViewScreen() {
           <Ionicons name="close" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Complete Payment</Text>
-        <View style={styles.placeholder} />
+        <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+          <TouchableOpacity
+            style={[
+              styles.confirmButton,
+              { backgroundColor: colors.primary, opacity: verifying ? 0.6 : 1 },
+            ]}
+            onPress={() => verifyAndComplete()}
+            disabled={verifying}
+          >
+            <Text style={styles.confirmButtonText}>I've Paid - Confirm</Text>
+          </TouchableOpacity>
+        </Animated.View>
       </View>
 
       {/* Payment Amount Info */}
@@ -155,7 +216,7 @@ export default function PaymentWebViewScreen() {
           Subscribing to {plan} plan
         </Text>
         <Text style={[styles.paymentAmount, { color: colors.primary }]}>
-          ${(amount / 100).toFixed(2)}
+          KES {(amount / 100).toFixed(2)}
         </Text>
       </View>
 
@@ -231,6 +292,18 @@ const styles = StyleSheet.create({
   },
   webView: {
     flex: 1,
+  },
+  confirmButton: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: 999,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  confirmButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
   },
   loadingContainer: {
     position: 'absolute',

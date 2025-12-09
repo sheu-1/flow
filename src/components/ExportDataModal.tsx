@@ -166,19 +166,19 @@ export default function ExportDataModal({
             <View style={styles.summaryRow}>
               <Text style={[styles.summaryLabel, { color: colors.text }]}>Total Income:</Text>
               <Text style={[styles.summaryValue, { color: colors.income }]}>
-                ${summary.totalIncome.toFixed(2)}
+                KES {summary.totalIncome.toFixed(2)}
               </Text>
             </View>
             <View style={styles.summaryRow}>
               <Text style={[styles.summaryLabel, { color: colors.text }]}>Total Expenses:</Text>
               <Text style={[styles.summaryValue, { color: colors.expense }]}>
-                ${summary.totalExpense.toFixed(2)}
+                KES {summary.totalExpense.toFixed(2)}
               </Text>
             </View>
             <View style={[styles.summaryRow, styles.summaryTotal]}>
               <Text style={[styles.summaryLabel, { color: colors.text, fontWeight: 'bold' }]}>Net:</Text>
               <Text style={[styles.summaryValue, { color: colors.text, fontWeight: 'bold' }]}>
-                ${(summary.totalIncome - summary.totalExpense).toFixed(2)}
+                KES {(summary.totalIncome - summary.totalExpense).toFixed(2)}
               </Text>
             </View>
           </View>

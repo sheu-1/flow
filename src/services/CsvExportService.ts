@@ -5,6 +5,8 @@
  */
 
 import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system';
+import { Platform } from 'react-native';
 import { Transaction } from '../types';
 import { format } from 'date-fns';
 
@@ -86,12 +88,12 @@ export async function exportTransactionsToCSV(
     // Create a blob and share it
     // For web, create a download link
     // For mobile, use sharing
-    const blob = new Blob([csvContent], { type: 'text/csv' });
     const timestamp = format(new Date(), 'yyyyMMdd_HHmmss');
     const filename = `transactions_${timestamp}.csv`;
-    
+
     // Check if we're on web
     if (typeof window !== 'undefined' && window.document) {
+      const blob = new Blob([csvContent], { type: 'text/csv' });
       // Web: Create download link
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -102,23 +104,20 @@ export async function exportTransactionsToCSV(
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } else {
-      // Mobile: Use expo-sharing
-      // Create a temporary file URL from the blob
-      const reader = new FileReader();
-      reader.readAsDataURL(blob);
-      
-      await new Promise((resolve, reject) => {
-        reader.onloadend = async () => {
-          try {
-            const base64data = reader.result as string;
-            // For now, just copy to clipboard or show alert
-            // Full file sharing would require expo-file-system
-            throw new Error('File export requires expo-file-system package. Please install it: expo install expo-file-system');
-          } catch (error) {
-            reject(error);
-          }
-        };
-        reader.onerror = reject;
+      // Mobile: Use expo-sharing with expo-file-system
+      const fileUri = `${FileSystem.documentDirectory || ''}${filename}`;
+      await FileSystem.writeAsStringAsync(fileUri, csvContent, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        throw new Error('Sharing is not available on this device');
+      }
+
+      await Sharing.shareAsync(fileUri, {
+        mimeType: 'text/csv',
+        dialogTitle: 'Export Transactions',
       });
     }
     
