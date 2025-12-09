@@ -9,6 +9,7 @@ import { useAuth } from '../hooks/useAuth';
 import { AggregatePeriod } from '../types';
 // Category breakdown computed locally from filtered transactions
 import { Dimensions } from 'react-native';
+import { LineChart } from 'react-native-chart-kit';
 import { AnimatedSimplePieChart } from '../components/AnimatedSimplePieChart';
 import { AnimatedCircleMetric } from '../components/AnimatedCircleMetric';
 import { UnifiedPeriodSelector } from '../components/UnifiedPeriodSelector';
@@ -807,30 +808,9 @@ export default function ReportsScreen() {
               
               {/* Week Navigation Below Bars - Weekly Only */}
               {period === 'weekly' && windowRange && (() => {
-                // Calculate max weeks that can be navigated back within current month
-                const today = new Date();
-                const currentMonth = today.getMonth();
-                const currentYear = today.getFullYear();
-                
-                // Find the Sunday of the week containing today
-                const currentSunday = new Date(today);
-                const dayOfWeek = today.getDay();
-                currentSunday.setDate(today.getDate() - dayOfWeek);
-                currentSunday.setHours(0, 0, 0, 0);
-                
-                // Get the first day of current month
-                const monthStart = new Date(currentYear, currentMonth, 1, 0, 0, 0, 0);
-                
-                // Calculate how many weeks back we can go within the current month
-                let maxWeeksBack = 0;
-                let testWeekStart = new Date(currentSunday);
-                
-                while (testWeekStart >= monthStart) {
-                  maxWeeksBack++;
-                  testWeekStart.setDate(testWeekStart.getDate() - 7);
-                }
-                maxWeeksBack = Math.max(0, maxWeeksBack - 1); // Subtract 1 because we include current week
-                
+                // Allow navigating current week plus previous 3 weeks using the same weekly bar graph
+                const maxWeeksBack = 3;
+
                 return (
                   <View style={styles.weekNavigationBelow}>
                     <TouchableOpacity
@@ -920,6 +900,51 @@ export default function ReportsScreen() {
                   </View>
                 </ScrollView>
               ) : null}
+              
+              {/* Time-Series Line Chart: Money In vs Money Out */}
+              <View style={styles.lineChartSection}>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Time Series (In vs Out)</Text>
+                <LineChart
+                  data={{
+                    labels: series.labels,
+                    datasets: [
+                      {
+                        data: series.income,
+                        color: () => colors.success,
+                        strokeWidth: 2,
+                      },
+                      {
+                        data: series.expense,
+                        color: () => colors.danger,
+                        strokeWidth: 2,
+                      },
+                    ],
+                    legend: ['Money In', 'Money Out'],
+                  }}
+                  width={Dimensions.get('window').width - spacing.md * 2}
+                  height={220}
+                  yAxisLabel=""
+                  yAxisSuffix=""
+                  chartConfig={{
+                    backgroundColor: 'transparent',
+                    backgroundGradientFrom: colors.background,
+                    backgroundGradientTo: colors.background,
+                    decimalPlaces: 0,
+                    color: (opacity = 1) => `rgba(148, 163, 184, ${opacity})`,
+                    labelColor: (opacity = 1) => `rgba(148, 163, 184, ${opacity})`,
+                    propsForDots: {
+                      r: '2',
+                    },
+                    propsForBackgroundLines: {
+                      stroke: colors.border,
+                      strokeDasharray: '4 4',
+                    },
+                    useShadowColorFromDataset: false,
+                  }}
+                  bezier
+                  style={styles.lineChart}
+                />
+              </View>
               
               {/* Dynamic Tooltip */}
               {barTooltip && (
