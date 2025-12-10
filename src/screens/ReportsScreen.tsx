@@ -726,7 +726,13 @@ export default function ReportsScreen() {
           </View>
         ) : series.labels.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No data available</Text>
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>We couldn’t find transactions for this date range.</Text>
+            <View style={{ marginTop: spacing.sm }}>
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Try:</Text>
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>- Widening the date range</Text>
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>- Adding a transaction</Text>
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>- Turning on SMS import</Text>
+            </View>
           </View>
         ) : (
           <View style={{ paddingHorizontal: spacing.md }}>

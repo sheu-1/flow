@@ -4,6 +4,7 @@ import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, Fad
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeColors } from '../theme/ThemeProvider';
 import { useCurrency } from '../services/CurrencyProvider';
+import { SavingsGoalsService } from '../services/SavingsGoalsService';
 
 interface SavingsGoal {
   id: string;
@@ -42,52 +43,130 @@ export const SavingsGoals: React.FC<Props> = ({ userId, totalSavings }) => {
     category: 'other' as SavingsGoal['category'],
   });
 
-  // Load goals from storage (simplified - would use actual storage)
+  const mapBackendGoalToUi = (g: any): SavingsGoal => {
+    const categoryMeta =
+      goalCategories.find(c => c.label === g.category) ||
+      goalCategories.find(c => c.key === 'other')!;
+
+    const fallbackDeadline = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+
+    const rawTargetDate = g.targetDate || g.target_date || g.deadline;
+    const parsedDeadline = rawTargetDate ? new Date(rawTargetDate) : fallbackDeadline;
+    const safeDeadline = isNaN(parsedDeadline.getTime()) ? fallbackDeadline : parsedDeadline;
+
+    const rawCreatedAt = g.createdAt || g.created_at;
+    const parsedCreated = rawCreatedAt ? new Date(rawCreatedAt) : new Date();
+    const safeCreated = isNaN(parsedCreated.getTime()) ? new Date() : parsedCreated;
+
+    return {
+      id: g.id,
+      title: g.title,
+      targetAmount: g.targetAmount ?? g.target_amount ?? 0,
+      currentAmount: g.currentAmount ?? g.current_amount ?? 0,
+      deadline: safeDeadline,
+      category: (categoryMeta.key as SavingsGoal['category']),
+      emoji: categoryMeta.emoji,
+      color: g.color || categoryMeta.color,
+      createdAt: safeCreated,
+    };
+  };
+
+  // Load goals from Supabase/AsyncStorage via service
   useEffect(() => {
     loadGoals();
   }, [userId]);
 
   const loadGoals = async () => {
     try {
-      // TODO: Replace with actual Supabase query when user authentication is available
-      // For now, show empty state to avoid errors
-      setGoals([]);
+      if (!userId) {
+        setGoals([]);
+        return;
+      }
+      const backendGoals = await SavingsGoalsService.getSavingsGoals(userId);
+      const mapped: SavingsGoal[] = backendGoals.map(mapBackendGoalToUi);
+
+      setGoals(mapped);
     } catch (error) {
       console.error('Failed to load savings goals:', error);
       setGoals([]);
     }
   };
 
-  const addGoal = () => {
+  const addGoal = async () => {
     if (!newGoal.title || !newGoal.targetAmount) {
       Alert.alert('Missing Information', 'Please fill in all required fields.');
       return;
     }
 
-    const category = goalCategories.find(c => c.key === newGoal.category)!;
-    const goal: SavingsGoal = {
-      id: Date.now().toString(),
-      title: newGoal.title,
-      targetAmount: parseFloat(newGoal.targetAmount),
-      currentAmount: 0,
-      deadline: newGoal.deadline ? new Date(newGoal.deadline) : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-      category: newGoal.category,
-      emoji: category.emoji,
-      color: category.color,
-      createdAt: new Date(),
-    };
+    if (!userId) {
+      Alert.alert('Not Logged In', 'Please log in to create a savings goal.');
+      return;
+    }
 
-    setGoals([...goals, goal]);
-    setShowAddModal(false);
-    setNewGoal({ title: '', targetAmount: '', deadline: '', category: 'other' });
+    const amount = parseFloat(newGoal.targetAmount);
+    if (isNaN(amount) || amount <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid target amount.');
+      return;
+    }
+
+    const categoryMeta = goalCategories.find(c => c.key === newGoal.category)!;
+
+    try {
+      // Parse deadline safely; fall back to 12 months from now if invalid or empty
+      let targetDate: Date;
+      if (newGoal.deadline) {
+        const parsed = new Date(newGoal.deadline);
+        if (isNaN(parsed.getTime())) {
+          targetDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+        } else {
+          targetDate = parsed;
+        }
+      } else {
+        targetDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+      }
+
+      const createdBackend = await SavingsGoalsService.createSavingsGoal(userId, {
+        title: newGoal.title,
+        description: `Save ${amount} for ${categoryMeta.label}`,
+        targetAmount: amount,
+        targetDate,
+        category: categoryMeta.label,
+        icon: 'flag-outline',
+        color: categoryMeta.color,
+      });
+
+      const created = mapBackendGoalToUi(createdBackend);
+
+      setGoals(prev => [created, ...prev]);
+      setShowAddModal(false);
+      setNewGoal({ title: '', targetAmount: '', deadline: '', category: 'other' });
+    } catch (error) {
+      console.error('Error creating savings goal:', error);
+      Alert.alert('Error', 'Failed to create savings goal. Please try again.');
+    }
   };
 
-  const updateGoalProgress = (goalId: string, amount: number) => {
-    setGoals(goals.map(goal => 
-      goal.id === goalId 
-        ? { ...goal, currentAmount: Math.min(goal.targetAmount, goal.currentAmount + amount) }
-        : goal
-    ));
+  const updateGoalProgress = async (goalId: string, amount: number) => {
+    if (!userId) {
+      Alert.alert('Not Logged In', 'Please log in to update a savings goal.');
+      return;
+    }
+
+    const existing = goals.find(g => g.id === goalId);
+    if (!existing) return;
+
+    const newAmount = Math.min(existing.targetAmount, existing.currentAmount + amount);
+
+    try {
+      const updatedBackend = await SavingsGoalsService.updateGoalProgress(userId, goalId, newAmount);
+      if (updatedBackend) {
+        const updated = mapBackendGoalToUi(updatedBackend);
+        setGoals(prev => prev.map(g => (g.id === goalId ? updated : g)));
+      }
+    } catch (error) {
+      console.error('Error updating goal progress:', error);
+      Alert.alert('Error', 'Failed to update goal progress. Please try again.');
+    }
   };
 
   const deleteGoal = (goalId: string) => {
@@ -96,8 +175,16 @@ export const SavingsGoals: React.FC<Props> = ({ userId, totalSavings }) => {
       'Are you sure you want to delete this savings goal?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => {
-          setGoals(goals.filter(g => g.id !== goalId));
+        { text: 'Delete', style: 'destructive', onPress: async () => {
+          try {
+            if (userId) {
+              await SavingsGoalsService.deleteSavingsGoal(userId, goalId);
+            }
+            setGoals(prev => prev.filter(g => g.id !== goalId));
+          } catch (error) {
+            console.error('Error deleting savings goal:', error);
+            Alert.alert('Error', 'Failed to delete savings goal. Please try again.');
+          }
         }},
       ]
     );
@@ -203,10 +290,10 @@ export const SavingsGoals: React.FC<Props> = ({ userId, totalSavings }) => {
                     { text: 'Cancel', style: 'cancel' },
                     { 
                       text: 'Add', 
-                      onPress: (amount?: string) => {
+                      onPress: async (amount?: string) => {
                         const numAmount = parseFloat(amount || '0');
                         if (numAmount > 0) {
-                          updateGoalProgress(goal.id, numAmount);
+                          await updateGoalProgress(goal.id, numAmount);
                         }
                       }
                     },

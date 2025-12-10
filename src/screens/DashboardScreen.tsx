@@ -38,6 +38,7 @@ export default function DashboardScreen() {
   const [filterLoading, setFilterLoading] = useState(false);
   const [showMetricsInsights, setShowMetricsInsights] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState<any>(null);
+  const [showOnboardingCard, setShowOnboardingCard] = useState(true);
   
   // Date filtering from shared context
   const {
@@ -393,6 +394,54 @@ export default function DashboardScreen() {
         
         {/* Main Content */}
         <View>
+        {/* Onboarding / Get Started Card */}
+        {showOnboardingCard && (
+          <View style={[styles.onboardingCard, { backgroundColor: colors.surface }]}> 
+            <Text style={[styles.onboardingTitle, { color: colors.text }]}>Welcome to your cash flow tracker</Text>
+            <Text style={[styles.onboardingBody, { color: colors.textSecondary }]}
+            >Well help you track money in and out automatically from your M-Pesa and bank messages.</Text>
+
+            <View style={styles.onboardingButtonsRow}>
+              <TouchableOpacity
+                style={[styles.onboardingButtonPrimary, { backgroundColor: colors.primary }]}
+                onPress={() => {
+                  Alert.alert(
+                    'Connect SMS & Notifications',
+                    'Make sure SMS import and notifications are enabled in your settings so we can auto-capture M-Pesa and bank transactions.'
+                  );
+                }}
+              >
+                <Text style={[styles.onboardingButtonTextPrimary, { color: colors.background }]}>Connect SMS & Notifications</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.onboardingButtonSecondary}
+                onPress={() => setShowOnboardingCard(false)}
+              >
+                <Text style={[styles.onboardingButtonTextSecondary, { color: colors.textSecondary }]}>Skip for now</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.onboardingChecklist}>
+              <View style={styles.onboardingChecklistItem}>
+                <Ionicons name="square-outline" size={16} color={colors.textSecondary} />
+                <Text style={[styles.onboardingChecklistText, { color: colors.textSecondary }]}>Enable SMS reading</Text>
+              </View>
+              <View style={styles.onboardingChecklistItem}>
+                <Ionicons name="square-outline" size={16} color={colors.textSecondary} />
+                <Text style={[styles.onboardingChecklistText, { color: colors.textSecondary }]}>Turn on daily summary notifications</Text>
+              </View>
+              <View style={styles.onboardingChecklistItem}>
+                <Ionicons name="square-outline" size={16} color={colors.textSecondary} />
+                <Text style={[styles.onboardingChecklistText, { color: colors.textSecondary }]}>Add your first manual transaction</Text>
+              </View>
+              <View style={styles.onboardingChecklistItem}>
+                <Ionicons name="square-outline" size={16} color={colors.textSecondary} />
+                <Text style={[styles.onboardingChecklistText, { color: colors.textSecondary }]}>View your first report</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
         {/* Animated Circular Metrics */}
         <View style={styles.circularMetricsContainer}>
           <Animated.View entering={FadeInUp.delay(50).springify()} style={styles.circleWrapper}>
@@ -601,11 +650,13 @@ export default function DashboardScreen() {
           </View>
         )}
 
-        {/* Savings Goals */}
-        <SavingsGoals
-          userId={user?.id || ''}
-          totalSavings={netBalance}
-        />
+        {/* Savings Goals temporarily disabled due to backend schema issues */}
+        {false && (
+          <SavingsGoals
+            userId={user?.id || ''}
+            totalSavings={netBalance}
+          />
+        )}
 
         {/* Debug panels removed for production */}
 
@@ -910,6 +961,62 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     flex: 1,
     lineHeight: 16,
+  },
+  onboardingCard: {
+    marginHorizontal: spacing.md,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+  },
+  onboardingTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: '600',
+    marginBottom: spacing.xs,
+  },
+  onboardingBody: {
+    fontSize: fontSize.sm,
+    marginBottom: spacing.md,
+  },
+  onboardingButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  onboardingButtonPrimary: {
+    flex: 1,
+    borderRadius: 999,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  onboardingButtonSecondary: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  onboardingButtonTextPrimary: {
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+  },
+  onboardingButtonTextSecondary: {
+    fontSize: fontSize.sm,
+    fontWeight: '500',
+  },
+  onboardingChecklist: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(148, 163, 184, 0.3)',
+    paddingTop: spacing.sm,
+    gap: spacing.xs,
+  },
+  onboardingChecklistItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  onboardingChecklistText: {
+    fontSize: fontSize.sm,
   },
   lineChartSection: {
     marginHorizontal: spacing.md,

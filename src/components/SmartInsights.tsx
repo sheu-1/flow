@@ -186,7 +186,6 @@ export const SmartInsights: React.FC<Props> = ({ transactions, userId }) => {
 
     const localInsights: Insight[] = [];
 
-    // Spending spike detection
     const thisMonthSpending = thisMonth.filter(t => t.type === 'expense').reduce((sum, t) => sum + Math.abs(t.amount), 0);
     const lastMonthSpending = lastMonth.filter(t => t.type === 'expense').reduce((sum, t) => sum + Math.abs(t.amount), 0);
     
@@ -203,7 +202,6 @@ export const SmartInsights: React.FC<Props> = ({ transactions, userId }) => {
       });
     }
 
-    // Weekend spending pattern
     const weekendSpending = getWeekendSpendingPattern(thisMonth);
     if (weekendSpending.ratio > 0.4) {
       localInsights.push({
@@ -260,13 +258,11 @@ export const SmartInsights: React.FC<Props> = ({ transactions, userId }) => {
 
   if (insights.length === 0) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.surface }]}>
+      <View style={[styles.container, { backgroundColor: colors.surface }]}> 
         <Text style={[styles.title, { color: colors.text }]}>Smart Insights</Text>
         <View style={styles.emptyState}>
           <Ionicons name="analytics" size={48} color={colors.textMuted} />
-          <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-            Keep using the app to unlock personalized insights!
-          </Text>
+          <Text style={[styles.emptyText, { color: colors.textMuted }]}>Once we see a few days of activity, we’ll show smart tips about your spending and income.</Text>
         </View>
       </View>
     );
