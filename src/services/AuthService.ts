@@ -10,6 +10,7 @@ import { supabase, pingSupabase } from './SupabaseClient';
 import { PermissionService } from './PermissionService';
 import { startSmsListener, stopSmsListener } from './SmsService';
 import { registerBackgroundSmsTask, unregisterBackgroundSmsTask } from './BackgroundSms';
+import { notificationService } from './NotificationService';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -281,6 +282,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.warn('[Auth] Failed to start SMS listener:', e);
           }
           try { await registerBackgroundSmsTask(); } catch {}
+          // Schedule daily notifications for signed-in user
+          try { await notificationService.scheduleDailyNotification(session.user.id); } catch {}
         }
       } catch (e) {
         console.error('[Auth] init error:', e);
@@ -313,6 +316,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.warn('Failed to initialize SMS permissions:', error);
           }
           try { await registerBackgroundSmsTask(); } catch {}
+          // Schedule daily notifications whenever user signs in
+          try { await notificationService.scheduleDailyNotification(newSession.user.id); } catch {}
         }
 
         if (event === 'SIGNED_OUT') {

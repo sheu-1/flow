@@ -901,12 +901,59 @@ export default function ReportsScreen() {
                 </ScrollView>
               ) : null}
               
+              {/* Dynamic Tooltip (immediately below bar chart / week nav) */}
+              {barTooltip && (
+                <Animated.View 
+                  entering={FadeInUp.springify()}
+                  exiting={FadeOut.duration(200)}
+                  style={[styles.tooltipContainer, { backgroundColor: colors.surface }]}
+                >
+                  <TouchableOpacity 
+                    style={styles.tooltipClose}
+                    onPress={() => setBarTooltip(null)}
+                  >
+                    <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                  <Text style={[styles.tooltipTitle, { color: colors.text }]}>{barTooltip.label}</Text>
+                  <View style={styles.tooltipRow}>
+                    <View style={styles.tooltipItem}>
+                      <View style={[styles.tooltipDot, { backgroundColor: colors.success }]} />
+                      <Text style={[styles.tooltipLabel, { color: colors.textSecondary }]}>Money In:</Text>
+                      <Text style={[styles.tooltipValue, { color: colors.success }]}> 
+                        {formatCurrency(barTooltip.income)}
+                      </Text>
+                    </View>
+                    <View style={styles.tooltipItem}>
+                      <View style={[styles.tooltipDot, { backgroundColor: colors.danger }]} />
+                      <Text style={[styles.tooltipLabel, { color: colors.textSecondary }]}>Money Out:</Text>
+                      <Text style={[styles.tooltipValue, { color: colors.danger }]}> 
+                        {formatCurrency(barTooltip.expense)}
+                      </Text>
+                    </View>
+                  </View>
+                  {barTooltip.income > barTooltip.expense ? (
+                    <Text style={[styles.tooltipInsight, { color: colors.success }]}> 
+                      ✓ Positive flow: +{formatCurrency(barTooltip.income - barTooltip.expense)}
+                    </Text>
+                  ) : barTooltip.expense > barTooltip.income ? (
+                    <Text style={[styles.tooltipInsight, { color: colors.danger }]}> 
+                      ⚠ Spending exceeded income by {formatCurrency(barTooltip.expense - barTooltip.income)}
+                    </Text>
+                  ) : (
+                    <Text style={[styles.tooltipInsight, { color: colors.textSecondary }]}> 
+                      ⚖ Balanced
+                    </Text>
+                  )}
+                </Animated.View>
+              )}
+
               {/* Time-Series Line Chart: Money In vs Money Out */}
               <View style={styles.lineChartSection}>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>Time Series (In vs Out)</Text>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Line graph of money in against money out</Text>
                 <LineChart
                   data={{
-                    labels: series.labels,
+                    // Daily view: simple fixed hour labels, with 24 at the last tick
+                    labels: period === 'daily' ? ['0', '4', '8', '12', '16', '20', '24'] : series.labels,
                     datasets: [
                       {
                         data: series.income,
@@ -921,7 +968,8 @@ export default function ReportsScreen() {
                     ],
                     legend: ['Money In', 'Money Out'],
                   }}
-                  width={Dimensions.get('window').width - spacing.md * 2}
+                  // Slightly wider than the viewport so the last tick (24) sits on the final grid line
+                  width={Dimensions.get('window').width + spacing.md * 2}
                   height={220}
                   yAxisLabel=""
                   yAxisSuffix=""
@@ -942,55 +990,10 @@ export default function ReportsScreen() {
                     useShadowColorFromDataset: false,
                   }}
                   bezier
-                  style={styles.lineChart}
+                  // Shift left while compensating with extra chart width so 24 remains on the last grid line
+                  style={{ marginLeft: -spacing.md * 2, marginRight: 0 }}
                 />
               </View>
-              
-              {/* Dynamic Tooltip */}
-              {barTooltip && (
-                <Animated.View 
-                  entering={FadeInUp.springify()}
-                  exiting={FadeOut.duration(200)}
-                  style={[styles.tooltipContainer, { backgroundColor: colors.surface }]}
-                >
-                  <TouchableOpacity 
-                    style={styles.tooltipClose}
-                    onPress={() => setBarTooltip(null)}
-                  >
-                    <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
-                  </TouchableOpacity>
-                  <Text style={[styles.tooltipTitle, { color: colors.text }]}>{barTooltip.label}</Text>
-                  <View style={styles.tooltipRow}>
-                    <View style={styles.tooltipItem}>
-                      <View style={[styles.tooltipDot, { backgroundColor: colors.success }]} />
-                      <Text style={[styles.tooltipLabel, { color: colors.textSecondary }]}>Money In:</Text>
-                      <Text style={[styles.tooltipValue, { color: colors.success }]}>
-                        {formatCurrency(barTooltip.income)}
-                      </Text>
-                    </View>
-                    <View style={styles.tooltipItem}>
-                      <View style={[styles.tooltipDot, { backgroundColor: colors.danger }]} />
-                      <Text style={[styles.tooltipLabel, { color: colors.textSecondary }]}>Money Out:</Text>
-                      <Text style={[styles.tooltipValue, { color: colors.danger }]}>
-                        {formatCurrency(barTooltip.expense)}
-                      </Text>
-                    </View>
-                  </View>
-                  {barTooltip.income > barTooltip.expense ? (
-                    <Text style={[styles.tooltipInsight, { color: colors.success }]}>
-                      ✓ Positive flow: +{formatCurrency(barTooltip.income - barTooltip.expense)}
-                    </Text>
-                  ) : barTooltip.expense > barTooltip.income ? (
-                    <Text style={[styles.tooltipInsight, { color: colors.danger }]}>
-                      ⚠ Spending exceeded income by {formatCurrency(barTooltip.expense - barTooltip.income)}
-                    </Text>
-                  ) : (
-                    <Text style={[styles.tooltipInsight, { color: colors.textSecondary }]}>
-                      ⚖ Balanced
-                    </Text>
-                  )}
-                </Animated.View>
-              )}
             </View>
 
 

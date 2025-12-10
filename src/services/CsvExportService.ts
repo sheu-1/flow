@@ -5,7 +5,8 @@
  */
 
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
+// Use legacy filesystem API to keep writeAsStringAsync working on SDK 54+
+import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 import { Transaction } from '../types';
 import { format } from 'date-fns';
@@ -21,22 +22,19 @@ export interface ExportOptions {
  * Convert transactions to CSV format
  */
 function transactionsToCSV(transactions: Transaction[]): string {
-  // CSV Header
-  const header = 'Date,Description,Amount,Type,Category,Provider,Reference\n';
-  
-  // CSV Rows
+  // Minimal CSV Header
+  const header = 'Date,Category,Description,Amount\n';
+
+  // CSV Rows (Date, Category, Description, Amount)
   const rows = transactions.map(transaction => {
     const date = format(new Date(transaction.date), 'yyyy-MM-dd HH:mm:ss');
+    const category = `"${(transaction.category || 'Other').replace(/"/g, '""')}"`;
     const description = `"${(transaction.description || '').replace(/"/g, '""')}"`;
     const amount = transaction.amount.toFixed(2);
-    const type = transaction.type;
-    const category = `"${(transaction.category || 'Other').replace(/"/g, '""')}"`;
-    const provider = '';
-    const reference = transaction.id || '';
-    
-    return `${date},${description},${amount},${type},${category},${provider},${reference}`;
+
+    return `${date},${category},${description},${amount}`;
   }).join('\n');
-  
+
   return header + rows;
 }
 
@@ -82,8 +80,8 @@ export async function exportTransactionsToCSV(
       throw new Error('No transactions to export');
     }
     
-    // Convert to CSV
-    const csvContent = transactionsToCSV(filtered);
+    // Convert to CSV and prepend UTF-8 BOM so Excel opens it correctly
+    const csvContent = '\uFEFF' + transactionsToCSV(filtered);
     
     // Create a blob and share it
     // For web, create a download link
@@ -93,7 +91,7 @@ export async function exportTransactionsToCSV(
 
     // Check if we're on web
     if (typeof window !== 'undefined' && window.document) {
-      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       // Web: Create download link
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -105,9 +103,11 @@ export async function exportTransactionsToCSV(
       URL.revokeObjectURL(url);
     } else {
       // Mobile: Use expo-sharing with expo-file-system
-      const fileUri = `${FileSystem.documentDirectory || ''}${filename}`;
+      const fsAny = FileSystem as any;
+      const baseDir: string = fsAny.documentDirectory || '';
+      const fileUri = `${baseDir}${filename}`;
       await FileSystem.writeAsStringAsync(fileUri, csvContent, {
-        encoding: FileSystem.EncodingType.UTF8,
+        encoding: fsAny.EncodingType?.UTF8 ?? 'utf8',
       });
 
       const canShare = await Sharing.isAvailableAsync();

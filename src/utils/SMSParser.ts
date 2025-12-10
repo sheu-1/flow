@@ -15,8 +15,8 @@ export type ParsedTransaction = {
 
 // Regex patterns
 export const AMOUNT_REGEX = /\b(?:Ksh|KES|KSh|KES\s|Kes\s|USD|US\$|UGX|GHS)\s?([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)/i;
-export const CREDIT_REGEX = /\b(received|credited|deposit|you have received|credited to your account|payment received)\b/i;
-export const DEBIT_REGEX = /\b(sent to|paid|withdrawn|debited|purchase at|payment of|spent)\b/i;
+export const CREDIT_REGEX = /\b(received|credited|deposit|you have received|credited to your account|payment received|transfer from|bank transfer in|incoming bank transfer|account credited)\b/i;
+export const DEBIT_REGEX = /\b(sent to|paid|withdrawn|debited|purchase at|payment of|spent|transfer to|bank transfer|outgoing transfer|account debited)\b/i;
 export const REF_REGEX = /(?:ref\.?|refno|reference(?:\s*number)?|tranid|transaction id|trxid)[:\s\-]*([A-Za-z0-9\-\/]+)/i;
 export const SENDER_REGEX = /(?:from|by|to)\s+([A-Za-z0-9 &\-\.]+)/i;
 

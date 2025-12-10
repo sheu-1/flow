@@ -45,8 +45,12 @@ class NotificationService {
       isRead: false,
     };
 
+    // De-duplicate by type + message to avoid showing repeated identical alerts
+    this.notifications = this.notifications.filter(
+      (n) => !(n.type === newNotification.type && n.message === newNotification.message)
+    );
     this.notifications.unshift(newNotification);
-    
+
     // Keep only the last 10 notifications
     if (this.notifications.length > 10) {
       this.notifications = this.notifications.slice(0, 10);
@@ -240,11 +244,12 @@ class NotificationService {
   async sendDailySummaryNotification(userId: string): Promise<void> {
     try {
       const { moneyIn, moneyOut } = await this.getDailySummary(userId);
+      const netBalance = moneyIn - moneyOut;
 
       await Notifications.scheduleNotificationAsync({
         content: {
           title: '📊 Daily Summary',
-          body: `You received ${moneyIn.toFixed(2)} and spent ${moneyOut.toFixed(2)} today.`,
+          body: `Today: Money In ${moneyIn.toFixed(2)}, Money Out ${moneyOut.toFixed(2)}, Net ${netBalance.toFixed(2)}.`,
           data: { type: 'daily_summary', moneyIn, moneyOut },
         },
         trigger: null, // Send immediately

@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInUp, FadeIn, FadeOut, useAnimatedStyle, withTiming, useSharedValue } from 'react-native-reanimated';
@@ -40,6 +41,8 @@ function TransactionsScreen() {
   const [showPagination, setShowPagination] = useState(true);
   const paginationOpacity = useSharedValue(1);
   const [showExport, setShowExport] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
 
   // Use globally filtered transactions for CSV export (respects custom date filters)
   const { transactions: filteredTransactionsForExport } = useDateFilterContext();
@@ -129,6 +132,14 @@ function TransactionsScreen() {
     (a, b) => new Date(b.date as any).getTime() - new Date(a.date as any).getTime()
   );
 
+  const filteredBySearch = sortedTransactions.filter((tx) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.trim().toLowerCase();
+    const description = (tx.description || '').toLowerCase();
+    const sender = ((tx as any).sender || '').toLowerCase();
+    return description.includes(q) || sender.includes(q);
+  });
+
   const totalPages = Math.ceil(totalTransactions / ITEMS_PER_PAGE);
   const hasNextPage = currentPage < totalPages;
   const hasPrevPage = currentPage > 1;
@@ -207,9 +218,15 @@ function TransactionsScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: colors.text }]}>Transactions</Text>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
+        <View style={styles.headerActions}>
           <TouchableOpacity
-            style={[styles.addButton, { backgroundColor: colors.surface, marginRight: 8 }]}
+            style={[styles.iconButton, { backgroundColor: colors.surface }]}
+            onPress={() => setShowSearch((prev) => !prev)}
+          >
+            <Ionicons name={showSearch ? 'close' : 'search'} size={20} color={colors.text} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.addButton, { backgroundColor: colors.surface }]}
             onPress={() => setShowExport(true)}
           >
             <Ionicons name="download-outline" size={22} color={colors.text} />
@@ -223,6 +240,19 @@ function TransactionsScreen() {
         </View>
       </View>
 
+      {showSearch && (
+        <View style={[styles.searchContainer, { borderColor: colors.border }]}> 
+          <Ionicons name="search" size={18} color={colors.textSecondary} style={{ marginHorizontal: 8 }} />
+          <TextInput
+            style={[styles.searchInput, { color: colors.text }]}
+            placeholder="Search by name or description"
+            placeholderTextColor={colors.textSecondary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+        </View>
+      )}
+
       {loading ? (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator color={colors.primary} />
@@ -230,7 +260,7 @@ function TransactionsScreen() {
       ) : sortedTransactions.length > 0 ? (
         <>
           <FlatList
-            data={sortedTransactions}
+            data={filteredBySearch}
             renderItem={renderTransaction}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
@@ -337,9 +367,21 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   title: {
     fontSize: fontSize.xl,
     fontWeight: 'bold',
+  },
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   addButton: {
     width: 40,
@@ -350,6 +392,19 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     paddingBottom: spacing.xs,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingRight: 12,
   },
   emptyState: {
     flex: 1,

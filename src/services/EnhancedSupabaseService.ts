@@ -177,17 +177,27 @@ async function detectDuplicate(userId: string, parsed: ParsedTransaction) {
     if (!error && data && data.length > 0) return data[0];
   }
 
-  // Fallback: check by amount and time window
+  // Fallback: check by amount and time window, and try to match on original message
   const { data, error } = await supabase
     .from('transactions')
-    .select('id, amount, date')
+    .select('id, amount, date, metadata')
     .eq('user_id', userId)
     .eq('amount', parsed.amount)
     .gte('date', minus5)
     .lte('date', plus5)
-    .limit(1);
-  if (!error && data && data.length > 0) return data[0];
-  
+    .limit(20);
+
+  if (!error && data && data.length > 0) {
+    const normalizedMsg = (parsed.message || '').trim().toLowerCase();
+    if (normalizedMsg) {
+      const withSameMessage = data.find((row: any) => {
+        const existingMsg = (row.metadata?.message || '').trim().toLowerCase();
+        return existingMsg === normalizedMsg;
+      });
+      if (withSameMessage) return withSameMessage;
+    }
+  }
+
   return null;
 }
 
