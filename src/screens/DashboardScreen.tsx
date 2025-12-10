@@ -21,6 +21,8 @@ import { spacing, fontSize, borderRadius } from '../theme/colors';
 import { useDateFilterContext } from '../contexts/DateFilterContext';
 import { getSubscriptionStatus, shouldShowSubscriptionPrompt } from '../services/SubscriptionManager';
 import Animated, { FadeInUp } from 'react-native-reanimated';
+import { Dimensions } from 'react-native';
+import { LineChart } from 'react-native-chart-kit';
 
 // Enable detailed logging
 console.log('🚀 DashboardScreen loading...');
@@ -223,6 +225,117 @@ export default function DashboardScreen() {
   const maxAmount = Math.max(moneyIn, moneyOut);
 
   const displayName = user?.user_metadata?.username || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User';
+
+  // Build a simple time-series of total transaction counts, mirroring Reports bucketing
+  const transactionCountSeries = useMemo(() => {
+    const labels: string[] = [];
+    const counts: number[] = [];
+
+    if (!filteredTransactions || filteredTransactions.length === 0) {
+      return { labels, counts };
+    }
+
+    const rangeStart = new Date(dateRange.startDate);
+    rangeStart.setHours(0, 0, 0, 0);
+    const rangeEnd = new Date(dateRange.endDate);
+    rangeEnd.setHours(23, 59, 59, 999);
+
+    if (selectedPeriod === 'daily') {
+      // 24 hourly buckets for the last day in the range
+      const dayStart = new Date(rangeEnd);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(rangeEnd);
+      dayEnd.setHours(23, 59, 59, 999);
+
+      const dayTx = filteredTransactions.filter((t) => {
+        const dt = new Date(t.date);
+        return dt >= dayStart && dt <= dayEnd;
+      });
+
+      for (let h = 0; h < 24; h++) {
+        const hStart = new Date(dayStart);
+        hStart.setHours(h, 0, 0, 0);
+        const hEnd = new Date(dayStart);
+        hEnd.setHours(h, 59, 59, 999);
+
+        labels.push(`${h}`);
+        const bucket = dayTx.filter((t) => {
+          const dt = new Date(t.date);
+          return dt >= hStart && dt <= hEnd;
+        });
+        counts.push(bucket.length);
+      }
+    } else if (selectedPeriod === 'weekly') {
+      // 7 day buckets for the week anchored at rangeEnd (Mon-Sun)
+      const weekStart = new Date(rangeEnd);
+      weekStart.setHours(0, 0, 0, 0);
+      const dayOfWeek = weekStart.getDay();
+      const diffToMonday = (dayOfWeek + 6) % 7;
+      weekStart.setDate(weekStart.getDate() - diffToMonday);
+
+      for (let i = 0; i < 7; i++) {
+        const dayStart = new Date(weekStart);
+        dayStart.setDate(weekStart.getDate() + i);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(dayStart);
+        dayEnd.setHours(23, 59, 59, 999);
+
+        const clampedStart = dayStart < rangeStart ? rangeStart : dayStart;
+        const clampedEnd = dayEnd > rangeEnd ? rangeEnd : dayEnd;
+
+        const label = dayStart.toLocaleDateString('en-US', { weekday: 'short' });
+        labels.push(label);
+
+        const bucket = filteredTransactions.filter((t) => {
+          const dt = new Date(t.date);
+          return dt >= clampedStart && dt <= clampedEnd;
+        });
+        counts.push(bucket.length);
+      }
+    } else if (selectedPeriod === 'monthly') {
+      // Months of the current year containing rangeEnd (Jan-Dec)
+      const currentYear = rangeEnd.getFullYear();
+
+      for (let m = 0; m < 12; m++) {
+        const monthStart = new Date(currentYear, m, 1, 0, 0, 0, 0);
+        const monthEnd = new Date(currentYear, m + 1, 0, 23, 59, 59, 999);
+
+        const clampedStart = monthStart < rangeStart ? rangeStart : monthStart;
+        const clampedEnd = monthEnd > rangeEnd ? rangeEnd : monthEnd;
+
+        const label = monthStart.toLocaleDateString('en-US', { month: 'short' });
+        labels.push(label);
+
+        const bucket = filteredTransactions.filter((t) => {
+          const dt = new Date(t.date);
+          return dt >= clampedStart && dt <= clampedEnd;
+        });
+        counts.push(bucket.length);
+      }
+    } else if (selectedPeriod === 'yearly') {
+      // Years from 2024 to current year
+      const currentYear = new Date().getFullYear();
+      const startYear = 2024;
+
+      for (let y = startYear; y <= currentYear; y++) {
+        const yearStart = new Date(y, 0, 1, 0, 0, 0, 0);
+        const yearEnd = new Date(y, 11, 31, 23, 59, 59, 999);
+
+        const clampedStart = yearStart < rangeStart ? rangeStart : yearStart;
+        const clampedEnd = yearEnd > rangeEnd ? rangeEnd : yearEnd;
+
+        labels.push(String(y));
+
+        const bucket = filteredTransactions.filter((t) => {
+          const dt = new Date(t.date);
+          return dt >= clampedStart && dt <= clampedEnd;
+        });
+        counts.push(bucket.length);
+      }
+    }
+
+    return { labels, counts };
+  }, [filteredTransactions, dateRange, selectedPeriod]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -441,6 +554,52 @@ export default function DashboardScreen() {
           transactions={filteredTransactions}
           userId={user?.id || ''}
         />
+
+        {/* Total Transactions Line Graph */}
+        {transactionCountSeries.labels.length > 0 && (
+          <View style={styles.lineChartSection}>
+            <Text style={[styles.lineChartTitle, { color: colors.text }]}>Trend of total transactions</Text>
+            <LineChart
+              data={{
+                // Daily view: match Reports daily styling with fixed hour labels
+                labels:
+                  selectedPeriod === 'daily'
+                    ? ['0', '4', '8', '12', '16', '20', '24']
+                    : transactionCountSeries.labels,
+                datasets: [
+                  {
+                    data: transactionCountSeries.counts,
+                    color: () => colors.primary,
+                    strokeWidth: 2,
+                  },
+                ],
+              }}
+              // Slightly wider than the viewport so the last tick (24) sits on the final grid line
+              width={Dimensions.get('window').width + spacing.md * 2}
+              height={220}
+              fromZero
+              chartConfig={{
+                backgroundColor: 'transparent',
+                backgroundGradientFrom: colors.background,
+                backgroundGradientTo: colors.background,
+                decimalPlaces: 0,
+                color: (opacity = 1) => `rgba(148, 163, 184, ${opacity})`,
+                labelColor: (opacity = 1) => `rgba(148, 163, 184, ${opacity})`,
+                propsForDots: {
+                  r: '2',
+                },
+                propsForBackgroundLines: {
+                  stroke: colors.border,
+                  strokeDasharray: '4 4',
+                },
+                useShadowColorFromDataset: false,
+              }}
+              bezier
+              // Shift left while compensating with extra chart width so the last tick remains on the last grid line
+              style={{ marginLeft: -spacing.md * 2, marginRight: 0, borderRadius: borderRadius.lg }}
+            />
+          </View>
+        )}
 
         {/* Savings Goals */}
         <SavingsGoals
@@ -751,5 +910,17 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     flex: 1,
     lineHeight: 16,
+  },
+  lineChartSection: {
+    marginHorizontal: spacing.md,
+    marginTop: spacing.lg,
+  },
+  lineChartTitle: {
+    fontSize: fontSize.md,
+    fontWeight: '600',
+    marginBottom: spacing.sm,
+  },
+  lineChart: {
+    borderRadius: borderRadius.lg,
   },
 });
