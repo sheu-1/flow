@@ -180,7 +180,7 @@ async function detectDuplicate(userId: string, parsed: ParsedTransaction) {
   // Fallback: check by amount and time window, and try to match on original message
   const { data, error } = await supabase
     .from('transactions')
-    .select('id, amount, date, metadata')
+    .select('id, amount, date, metadata, sender, description')
     .eq('user_id', userId)
     .eq('amount', parsed.amount)
     .gte('date', minus5)
@@ -189,6 +189,8 @@ async function detectDuplicate(userId: string, parsed: ParsedTransaction) {
 
   if (!error && data && data.length > 0) {
     const normalizedMsg = (parsed.message || '').trim().toLowerCase();
+    const normalizedSender = (parsed.sender || '').trim().toLowerCase();
+    const normalizedDescription = generateDescription(parsed).trim().toLowerCase();
     if (normalizedMsg) {
       const withSameMessage = data.find((row: any) => {
         const existingMsg = (row.metadata?.message || '').trim().toLowerCase();
@@ -196,6 +198,17 @@ async function detectDuplicate(userId: string, parsed: ParsedTransaction) {
       });
       if (withSameMessage) return withSameMessage;
     }
+
+    // Additional guard: match on sender or generated description within the same time/amount window
+    const withSameSenderOrDescription = data.find((row: any) => {
+      const rowSender = (row.sender || row.metadata?.original_sender || '').trim().toLowerCase();
+      const rowDescription = (row.description || '').trim().toLowerCase();
+      if (normalizedSender && rowSender && rowSender === normalizedSender) return true;
+      if (normalizedDescription && rowDescription && rowDescription === normalizedDescription) return true;
+      return false;
+    });
+
+    if (withSameSenderOrDescription) return withSameSenderOrDescription;
   }
 
   return null;

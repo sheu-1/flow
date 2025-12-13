@@ -724,17 +724,7 @@ export default function ReportsScreen() {
           <View style={{ paddingVertical: spacing.xl }}>
             <ActivityIndicator color={colors.primary} />
           </View>
-        ) : series.labels.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>We couldn’t find transactions for this date range.</Text>
-            <View style={{ marginTop: spacing.sm }}>
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Try:</Text>
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>- Widening the date range</Text>
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>- Adding a transaction</Text>
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>- Turning on SMS import</Text>
-            </View>
-          </View>
-        ) : (
+        ) : series.labels.length === 0 ? null : (
           <View style={{ paddingHorizontal: spacing.md }}>
             {/* Pie Chart Summary */}
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Period Overview</Text>
@@ -814,8 +804,19 @@ export default function ReportsScreen() {
               
               {/* Week Navigation Below Bars - Weekly Only */}
               {period === 'weekly' && windowRange && (() => {
-                // Allow navigating current week plus previous 3 weeks using the same weekly bar graph
-                const maxWeeksBack = 3;
+                // Allow navigating back as many weeks as there is data
+                let maxWeeksBack = 0;
+                if (filteredTransactions && filteredTransactions.length > 0) {
+                  const earliestTx = filteredTransactions.reduce<Date | null>((min, t) => {
+                    const dt = new Date(t.date);
+                    return !min || dt < min ? dt : min;
+                  }, null);
+                  if (earliestTx) {
+                    const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+                    const diffMs = new Date().getTime() - earliestTx.getTime();
+                    maxWeeksBack = diffMs > 0 ? Math.floor(diffMs / msPerWeek) : 0;
+                  }
+                }
 
                 return (
                   <View style={styles.weekNavigationBelow}>
@@ -1241,6 +1242,10 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: fontSize.md,
+  },
+  lineChartSection: {
+    marginTop: spacing.lg,
+    marginBottom: spacing.lg,
   },
   chartContainer: {
     backgroundColor: 'transparent',

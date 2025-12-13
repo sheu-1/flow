@@ -31,6 +31,7 @@ import { CurrencyProvider } from './src/services/CurrencyProvider';
 import { ThemeProvider, useTheme } from './src/theme/ThemeProvider';
 import { DateFilterProvider } from './src/contexts/DateFilterContext';
 import AuthScreen from './src/screens/AuthScreen';
+import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
 // import { SplashScreen as CustomSplashScreen } from './src/components/SplashScreen'; // Commented out
 // Debug panel removed from production UI
 
@@ -151,7 +152,7 @@ function MainTabNavigator() {
 }
 
 function AppContainer() {
-  const { user, loading } = useAuth();
+  const { user, loading, needsPasswordReset } = useAuth();
   const { colors } = useTheme();
   const [trialExpired, setTrialExpired] = React.useState(false);
   const [showSplash, setShowSplash] = React.useState(true);
@@ -191,6 +192,10 @@ function AppContainer() {
         <Text style={{ color: colors.text, fontSize: 18 }}>Loading...</Text>
       </View>
     );
+  }
+
+  if (needsPasswordReset) {
+    return <ResetPasswordScreen />;
   }
 
   if (!user) {

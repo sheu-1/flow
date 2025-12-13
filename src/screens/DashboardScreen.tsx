@@ -38,7 +38,6 @@ export default function DashboardScreen() {
   const [filterLoading, setFilterLoading] = useState(false);
   const [showMetricsInsights, setShowMetricsInsights] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState<any>(null);
-  const [showOnboardingCard, setShowOnboardingCard] = useState(true);
   
   // Date filtering from shared context
   const {
@@ -394,54 +393,6 @@ export default function DashboardScreen() {
         
         {/* Main Content */}
         <View>
-        {/* Onboarding / Get Started Card */}
-        {showOnboardingCard && (
-          <View style={[styles.onboardingCard, { backgroundColor: colors.surface }]}> 
-            <Text style={[styles.onboardingTitle, { color: colors.text }]}>Welcome to your cash flow tracker</Text>
-            <Text style={[styles.onboardingBody, { color: colors.textSecondary }]}
-            >Well help you track money in and out automatically from your M-Pesa and bank messages.</Text>
-
-            <View style={styles.onboardingButtonsRow}>
-              <TouchableOpacity
-                style={[styles.onboardingButtonPrimary, { backgroundColor: colors.primary }]}
-                onPress={() => {
-                  Alert.alert(
-                    'Connect SMS & Notifications',
-                    'Make sure SMS import and notifications are enabled in your settings so we can auto-capture M-Pesa and bank transactions.'
-                  );
-                }}
-              >
-                <Text style={[styles.onboardingButtonTextPrimary, { color: colors.background }]}>Connect SMS & Notifications</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.onboardingButtonSecondary}
-                onPress={() => setShowOnboardingCard(false)}
-              >
-                <Text style={[styles.onboardingButtonTextSecondary, { color: colors.textSecondary }]}>Skip for now</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.onboardingChecklist}>
-              <View style={styles.onboardingChecklistItem}>
-                <Ionicons name="square-outline" size={16} color={colors.textSecondary} />
-                <Text style={[styles.onboardingChecklistText, { color: colors.textSecondary }]}>Enable SMS reading</Text>
-              </View>
-              <View style={styles.onboardingChecklistItem}>
-                <Ionicons name="square-outline" size={16} color={colors.textSecondary} />
-                <Text style={[styles.onboardingChecklistText, { color: colors.textSecondary }]}>Turn on daily summary notifications</Text>
-              </View>
-              <View style={styles.onboardingChecklistItem}>
-                <Ionicons name="square-outline" size={16} color={colors.textSecondary} />
-                <Text style={[styles.onboardingChecklistText, { color: colors.textSecondary }]}>Add your first manual transaction</Text>
-              </View>
-              <View style={styles.onboardingChecklistItem}>
-                <Ionicons name="square-outline" size={16} color={colors.textSecondary} />
-                <Text style={[styles.onboardingChecklistText, { color: colors.textSecondary }]}>View your first report</Text>
-              </View>
-            </View>
-          </View>
-        )}
-
         {/* Animated Circular Metrics */}
         <View style={styles.circularMetricsContainer}>
           <Animated.View entering={FadeInUp.delay(50).springify()} style={styles.circleWrapper}>

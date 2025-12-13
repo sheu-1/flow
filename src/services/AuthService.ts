@@ -227,6 +227,9 @@ export interface AuthContextValue {
   signUp: (email: string, password: string, username?: string, phoneNumber?: string, country?: string) => Promise<void>;
   signInWithGoogle: () => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<void>;
+  needsPasswordReset: boolean;
+  updatePassword: (newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -235,6 +238,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [needsPasswordReset, setNeedsPasswordReset] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -301,6 +305,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log('[Auth] onAuthStateChange:', event);
         setSession(newSession);
         setUser(newSession?.user ?? null);
+        if (event === 'PASSWORD_RECOVERY') {
+          console.log('[Auth] PASSWORD_RECOVERY event received');
+          setNeedsPasswordReset(true);
+        }
         
         // Any auth event means we have a definitive state; stop loading
         // This prevents the UI from being stuck on the loading screen when the initial
@@ -323,6 +331,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (event === 'SIGNED_OUT') {
           try { stopSmsListener(); smsStarted = false; } catch {}
           try { await unregisterBackgroundSmsTask(); } catch {}
+          setNeedsPasswordReset(false);
         }
       }
     );
@@ -438,6 +447,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try { await unregisterBackgroundSmsTask(); } catch {}
       } finally {
         setLoading(false);
+      }
+    },
+    requestPasswordReset: async (email: string) => {
+      // Do not flip global loading spinner; show local feedback in the UI instead
+      try {
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+        if (error) throw error;
+      } catch (error) {
+        const message = (error as any)?.message || 'Failed to send reset email';
+        throw new Error(message);
+      }
+    },
+    needsPasswordReset,
+    updatePassword: async (newPassword: string) => {
+      try {
+        const { error } = await supabase.auth.updateUser({ password: newPassword });
+        if (error) throw error;
+        setNeedsPasswordReset(false);
+      } catch (error) {
+        const message = (error as any)?.message || 'Failed to update password';
+        throw new Error(message);
       }
     },
   };

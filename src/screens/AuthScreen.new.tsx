@@ -18,7 +18,7 @@ import { useTheme } from '../theme/ThemeProvider';
 type AuthMode = 'signin' | 'signup';
 
 const AuthScreen: React.FC = () => {
-  const { signIn, signUp, signInWithGoogle, loading } = useAuth();
+  const { signIn, signUp, signInWithGoogle, requestPasswordReset, loading } = useAuth();
   const { colors } = useTheme();
   
   const [mode, setMode] = useState<AuthMode>('signin');
@@ -30,6 +30,8 @@ const AuthScreen: React.FC = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [resetSending, setResetSending] = useState(false);
+  const [showResetView, setShowResetView] = useState(false);
 
   const validateEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -88,7 +90,37 @@ const AuthScreen: React.FC = () => {
     }
   };
 
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      setError('Please enter your email first to reset your password');
+      return;
+    }
+    if (!validateEmail(email.trim())) {
+      setError('Please enter a valid email address');
+      return;
+    }
+
+    setError(null);
+    setResetSending(true);
+    try {
+      await requestPasswordReset(email.trim());
+      Alert.alert(
+        'Check your email',
+        'If an account exists for this email, we\'ve sent a link to reset your password.'
+      );
+    } catch (e: any) {
+      setError(e?.message || 'Failed to send reset email. Please try again.');
+    } finally {
+      setResetSending(false);
+    }
+  };
+
   const toggleMode = () => {
+    if (showResetView) {
+      setShowResetView(false);
+      setError(null);
+      return;
+    }
     setMode(mode === 'signin' ? 'signup' : 'signin');
     setError(null);
     setPassword('');
@@ -125,10 +157,16 @@ const AuthScreen: React.FC = () => {
             <Ionicons name="wallet" size={48} color={colors.primary} />
           </View>
           <Text style={[styles.title, { color: colors.text }]}>
-            {mode === 'signin' ? 'Welcome Back' : 'Create Account'}
+            {showResetView
+              ? 'Reset Password'
+              : mode === 'signin'
+              ? 'Welcome Back'
+              : 'Create Account'}
           </Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            {mode === 'signin'
+            {showResetView
+              ? 'Enter your email and we\'ll send you a reset link'
+              : mode === 'signin'
               ? 'Sign in to manage your cash flow'
               : 'Start tracking your finances today'}
           </Text>
@@ -136,6 +174,60 @@ const AuthScreen: React.FC = () => {
 
         {/* Form Card */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          {/* Reset Password View */}
+          {showResetView ? (
+            <>
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, { color: colors.textSecondary }]}>Email</Text>
+                <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <Ionicons name="mail-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
+                  <TextInput
+                    style={[styles.input, { color: colors.text }]}
+                    placeholder="you@example.com"
+                    placeholderTextColor={colors.textMuted}
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </View>
+              </View>
+
+              {error && (
+                <View style={[styles.errorContainer, { backgroundColor: colors.danger + '15', borderColor: colors.danger }]}>
+                  <Ionicons name="alert-circle" size={20} color={colors.danger} />
+                  <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={[
+                  styles.submitButton,
+                  { backgroundColor: resetSending ? colors.inactive : colors.primary },
+                ]}
+                onPress={handleForgotPassword}
+                disabled={resetSending}
+              >
+                {resetSending ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.submitButtonText}>Send reset link</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.toggleButton}
+                onPress={() => {
+                  setShowResetView(false);
+                  setError(null);
+                }}
+              >
+                <Text style={[styles.toggleText, { color: colors.textSecondary }]}>Back to sign in</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
           {/* Username (signup only) */}
           {mode === 'signup' && (
             <View style={styles.inputGroup}>
@@ -200,6 +292,20 @@ const AuthScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
           </View>
+
+          {/* Forgot Password (sign-in only) */}
+          {mode === 'signin' && (
+            <TouchableOpacity
+              style={styles.forgotPasswordButton}
+              onPress={() => {
+                setShowResetView(true);
+                setError(null);
+              }}
+              disabled={loading}
+            >
+              <Text style={[styles.forgotPasswordText, { color: colors.primary }]}>Forgot password?</Text>
+            </TouchableOpacity>
+          )}
 
           {/* Confirm Password (signup only) */}
           {mode === 'signup' && (
@@ -290,14 +396,18 @@ const AuthScreen: React.FC = () => {
           </TouchableOpacity>
 
           {/* Toggle Mode */}
-          <TouchableOpacity onPress={toggleMode} style={styles.toggleButton}>
-            <Text style={[styles.toggleText, { color: colors.textSecondary }]}>
-              {mode === 'signin' ? "Don't have an account? " : 'Already have an account? '}
-              <Text style={{ color: colors.primary, fontWeight: '600' }}>
-                {mode === 'signin' ? 'Sign Up' : 'Sign In'}
+          {!showResetView && (
+            <TouchableOpacity onPress={toggleMode} style={styles.toggleButton}>
+              <Text style={[styles.toggleText, { color: colors.textSecondary }]}>
+                {mode === 'signin' ? "Don't have an account? " : 'Already have an account? '}
+                <Text style={{ color: colors.primary, fontWeight: '600' }}>
+                  {mode === 'signin' ? 'Sign Up' : 'Sign In'}
+                </Text>
               </Text>
-            </Text>
-          </TouchableOpacity>
+            </TouchableOpacity>
+          )}
+          </>
+          )}
         </View>
 
         {/* Footer */}
@@ -436,6 +546,15 @@ const styles = StyleSheet.create({
   googleButtonText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  forgotPasswordButton: {
+    alignSelf: 'flex-end',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  forgotPasswordText: {
+    fontSize: 13,
+    fontWeight: '500',
   },
   footer: {
     fontSize: 12,
