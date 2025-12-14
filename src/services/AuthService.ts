@@ -452,7 +452,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     requestPasswordReset: async (email: string) => {
       // Do not flip global loading spinner; show local feedback in the UI instead
       try {
-        const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+        const redirectTo = makeRedirectUri({
+          // Use the same scheme family as other auth flows (see signInWithGoogle above)
+          scheme: 'cashflowtracker',
+          path: 'reset-password',
+        });
+
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo,
+        });
         if (error) throw error;
       } catch (error) {
         const message = (error as any)?.message || 'Failed to send reset email';

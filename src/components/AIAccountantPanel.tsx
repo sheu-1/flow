@@ -112,8 +112,8 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.select({ ios: 90, android: 0 })}
+        behavior={Platform.select({ ios: 'padding', android: 'height' })}
+        keyboardVerticalOffset={Platform.select({ ios: 90, android: 50 })}
         style={styles.keyboardView}
       >
         {/* Chat Messages */}

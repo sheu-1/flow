@@ -172,9 +172,16 @@ async function detectDuplicate(userId: string, parsed: ParsedTransaction) {
       .from('transactions')
       .select('id')
       .eq('user_id', userId)
-      .eq('reference_number', parsed.reference)
+      .or(
+        `reference_number.eq.${parsed.reference},` +
+        `metadata->>reference.eq.${parsed.reference}`
+      )
       .limit(1);
     if (!error && data && data.length > 0) return data[0];
+
+    // If we have a reference but no existing row, we intentionally do NOT fall back to
+    // amount/time matching. The reference is the single source of truth for de-duplication.
+    return null;
   }
 
   // Fallback: check by amount and time window, and try to match on original message
