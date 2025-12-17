@@ -157,6 +157,59 @@ class NotificationService {
   }
 
   /**
+   * Register this device's Expo push token for the current user.
+   * Stores the token in Supabase.notification_tokens, avoiding duplicates.
+   */
+  async registerPushToken(userId: string): Promise<void> {
+    try {
+      if (!userId) return;
+
+      // Check existing permission first
+      const perm = await Notifications.getPermissionsAsync();
+      let finalStatus = perm.status;
+      if (finalStatus !== 'granted') {
+        const req = await Notifications.requestPermissionsAsync();
+        finalStatus = req.status;
+      }
+
+      if (finalStatus !== 'granted') {
+        console.log('Push token registration skipped: notification permission not granted');
+        return;
+      }
+
+      const tokenResponse = await Notifications.getExpoPushTokenAsync();
+      const expoPushToken = tokenResponse.data;
+      if (!expoPushToken) {
+        console.warn('Failed to obtain Expo push token');
+        return;
+      }
+
+      const platform = Platform.OS;
+
+      const { error } = await supabase
+        .from('notification_tokens')
+        .upsert(
+          {
+            user_id: userId,
+            expo_push_token: expoPushToken,
+            platform,
+          },
+          {
+            onConflict: 'expo_push_token',
+          }
+        );
+
+      if (error) {
+        console.error('Error saving push token to Supabase:', error);
+      } else {
+        console.log('Expo push token registered successfully');
+      }
+    } catch (error) {
+      console.error('Error during push token registration:', error);
+    }
+  }
+
+  /**
    * Schedule daily notification at 11:55 PM
    * Shows total Money In and Money Out for the day
    */

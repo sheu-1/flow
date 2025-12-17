@@ -19,6 +19,10 @@ export const CREDIT_REGEX = /\b(received|credited|deposit|you have received|cred
 export const DEBIT_REGEX = /\b(sent to|paid|withdrawn|debited|purchase at|payment of|spent|transfer to|bank transfer|outgoing transfer|account debited)\b/i;
 export const REF_REGEX = /(?:ref\.?|refno|reference(?:\s*number)?|tranid|transaction id|trxid)[:\s\-]*([A-Za-z0-9\-\/]+)/i;
 export const SENDER_REGEX = /(?:from|by|to)\s+([A-Za-z0-9 &\-\.]+)/i;
+// Bank names like "KCB Bank", "Equity Bank" etc. using the user's * bank pattern idea
+export const BANK_NAME_REGEX = /\b([A-Za-z0-9 &]+?\s+bank)\b/i;
+// Airtel Money specific keyword
+export const AIRTEL_MONEY_REGEX = /\bairtel\s*money\b/i;
 
 function parseAmount(body: string): number | null {
   const m = body.match(AMOUNT_REGEX);
@@ -48,7 +52,18 @@ function parseSender(body: string): string | null {
     // Trim trailing punctuation
     return m[1].trim().replace(/[.,;]+$/, '');
   }
-  // Fallback: try first 20 chars before amount or generic prefix
+  // Fallback 1: Airtel Money
+  if (AIRTEL_MONEY_REGEX.test(body)) {
+    return 'Airtel Money';
+  }
+
+  // Fallback 2: generic bank name using "* bank" pattern
+  const bankMatch = body.match(BANK_NAME_REGEX);
+  if (bankMatch && bankMatch[1]) {
+    return bankMatch[1].trim();
+  }
+
+  // Fallback: no reliable sender
   return null;
 }
 

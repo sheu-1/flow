@@ -288,6 +288,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           try { await registerBackgroundSmsTask(); } catch {}
           // Schedule daily notifications for signed-in user
           try { await notificationService.scheduleDailyNotification(session.user.id); } catch {}
+          // Register Expo push token for this user
+          try { await notificationService.registerPushToken(session.user.id); } catch {}
         }
       } catch (e) {
         console.error('[Auth] init error:', e);
@@ -326,6 +328,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           try { await registerBackgroundSmsTask(); } catch {}
           // Schedule daily notifications whenever user signs in
           try { await notificationService.scheduleDailyNotification(newSession.user.id); } catch {}
+          // Register Expo push token whenever user signs in
+          try { await notificationService.registerPushToken(newSession.user.id); } catch {}
         }
 
         if (event === 'SIGNED_OUT') {

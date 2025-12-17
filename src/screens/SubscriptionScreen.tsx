@@ -245,8 +245,7 @@ export default function SubscriptionScreen() {
     {
       id: 'daily' as SubscriptionPlan,
       title: 'Daily Plan',
-      // Set a very small USD value so converted KES amount is ~1 shilling for testing
-      price: '$0.01',
+      price: '$0.25',
       period: 'day',
       features: [
         'Everything in Free Trial',
