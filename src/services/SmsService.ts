@@ -12,6 +12,34 @@ type SmsListenerModule = {
   addListener: (cb: (msg: { originatingAddress?: string; body: string; timestamp?: number }) => void) => { remove: () => void };
 };
 
+ const inFlightSmsIds = new Set<string>();
+ const recentSmsIds = new Map<string, number>();
+ const RECENT_SMS_TTL_MS = 5 * 60 * 1000;
+
+ function hashString(input: string): string {
+   let hash = 0;
+   for (let i = 0; i < input.length; i++) {
+     hash = (hash << 5) - hash + input.charCodeAt(i);
+     hash |= 0;
+   }
+   return (hash >>> 0).toString(16);
+ }
+
+ function getSmsId(raw: RawSms, userId: string): string {
+   const ts = raw.date != null ? String(raw.date) : '';
+   const from = raw.originatingAddress ?? '';
+   const body = (raw.body ?? '').trim();
+   return `${userId}:${ts}:${from}:${hashString(body)}`;
+ }
+
+ function pruneRecentSms(now: number) {
+   for (const [key, seenAt] of recentSmsIds.entries()) {
+     if (now - seenAt > RECENT_SMS_TTL_MS) {
+       recentSmsIds.delete(key);
+     }
+   }
+ }
+
 // react-native-get-sms-android: allows querying SMS inbox (fallback/polling)
 type SmsAndroidModule = {
   list: (
@@ -217,17 +245,34 @@ export function stopSmsListener() {
 
 export async function processSmsAndSave(raw: RawSms): Promise<void> {
   try {
-    const parsed = parseTransactionFromSms(raw.body, raw.date ? new Date(raw.date).toISOString() : undefined);
-    if (!parsed) return; // not a transaction message
     const { data } = await supabase.auth.getUser();
     const userId = data.user?.id;
     if (!userId) {
       console.warn('[SMS] No authenticated user; skipping insert');
       return;
     }
-    const res = await insertTransactionEnhanced(parsed, userId);
-    if (!res.success) {
-      console.warn('[SMS] Supabase insert failed', res.error);
+
+    const now = Date.now();
+    pruneRecentSms(now);
+    const smsId = getSmsId(raw, userId);
+    if (inFlightSmsIds.has(smsId) || recentSmsIds.has(smsId)) {
+      return;
+    }
+
+    inFlightSmsIds.add(smsId);
+    try {
+      const parsed = parseTransactionFromSms(raw.body, raw.date ? new Date(raw.date).toISOString() : undefined);
+      if (!parsed) return;
+
+      const res = await insertTransactionEnhanced(parsed, userId);
+      if (!res.success) {
+        console.warn('[SMS] Supabase insert failed', res.error);
+        return;
+      }
+
+      recentSmsIds.set(smsId, now);
+    } finally {
+      inFlightSmsIds.delete(smsId);
     }
   } catch (e) {
     console.warn('[SMS] processSmsAndSave error', e);

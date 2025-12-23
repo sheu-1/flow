@@ -8,6 +8,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar, View, Text } from 'react-native';
+import * as Linking from 'expo-linking';
 import { colors as DarkColors } from './src/theme/colors';
 import * as SplashScreen from 'expo-splash-screen';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
@@ -156,6 +157,37 @@ function AppContainer() {
   const { colors } = useTheme();
   const [trialExpired, setTrialExpired] = React.useState(false);
   const [showSplash, setShowSplash] = React.useState(true);
+
+  // Handle deep links for password reset
+  useEffect(() => {
+    const handleDeepLink = async (url: string) => {
+      try {
+        const parsed = Linking.parse(url);
+        // Check if this is a password reset link
+        if (parsed.path === 'reset-password' || parsed.hostname === 'reset-password') {
+          // The URL contains hash fragments with access_token and type=recovery
+          // Supabase auth listener will automatically detect this and fire PASSWORD_RECOVERY
+          console.log('[DeepLink] Password reset link detected');
+        }
+      } catch (e) {
+        console.warn('[DeepLink] Error parsing URL:', e);
+      }
+    };
+
+    // Handle initial URL (app opened from link)
+    Linking.getInitialURL().then((url) => {
+      if (url) handleDeepLink(url);
+    });
+
+    // Handle URL when app is already open
+    const subscription = Linking.addEventListener('url', (event) => {
+      handleDeepLink(event.url);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   // Check trial status when user logs in
   useEffect(() => {

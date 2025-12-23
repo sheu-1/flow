@@ -22,7 +22,7 @@ type PaymentMethod = 'card' | 'mpesa';
 
 export default function PaymentMethodScreen() {
   const colors = useThemeColors();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const route = useRoute<PaymentMethodRouteProp>();
   const { user } = useAuth();
   
@@ -90,6 +90,10 @@ export default function PaymentMethodScreen() {
       });
 
       if (result.success) {
+        if (!result.authorization_url || !result.reference) {
+          Alert.alert('Payment Error', 'Missing payment authorization details. Please try again.');
+          return;
+        }
         if (selectedMethod === 'mpesa') {
           // For M-Pesa, show instructions and navigate to verification
           Alert.alert(
@@ -100,24 +104,24 @@ export default function PaymentMethodScreen() {
                 text: 'OK',
                 onPress: () => {
                   // Navigate to payment verification screen
-                  navigation.navigate('PaymentWebView' as never, {
+                  navigation.navigate('PaymentWebView', {
                     url: result.authorization_url,
                     reference: result.reference,
                     plan,
                     amount,
-                  } as never);
+                  });
                 },
               },
             ]
           );
         } else {
           // For card payments, navigate to WebView
-          navigation.navigate('PaymentWebView' as never, {
+          navigation.navigate('PaymentWebView', {
             url: result.authorization_url,
             reference: result.reference,
             plan,
             amount,
-          } as never);
+          });
         }
       } else {
         Alert.alert('Payment Failed', result.message || 'Please try again.');

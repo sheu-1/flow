@@ -27,6 +27,7 @@ export interface GetTransactionsParams {
   offset?: number;
   from?: Date | string;
   to?: Date | string;
+  search?: string;
 }
 
 function toISO(d?: Date | string) {
@@ -36,12 +37,12 @@ function toISO(d?: Date | string) {
 }
 
 export async function getTransactions(userId: string, params: GetTransactionsParams = {}): Promise<Transaction[]> {
-  const { limit = 50, offset = 0, from, to } = params;
+  const { limit = 50, offset = 0, from, to, search } = params;
   
-  Logger.info('TransactionService', `Getting transactions for user ${userId}`, { limit, offset, from, to });
+  Logger.info('TransactionService', `Getting transactions for user ${userId}`, { limit, offset, from, to, search });
   
   // Create cache key based on parameters
-  const cacheKey = `transactions_${userId}_${limit}_${offset}_${from?.toString()}_${to?.toString()}`;
+  const cacheKey = `transactions_${userId}_${limit}_${offset}_${from?.toString()}_${to?.toString()}_${search ?? ''}`;
   
   // Try cache first for non-real-time queries
   if (limit <= 100 && offset === 0) {
@@ -62,6 +63,13 @@ export async function getTransactions(userId: string, params: GetTransactionsPar
 
   if (from) query = query.gte('date', toISO(from)!);
   if (to) query = query.lte('date', toISO(to)!);
+
+  if (search && search.trim()) {
+    const q = search.trim();
+    query = query.or(
+      `description.ilike.%${q}%,sender.ilike.%${q}%,category.ilike.%${q}%`
+    );
+  }
 
   const { data, error } = await query;
   if (error) {

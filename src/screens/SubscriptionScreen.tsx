@@ -10,7 +10,7 @@ import { supabase } from '../services/SupabaseClient';
 import { getSubscriptionStatus } from '../services/SubscriptionManager';
 import { initializePaystackPayment } from '../services/PaystackService';
 
-type SubscriptionPlan = 'free' | 'daily' | 'monthly' | 'yearly';
+type SubscriptionPlan = 'free' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 
 interface PlanCardProps {
   title: string;
@@ -256,6 +256,18 @@ export default function SubscriptionScreen() {
         'Perfect for testing premium features',
       ],
       isPopular: true,
+    },
+    {
+      id: 'weekly' as SubscriptionPlan,
+      title: 'Weekly Plan',
+      price: '$1.25',
+      period: 'week',
+      features: [
+        'Everything in Daily Plan',
+        'Save vs daily',
+        'Great for regular weekly budgeting',
+      ],
+      isPopular: false,
     },
     {
       id: 'monthly' as SubscriptionPlan,

@@ -9,6 +9,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const TRIAL_DURATION_DAYS = 14; // 2 weeks free trial
 const TRIAL_START_KEY = 'trial_start_date';
+const SUBSCRIPTION_CACHE_KEY = 'subscription_cache_v1';
+const HAS_SUBSCRIBED_KEY = 'has_subscribed_v1';
 
 export interface SubscriptionStatus {
   isActive: boolean;
@@ -17,6 +19,55 @@ export interface SubscriptionStatus {
   daysRemaining: number;
   plan: string;
   expiresAt: Date | null;
+}
+
+async function getCachedSubscription(userId: string): Promise<{ plan: string; expiresAt: Date | null } | null> {
+  try {
+    const raw = await AsyncStorage.getItem(`${SUBSCRIPTION_CACHE_KEY}:${userId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const expiresAt = parsed?.expiresAt ? new Date(parsed.expiresAt) : null;
+    const plan = String(parsed?.plan || '');
+    if (!plan) return null;
+    return { plan, expiresAt };
+  } catch {
+    return null;
+  }
+}
+
+async function setCachedSubscription(userId: string, plan: string, expiresAt: Date | null): Promise<void> {
+  try {
+    await AsyncStorage.setItem(
+      `${SUBSCRIPTION_CACHE_KEY}:${userId}`,
+      JSON.stringify({ plan, expiresAt: expiresAt ? expiresAt.toISOString() : null })
+    );
+  } catch {}
+}
+
+async function clearCachedSubscription(userId: string): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(`${SUBSCRIPTION_CACHE_KEY}:${userId}`);
+  } catch {}
+}
+
+async function getHasSubscribed(userId: string): Promise<boolean> {
+  try {
+    const v = await AsyncStorage.getItem(`${HAS_SUBSCRIBED_KEY}:${userId}`);
+    return v === '1';
+  } catch {
+    return false;
+  }
+}
+
+export async function markUserHasSubscribed(userId: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem(`${HAS_SUBSCRIBED_KEY}:${userId}`, '1');
+  } catch {}
+}
+
+export async function cacheActiveSubscription(userId: string, plan: string, expiresAt: Date | null): Promise<void> {
+  await setCachedSubscription(userId, plan, expiresAt);
+  await markUserHasSubscribed(userId);
 }
 
 /**
@@ -30,7 +81,10 @@ export async function getSubscriptionStatus(userId: string): Promise<Subscriptio
       .select('*')
       .eq('user_id', userId)
       .eq('status', 'active')
-      .single();
+      .order('expires_at', { ascending: false })
+      .order('started_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     if (!error && subscription) {
       // User has active paid subscription
@@ -38,12 +92,41 @@ export async function getSubscriptionStatus(userId: string): Promise<Subscriptio
       const isExpired = expiresAt ? expiresAt < new Date() : false;
 
       if (!isExpired) {
+        await cacheActiveSubscription(userId, subscription.plan, expiresAt);
         return {
           isActive: true,
           isTrial: false,
           trialEnded: false,
           daysRemaining: expiresAt ? Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : 999,
           plan: subscription.plan,
+          expiresAt,
+        };
+      }
+
+      // If the DB still says "active" but the expiry has passed, mark it expired (best-effort).
+      // This keeps the subscriptions table accurate even without a server-side cron.
+      try {
+        await clearCachedSubscription(userId);
+        await supabase
+          .from('subscriptions')
+          .update({ status: 'expired', updated_at: new Date().toISOString() })
+          .eq('id', subscription.id);
+      } catch {}
+    }
+
+    // Fallback: if DB read fails or returns nothing, honor locally cached subscription until it expires.
+    // This prevents repeatedly prompting a user who has already paid when the device is offline or RLS blocks reads.
+    const cached = await getCachedSubscription(userId);
+    if (cached) {
+      const expiresAt = cached.expiresAt;
+      const isExpired = expiresAt ? expiresAt < new Date() : false;
+      if (!isExpired) {
+        return {
+          isActive: true,
+          isTrial: false,
+          trialEnded: false,
+          daysRemaining: expiresAt ? Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : 999,
+          plan: cached.plan,
           expiresAt,
         };
       }
@@ -118,7 +201,9 @@ async function getTrialStatus(userId: string): Promise<{ started: Date; ended: b
  */
 export async function shouldShowSubscriptionPrompt(userId: string): Promise<boolean> {
   const status = await getSubscriptionStatus(userId);
-  return status.trialEnded && !status.isActive;
+  if (status.isActive) return false;
+  const hasSubscribed = await getHasSubscribed(userId);
+  return status.trialEnded || hasSubscribed;
 }
 
 /**

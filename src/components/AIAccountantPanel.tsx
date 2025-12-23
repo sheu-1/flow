@@ -92,9 +92,12 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
       setMessages((m) => [...m, { role: 'assistant', content: reply }]);
     } catch (e: any) {
       console.error('AI Chat Error:', e);
-      const errorMsg = e?.message?.includes('API key') 
+      const rawMessage = String(e?.message || '');
+      const errorMsg = rawMessage.includes('API key')
         ? 'Please configure your AI API key in Settings to use this feature.'
-        : e?.message?.includes('rate limit')
+        : rawMessage.includes('(402)') || rawMessage.includes('"code":402')
+        ? 'AI request failed due to insufficient OpenRouter credits (or token budget). Reduce usage or add credits in OpenRouter settings.'
+        : rawMessage.toLowerCase().includes('rate limit')
         ? 'Too many requests. Please wait a moment and try again.'
         : `Sorry, I couldn\'t process that request. Please try again.`;
       
@@ -103,6 +106,13 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
       // Show alert for critical errors
       if (e?.message?.includes('API key')) {
         Alert.alert('AI Setup Required', 'Configure your OpenRouter API key in Settings to enable AI features.');
+      }
+
+      if (rawMessage.includes('(402)') || rawMessage.includes('"code":402')) {
+        Alert.alert(
+          'OpenRouter Credits Required',
+          'Your OpenRouter account does not have enough credits for this request. Add credits on OpenRouter, or use a cheaper model / smaller responses.'
+        );
       }
     } finally {
       setLoading(false);

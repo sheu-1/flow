@@ -76,7 +76,7 @@ const AuthScreen: React.FC = () => {
         await signUp(email.trim(), password, username.trim());
         Alert.alert(
           'Success!',
-          'Account created successfully. Please check your email to verify your account.',
+          'Account created successfully.',
           [{ text: 'OK', onPress: () => setMode('signin') }]
         );
         // Clear form

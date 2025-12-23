@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Alert, ActivityIndicator, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { spacing, fontSize, borderRadius } from '../theme/colors';
 import { useThemeColors } from '../theme/ThemeProvider';
 import { exportTransactionsToCSV, getExportSummary } from '../services/CsvExportService';
 import { Transaction } from '../types';
 import { useDateFilterContext } from '../contexts/DateFilterContext';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 interface ExportDataModalProps {
   visible: boolean;
@@ -22,10 +23,20 @@ export default function ExportDataModal({
   const { dateRange, selectedPreset } = useDateFilterContext();
   const [exportType, setExportType] = useState<'all' | 'income' | 'expense'>('all');
   const [loading, setLoading] = useState(false);
+  const [startDate, setStartDate] = useState<Date>(dateRange.startDate);
+  const [endDate, setEndDate] = useState<Date>(dateRange.endDate);
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
+
+  useEffect(() => {
+    if (!visible) return;
+    setStartDate(dateRange.startDate);
+    setEndDate(dateRange.endDate);
+  }, [visible, dateRange.startDate, dateRange.endDate]);
 
   const summary = getExportSummary(transactions, {
-    startDate: dateRange.startDate,
-    endDate: dateRange.endDate,
+    startDate,
+    endDate,
     type: exportType,
   });
 
@@ -38,8 +49,8 @@ export default function ExportDataModal({
     setLoading(true);
     try {
       await exportTransactionsToCSV(transactions, {
-        startDate: dateRange.startDate,
-        endDate: dateRange.endDate,
+        startDate,
+        endDate,
         type: exportType,
       });
 
@@ -88,6 +99,61 @@ export default function ExportDataModal({
               </Text>
             </View>
           </View>
+
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Date Range</Text>
+
+            <View style={styles.dateRow}>
+              <TouchableOpacity
+                style={[styles.dateButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                onPress={() => setShowStartPicker(true)}
+                disabled={loading}
+              >
+                <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+                <Text style={[styles.dateButtonText, { color: colors.text }]}>{startDate.toLocaleDateString()}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.dateButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                onPress={() => setShowEndPicker(true)}
+                disabled={loading}
+              >
+                <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+                <Text style={[styles.dateButtonText, { color: colors.text }]}>{endDate.toLocaleDateString()}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {showStartPicker && (
+            <DateTimePicker
+              value={startDate}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={(_event, date) => {
+                setShowStartPicker(Platform.OS === 'ios');
+                if (!date) return;
+                setStartDate(date);
+                if (date > endDate) setEndDate(date);
+              }}
+              maximumDate={new Date()}
+            />
+          )}
+
+          {showEndPicker && (
+            <DateTimePicker
+              value={endDate}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={(_event, date) => {
+                setShowEndPicker(Platform.OS === 'ios');
+                if (!date) return;
+                const next = date < startDate ? startDate : date;
+                setEndDate(next);
+              }}
+              maximumDate={new Date()}
+              minimumDate={startDate}
+            />
+          )}
 
           {/* Export Type Selection */}
           <View style={styles.section}>
@@ -254,6 +320,24 @@ const styles = StyleSheet.create({
   },
   section: {
     marginBottom: spacing.lg,
+  },
+  dateRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  dateButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    gap: spacing.sm,
+  },
+  dateButtonText: {
+    fontSize: fontSize.sm,
+    fontWeight: '600',
   },
   sectionTitle: {
     fontSize: fontSize.sm,

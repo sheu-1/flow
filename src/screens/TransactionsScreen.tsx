@@ -52,7 +52,17 @@ function TransactionsScreen() {
     if (showLoading) setLoading(true);
     try {
       const offset = (page - 1) * ITEMS_PER_PAGE;
-      const rows = await getTransactions(user.id, { limit: ITEMS_PER_PAGE, offset });
+
+      const q = searchQuery.trim();
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+
+      const rows = await getTransactions(
+        user.id,
+        q
+          ? { limit: ITEMS_PER_PAGE, offset, search: q }
+          : { limit: ITEMS_PER_PAGE, offset, from: startOfMonth, to: now }
+      );
       const mapped: Transaction[] = rows.map((r) => ({
         ...r,
         date: new Date(r.date),
@@ -64,8 +74,13 @@ function TransactionsScreen() {
       
       // Get total count for pagination (approximate)
       if (page === 1) {
-        // Fetch a larger set to estimate total
-        const allRows = await getTransactions(user.id, { limit: 1000 });
+        // Fetch a larger set to estimate total (still constrained for performance)
+        const allRows = await getTransactions(
+          user.id,
+          q
+            ? { limit: 1000, search: q }
+            : { limit: 1000, from: startOfMonth, to: now }
+        );
         setTotalTransactions(allRows.length);
       }
     } catch (e: any) {
@@ -74,11 +89,21 @@ function TransactionsScreen() {
       if (showLoading) setLoading(false);
       setRefreshing(false);
     }
-  }, [user?.id, currentPage]);
+  }, [user?.id, currentPage, searchQuery]);
 
   React.useEffect(() => {
     refresh(true, currentPage);
   }, [currentPage]);
+
+  React.useEffect(() => {
+    // When searching, query the DB (across all time) instead of filtering only the loaded page.
+    // Debounce slightly to avoid firing on every keystroke.
+    const t = setTimeout(() => {
+      setCurrentPage(1);
+      refresh(true, 1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
   React.useEffect(() => {
     if (currentPage === 1) {
@@ -132,13 +157,7 @@ function TransactionsScreen() {
     (a, b) => new Date(b.date as any).getTime() - new Date(a.date as any).getTime()
   );
 
-  const filteredBySearch = sortedTransactions.filter((tx) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.trim().toLowerCase();
-    const description = (tx.description || '').toLowerCase();
-    const sender = ((tx as any).sender || '').toLowerCase();
-    return description.includes(q) || sender.includes(q);
-  });
+  const filteredBySearch = sortedTransactions;
 
   const totalPages = Math.ceil(totalTransactions / ITEMS_PER_PAGE);
   const hasNextPage = currentPage < totalPages;

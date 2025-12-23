@@ -165,3 +165,12 @@ BEGIN
   RAISE NOTICE 'RLS policies enabled for data security';
   RAISE NOTICE 'Remember to set up your Paystack API keys in environment variables';
 END $$;
+
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+SELECT
+  cron.schedule(
+    'expire_subscriptions_hourly',
+    '0 * * * *',
+    $$select public.expire_subscriptions();$$
+  );

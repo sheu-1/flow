@@ -85,7 +85,7 @@ export default function PaymentWebViewScreen() {
       console.log('Verifying payment with reference:', paymentReference);
 
       // Verify payment with Paystack
-      const result = await verifyPaystackPayment(paymentReference);
+      const result = await verifyPaystackPayment(paymentReference, plan);
 
       if (result.success) {
         Alert.alert(

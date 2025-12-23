@@ -13,6 +13,7 @@ import ExportDataModal from '../components/ExportDataModal';
 import { supabase } from '../services/SupabaseClient';
 import { submitFeedback } from '../services/FeedbackService';
 import { Transaction } from '../types';
+import { getSubscriptionStatus, SubscriptionStatus } from '../services/SubscriptionManager';
 
 export default function ProfileScreen() {
   const colors = useThemeColors();
@@ -26,6 +27,8 @@ export default function ProfileScreen() {
   const [showExportData, setShowExportData] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loadingTransactions, setLoadingTransactions] = useState(false);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null);
+  const [loadingSubscription, setLoadingSubscription] = useState(false);
   const [feedbackVisible, setFeedbackVisible] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
@@ -35,6 +38,72 @@ export default function ProfileScreen() {
     checkSmsPermission();
     loadTransactions();
   }, []);
+
+  useEffect(() => {
+    loadSubscription();
+  }, [user?.id]);
+
+  const loadSubscription = async () => {
+    if (!user?.id) {
+      setSubscriptionStatus(null);
+      return;
+    }
+    setLoadingSubscription(true);
+    try {
+      const status = await getSubscriptionStatus(user.id);
+      setSubscriptionStatus(status);
+    } catch (e) {
+      console.warn('Error loading subscription status:', e);
+      setSubscriptionStatus(null);
+    } finally {
+      setLoadingSubscription(false);
+    }
+  };
+
+  const formatPlanLabel = (plan: string) => {
+    const p = (plan || '').toLowerCase();
+    if (p === 'daily') return 'Daily';
+    if (p === 'weekly') return 'Weekly';
+    if (p === 'monthly') return 'Monthly';
+    if (p === 'yearly' || p === 'annual') return 'Yearly';
+    if (p === 'free_trial') return 'Free Trial';
+    if (!p) return 'Unknown';
+    return plan;
+  };
+
+  const getSubscriptionLine1 = () => {
+    if (loadingSubscription) return 'Loading...';
+    if (!subscriptionStatus) return 'Unknown';
+
+    if (subscriptionStatus.isTrial) {
+      if (subscriptionStatus.trialEnded) return 'Trial ended';
+      return 'Free trial active';
+    }
+
+    if (subscriptionStatus.isActive) {
+      return `Active (${formatPlanLabel(subscriptionStatus.plan)})`;
+    }
+
+    return 'Inactive';
+  };
+
+  const getSubscriptionLine2 = () => {
+    if (loadingSubscription) return null;
+    if (!subscriptionStatus) return null;
+
+    if (subscriptionStatus.isTrial) {
+      if (!subscriptionStatus.trialEnded) {
+        return `${subscriptionStatus.daysRemaining} day(s) remaining`;
+      }
+      return null;
+    }
+
+    if (subscriptionStatus.expiresAt) {
+      return `Expires: ${subscriptionStatus.expiresAt.toLocaleDateString()}`;
+    }
+
+    return null;
+  };
 
   const loadTransactions = async () => {
     if (!user) return;
@@ -193,6 +262,19 @@ export default function ProfileScreen() {
                 <Text style={[styles.infoValue, { color: colors.text }]}>
                   {user?.created_at ? new Date(user.created_at).toLocaleDateString() : 'Unknown'}
                 </Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={[styles.infoItem, { backgroundColor: colors.surface }]}>
+            <View style={styles.infoContent}>
+              <Ionicons name="card-outline" size={20} color={colors.textSecondary} style={styles.infoIcon} />
+              <View>
+                <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Subscription</Text>
+                <Text style={[styles.infoValue, { color: colors.text }]}>{getSubscriptionLine1()}</Text>
+                {getSubscriptionLine2() ? (
+                  <Text style={[styles.infoSubValue, { color: colors.textSecondary }]}>{getSubscriptionLine2()}</Text>
+                ) : null}
               </View>
             </View>
           </View>
@@ -433,6 +515,10 @@ const styles = StyleSheet.create({
   infoValue: {
     fontSize: fontSize.md,
     fontWeight: '500',
+  },
+  infoSubValue: {
+    fontSize: fontSize.sm,
+    marginTop: 2,
   },
   actionItem: {
     flexDirection: 'row',

@@ -108,21 +108,24 @@ export default function DashboardScreen() {
     if (user?.id) {
       getSubscriptionStatus(user.id).then(status => {
         setSubscriptionStatus(status);
-        // Show subscription prompt if trial ended
-        if (status.trialEnded && !status.isActive) {
-          shouldShowSubscriptionPrompt(user.id).then(shouldShow => {
-            if (shouldShow) {
-              Alert.alert(
-                'Free Trial Ended',
-                'Your 2-week free trial has ended. Subscribe now to continue enjoying all features!',
-                [
-                  { text: 'Maybe Later', style: 'cancel' },
-                  { text: 'Subscribe', onPress: () => navigation.navigate('Subscription' as never) },
-                ]
-              );
-            }
-          });
-        }
+        if (status.isActive) return;
+
+        shouldShowSubscriptionPrompt(user.id).then(shouldShow => {
+          if (!shouldShow) return;
+          const title = status.trialEnded ? 'Free Trial Ended' : 'Subscription Expired';
+          const message = status.trialEnded
+            ? 'Your 2-week free trial has ended. Subscribe now to continue enjoying all features!'
+            : 'Your subscription has expired. Subscribe to continue enjoying premium features.';
+
+          Alert.alert(
+            title,
+            message,
+            [
+              { text: 'Maybe Later', style: 'cancel' },
+              { text: 'Subscribe', onPress: () => navigation.navigate('Subscription' as never) },
+            ]
+          );
+        });
       });
     }
   }, [user?.id, navigation]);

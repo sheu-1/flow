@@ -43,7 +43,15 @@ function parseType(body: string): 'credit' | 'debit' | null {
 
 function parseReference(body: string): string | null {
   const m = body.match(REF_REGEX);
-  return m ? m[1] ?? null : null;
+
+  if (m && m[1]) return m[1] ?? null;
+
+  // Fallback: common M-Pesa format where the transaction code is the first token
+  // e.g. "QAX8Y12ABC Confirmed. Ksh1,000.00 sent to ..."
+  const mpesaCode = body.match(/^\s*([A-Z0-9]{8,15})\s+(?:Confirmed|confirmed)\b/);
+  if (mpesaCode && mpesaCode[1]) return mpesaCode[1];
+
+  return null;
 }
 
 function parseSender(body: string): string | null {
@@ -101,6 +109,34 @@ export function parseTransactionFromSms(body: string, dateStr?: string): ParsedT
     return null;
   }
 
+  // Filter 7: Ignore promotional, marketing, and reward messages
+  // These often contain amounts but are not real financial transactions
+  if (/\b(offer|offers|reward|rewards|promo|promotion|win|bonus|free|gift|deal|sale)\b/i.test(body)) {
+    return null;
+  }
+
+  // Filter 8: Ignore service expiry/renewal reminders
+  // These mention amounts but are notifications, not transactions
+  if (/\b(expire|expires|expiring|expiry|renew|renewal|plan will expire|days to go|remind|reminder)\b/i.test(body)) {
+    return null;
+  }
+
+  // Filter 9: Ignore marketing calls-to-action
+  // Messages asking users to dial, reply, click, or buy are usually promotional
+  if (/\b(dial|reply|click|buy|get|call|visit|download|install)\b.*\b(now|today|here|link|app)\b/i.test(body)) {
+    const looksLikeTransaction =
+      AMOUNT_REGEX.test(body) &&
+      (CREDIT_REGEX.test(body) || DEBIT_REGEX.test(body) || /\bconfirmed\b/i.test(body));
+    if (!looksLikeTransaction) {
+      return null;
+    }
+  }
+
+  // Filter 10: Ignore "STOP" opt-out messages
+  if (/\bSTOP\s+TO\s+\d+/i.test(body)) {
+    return null;
+  }
+
   // Filter 4: Handle recharge/airtime purchases as debit (money out)
   if (/recharge.*successful|airtime.*successful|recharge of/i.test(body)) {
     const amount = parseAmount(body);
@@ -143,13 +179,38 @@ export function parseTransactionFromSms(body: string, dateStr?: string): ParsedT
 
   const amount = parseAmount(body);
   const type = parseType(body);
-  if (amount == null && type == null) return null; // Not a transaction-like message
   const reference = parseReference(body);
   const sender = parseSender(body);
+  
+  // Strict validation: A real transaction must have:
+  // 1. A valid amount
+  // 2. A clear transaction type (credit or debit)
+  // 3. Either a reference number OR a recognized sender (M-Pesa, bank, Airtel Money)
+  if (amount == null || amount <= 0) {
+    return null; // No valid amount = not a transaction
+  }
+  
+  if (type == null) {
+    return null; // Cannot determine if money in or out = not a transaction
+  }
+
+  // For messages from known financial services, we allow missing reference as they may be valid.
+  // Many transactional messages don't include a "Ref" token, but can still be confirmed by keywords.
+  const isFromKnownService =
+    /mpesa|m-pesa/i.test(body) ||
+    /airtel\s*money/i.test(body) ||
+    /\bbank\b/i.test(body) ||
+    (sender != null && (/mpesa|m-pesa/i.test(sender) || /bank/i.test(sender) || /airtel\s*money/i.test(sender)));
+
+  // If not from a known service and no reference, it's likely promotional
+  if (!reference && !isFromKnownService) {
+    return null;
+  }
+
   const dateISO = dateStr ? new Date(dateStr).toISOString() : undefined;
   return {
-    amount: amount ?? 0,
-    type: (type ?? 'credit') as 'credit' | 'debit',
+    amount,
+    type,
     sender: sender ?? null,
     reference: reference ?? null,
     message: body,

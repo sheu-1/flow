@@ -5,6 +5,7 @@ import { AppState } from 'react-native';
 import { Session, User, AuthChangeEvent } from '@supabase/supabase-js';
 import { makeRedirectUri } from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
 import Constants from 'expo-constants';
 import { supabase, pingSupabase } from './SupabaseClient';
 import { PermissionService } from './PermissionService';
@@ -244,6 +245,53 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let isMounted = true;
     let subscription: any;
     let smsStarted = false;
+
+    const handleAuthCallbackUrl = async (url: string) => {
+      try {
+        const parsed = Linking.parse(url);
+        const rawPath = (parsed.path || parsed.hostname || '').toString();
+        const path = rawPath.replace(/^\//, '');
+        // Accept variants like "reset-password" or "auth/reset-password" etc.
+        if (!path.endsWith('reset-password')) return;
+
+        const urlObj = new URL(url);
+        const code = urlObj.searchParams.get('code');
+
+        const hash = urlObj.hash ? urlObj.hash.replace(/^#/, '') : '';
+        const hashParams = new URLSearchParams(hash);
+        const accessToken = hashParams.get('access_token') || urlObj.searchParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token') || urlObj.searchParams.get('refresh_token');
+        const type = hashParams.get('type') || urlObj.searchParams.get('type');
+
+        // Supabase recovery can arrive either as a PKCE `code` or as implicit tokens in the hash.
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) {
+            console.warn('[Auth] Failed to exchange recovery code for session:', error);
+            return;
+          }
+        } else if (accessToken) {
+          const { error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken ?? '',
+          });
+          if (error) {
+            console.warn('[Auth] Failed to set recovery session from tokens:', error);
+            return;
+          }
+        } else {
+          console.warn('[Auth] reset-password link opened but no code/access_token found');
+          return;
+        }
+
+        // If the URL says it's a recovery link, set state immediately (listener should also fire).
+        if (type === 'recovery') {
+          setNeedsPasswordReset(true);
+        }
+      } catch (e) {
+        console.warn('[Auth] Error handling auth callback URL:', e);
+      }
+    };
     
     // Set a timeout to prevent infinite loading
     const timeoutId = setTimeout(() => {
@@ -301,6 +349,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     })();
 
+    // Handle incoming deep links (especially password recovery)
+    Linking.getInitialURL().then((url) => {
+      if (url) handleAuthCallbackUrl(url);
+    });
+    const urlSubscription = Linking.addEventListener('url', (event) => {
+      handleAuthCallbackUrl(event.url);
+    });
+
     // Set up auth state change listener
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event: AuthChangeEvent, newSession: Session | null) => {
@@ -345,6 +401,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isMounted = false;
       clearTimeout(timeoutId);
       subscription?.subscription.unsubscribe();
+      try { urlSubscription.remove(); } catch {}
       try { stopSmsListener(); } catch {}
     };
   }, []);

@@ -4,6 +4,7 @@ export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: stri
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const MODEL = 'deepseek/deepseek-chat';
+const MAX_TOKENS = 1024;
 
 const SYSTEM_PROMPT = `You are an AI Money Buddy embedded in a personal cash flow app.
 
@@ -56,6 +57,7 @@ export async function chat(messages: ChatMessage[], context: string): Promise<st
       ...messages,
     ],
     temperature: 0.2,
+    max_tokens: MAX_TOKENS,
   };
 
   const res = await fetch(OPENROUTER_URL, {

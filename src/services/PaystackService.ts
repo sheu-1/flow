@@ -6,6 +6,7 @@
  */
 
 import { supabase } from './SupabaseClient';
+import { cacheActiveSubscription } from './SubscriptionManager';
 
 // Paystack configuration
 const PAYSTACK_PUBLIC_KEY = process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY || 'pk_test_your_public_key_here';
@@ -120,7 +121,7 @@ export async function initializePaystackPayment(
  * Verify Paystack payment
  * Call this after user completes payment to verify transaction status
  */
-export async function verifyPaystackPayment(reference: string): Promise<PaymentResult> {
+export async function verifyPaystackPayment(reference: string, planHint?: string): Promise<PaymentResult> {
   try {
     const response = await fetch(`${PAYSTACK_API_URL}/transaction/verify/${reference}`, {
       method: 'GET',
@@ -135,8 +136,36 @@ export async function verifyPaystackPayment(reference: string): Promise<PaymentR
       // Update transaction status in database
       await updateTransactionStatus(reference, 'success', data.data);
 
-      // Activate subscription for user
-      await activateSubscription(data.data.metadata.userId, data.data.metadata.plan);
+      const metadata = data?.data?.metadata;
+      const metaUserId = metadata && typeof metadata === 'object' ? (metadata as any).userId : undefined;
+      const metaPlan = metadata && typeof metadata === 'object' ? (metadata as any).plan : undefined;
+
+      // Prefer the currently authenticated user to satisfy RLS (user_id must equal auth.uid())
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError) {
+        console.error('Auth error while verifying payment:', authError);
+      }
+
+      const authedUserId = authData?.user?.id;
+      const userId = authedUserId || metaUserId;
+      const plan = planHint || metaPlan;
+
+      if (!userId || !plan) {
+        console.error('Missing subscription activation info:', { userId, plan, metaUserId, metaPlan, planHint });
+        return {
+          success: false,
+          message: 'Payment verified, but subscription details were missing. Please log out/in and try again or contact support.',
+        };
+      }
+
+      // Activate subscription for user (must succeed, otherwise surface error)
+      const activated = await activateSubscription(userId, plan);
+      if (!activated) {
+        return {
+          success: false,
+          message: 'Payment verified, but we could not activate your subscription in the database. Please contact support.',
+        };
+      }
 
       return {
         success: true,
@@ -218,12 +247,14 @@ async function updateTransactionStatus(
 /**
  * Activate subscription for user
  */
-async function activateSubscription(userId: string, plan: string) {
+async function activateSubscription(userId: string, plan: string): Promise<boolean> {
   try {
     // Calculate expiry date based on plan
     const expiryDate = new Date();
     if (plan === 'daily') {
       expiryDate.setDate(expiryDate.getDate() + 1);
+    } else if (plan === 'weekly') {
+      expiryDate.setDate(expiryDate.getDate() + 7);
     } else if (plan === 'monthly') {
       expiryDate.setMonth(expiryDate.getMonth() + 1);
     } else if (plan === 'yearly') {
@@ -231,20 +262,41 @@ async function activateSubscription(userId: string, plan: string) {
     }
 
     // Update or insert subscription record
-    const { error } = await supabase.from('subscriptions').upsert({
-      user_id: userId,
-      plan,
-      status: 'active',
-      started_at: new Date().toISOString(),
-      expires_at: expiryDate.toISOString(),
-      updated_at: new Date().toISOString(),
-    });
+    // Mark any previous active subscription rows as expired (best-effort)
+    // (If you enforce a UNIQUE constraint on user_id, this won't be necessary but it helps clean up old data.)
+    try {
+      await supabase
+        .from('subscriptions')
+        .update({ status: 'expired', updated_at: new Date().toISOString() })
+        .eq('user_id', userId)
+        .eq('status', 'active');
+    } catch {}
+
+    const { error } = await supabase.from('subscriptions').upsert(
+      {
+        user_id: userId,
+        plan,
+        status: 'active',
+        started_at: new Date().toISOString(),
+        expires_at: expiryDate.toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id' }
+    );
 
     if (error) {
       console.error('Error activating subscription:', error);
+      return false;
     }
+
+    // Prime local cache immediately so UI doesn't prompt again right after payment
+    try {
+      await cacheActiveSubscription(userId, plan, expiryDate);
+    } catch {}
+    return true;
   } catch (error) {
     console.error('Database error:', error);
+    return false;
   }
 }
 
