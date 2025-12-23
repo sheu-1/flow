@@ -25,6 +25,9 @@ import WelcomeScreen from './src/screens/WelcomeScreen';
 import CustomSplashScreen from './src/screens/SplashScreen';
 import { AuthProvider, useAuth } from './src/services/AuthService';
 import { getSubscriptionStatus } from './src/services/SubscriptionManager';
+import { registerBackgroundSmsTask } from './src/services/BackgroundSms';
+import { scheduleDailySummaryNotification } from './src/services/DailySummaryNotifications';
+import { startSmsListener, stopSmsListener } from './src/services/SmsService';
 // SQLite sync removed: Supabase is the source of truth
 // import { initDB } from './src/services/Database';
 // import { syncTransactions } from './src/services/SyncService';
@@ -156,6 +159,7 @@ function AppContainer() {
   const { user, loading, needsPasswordReset } = useAuth();
   const { colors } = useTheme();
   const [trialExpired, setTrialExpired] = React.useState(false);
+  const [notificationsScheduled, setNotificationsScheduled] = React.useState(false);
   const [showSplash, setShowSplash] = React.useState(true);
 
   // Handle deep links for password reset
@@ -192,13 +196,27 @@ function AppContainer() {
   // Check trial status when user logs in
   useEffect(() => {
     async function checkTrialStatus() {
-      if (user && !loading) {
+      if (user && !loading && !notificationsScheduled) {
         const status = await getSubscriptionStatus(user.id);
-        setTrialExpired(status.trialEnded && !status.isActive);
+        setTrialExpired(!status.isActive);
+        // Schedule daily notifications
+        scheduleDailySummaryNotification(user.id);
+        // Start SMS listener
+        startSmsListener();
+        setNotificationsScheduled(true);
       }
     }
     checkTrialStatus();
-  }, [user, loading]);
+
+    return () => {
+      stopSmsListener();
+    };
+  }, [user, loading, notificationsScheduled]);
+
+  // Register background tasks
+  useEffect(() => {
+    registerBackgroundSmsTask();
+  }, []);
 
   // Hide the native splash when custom splash is ready
   useEffect(() => {

@@ -106,26 +106,25 @@ export default function DashboardScreen() {
   // Check subscription status
   useEffect(() => {
     if (user?.id) {
-      getSubscriptionStatus(user.id).then(status => {
-        setSubscriptionStatus(status);
-        if (status.isActive) return;
+      shouldShowSubscriptionPrompt(user.id).then(shouldShow => {
+        if (shouldShow) {
+          getSubscriptionStatus(user.id).then(status => {
+            setSubscriptionStatus(status);
+            const title = status.trialEnded ? 'Free Trial Ended' : 'Subscription Expired';
+            const message = status.trialEnded
+              ? 'Your 2-week free trial has ended. Subscribe now to continue enjoying all features!'
+              : 'Your subscription has expired. Subscribe to continue enjoying premium features.';
 
-        shouldShowSubscriptionPrompt(user.id).then(shouldShow => {
-          if (!shouldShow) return;
-          const title = status.trialEnded ? 'Free Trial Ended' : 'Subscription Expired';
-          const message = status.trialEnded
-            ? 'Your 2-week free trial has ended. Subscribe now to continue enjoying all features!'
-            : 'Your subscription has expired. Subscribe to continue enjoying premium features.';
-
-          Alert.alert(
-            title,
-            message,
-            [
-              { text: 'Maybe Later', style: 'cancel' },
-              { text: 'Subscribe', onPress: () => navigation.navigate('Subscription' as never) },
-            ]
-          );
-        });
+            Alert.alert(
+              title,
+              message,
+              [
+                { text: 'Maybe Later', style: 'cancel' },
+                { text: 'Subscribe', onPress: () => navigation.navigate('Subscription' as never) },
+              ]
+            );
+          });
+        }
       });
     }
   }, [user?.id, navigation]);

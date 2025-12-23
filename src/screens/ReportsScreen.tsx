@@ -232,9 +232,9 @@ export default function ReportsScreen() {
           );
         }
       } else {
-        // Yearly: Show from 2024 onward to current year
+        // Yearly: Show last 5 years
         const currentYear = new Date().getFullYear();
-        const startYear = 2024;
+        const startYear = currentYear - 4; // Show last 5 years including current
         
         for (let y = startYear; y <= currentYear; y++) {
           const yearStart = new Date(y, 0, 1, 0, 0, 0, 0);

@@ -269,13 +269,22 @@ export default function ProfileScreen() {
           <View style={[styles.infoItem, { backgroundColor: colors.surface }]}>
             <View style={styles.infoContent}>
               <Ionicons name="card-outline" size={20} color={colors.textSecondary} style={styles.infoIcon} />
-              <View>
+              <View style={{ flex: 1 }}>
                 <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Subscription</Text>
-                <Text style={[styles.infoValue, { color: colors.text }]}>{getSubscriptionLine1()}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <View style={[styles.statusDot, { backgroundColor: subscriptionStatus?.isActive ? colors.success : colors.danger }]} />
+                  <Text style={[styles.infoValue, { color: colors.text }]}>{getSubscriptionLine1()}</Text>
+                </View>
                 {getSubscriptionLine2() ? (
-                  <Text style={[styles.infoSubValue, { color: colors.textSecondary }]}>{getSubscriptionLine2()}</Text>
+                  <Text style={[styles.infoSubValue, { color: colors.textSecondary, marginLeft: 18 }]}>{getSubscriptionLine2()}</Text>
                 ) : null}
               </View>
+              <TouchableOpacity
+                style={styles.manageButton}
+                onPress={() => (navigation as any).navigate('Subscription')}
+              >
+                <Text style={[styles.manageButtonText, { color: colors.primary }]}>Manage</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -324,14 +333,6 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={[styles.actionItem, { backgroundColor: colors.surface }]}
-            onPress={() => (navigation as any).navigate('Subscription')}
-          >
-            <Ionicons name="card-outline" size={20} color={colors.primary} style={styles.actionIcon} />
-            <Text style={[styles.actionText, { color: colors.text }]}>Subscription Plans</Text>
-            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
 
           <TouchableOpacity 
             style={[styles.actionItem, { backgroundColor: colors.surface }]}
@@ -601,5 +602,22 @@ const styles = StyleSheet.create({
   modalButtonText: {
     fontSize: fontSize.md,
     fontWeight: '600',
+  },
+  manageButton: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: '#3B82F6',
+  },
+  manageButtonText: {
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+  },
+  statusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 8,
   },
 });

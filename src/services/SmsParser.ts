@@ -13,7 +13,7 @@ const incomeKeywords = /(received|credited|deposit|\bin\b|income|salary|refund|c
 const expenseKeywords = /(sent|paid|purchased|debited|withdrawn|expense|bill|fee|charge|subscription|transfer|access fee|airtime|data bundle)/i;
 
 // Patterns to exclude from parsing (avoid double entries)
-const excludePatterns = /(outstanding amount|total.*outstanding|balance.*due|amount due)/i;
+const excludePatterns = /(outstanding amount|total.*outstanding|balance.*due|amount due|reversal|reversed)/i;
 
 // Enhanced currency and amount matching with more formats
 const amountRegex = /(?:(USD|KES|KSH|UGX|TZS|ZAR|NGN|GHS|EUR|GBP)\s?([\d,]+(?:\.\d{1,2})?)|([\d,]+(?:\.\d{1,2})?)\s?(USD|KES|KSH|UGX|TZS|ZAR|NGN|GHS|EUR|GBP)|([\d,]+(?:\.\d{1,2})?))/i;
@@ -51,12 +51,17 @@ export function detectProvider(text: string): ParsedSms['service_provider'] {
 }
 
 export function parseAmount(text: string): number | null {
+  // Handle M-Pesa reversals
+  if (/reversal/i.test(text)) {
+    return null;
+  }
+
   // Check if this is a Fuliza message with outstanding amount
   if (/fuliza/i.test(text)) {
     // For Fuliza, only extract "Access Fee charged" amount, not outstanding
-    const accessFeeMatch = text.match(/access fee charged.*?(KES|Ksh|KSH)?\s*([\d,]+(?:\.\d{1,2})?)/i);
+    const accessFeeMatch = text.match(/(?:access fee of|access fee charged).*?(?:KES|Ksh|KSH)?\s*([\d,]+(?:\.\d{1,2})?)/i);
     if (accessFeeMatch) {
-      const amountStr = accessFeeMatch[2].replace(/,/g, '');
+      const amountStr = accessFeeMatch[1].replace(/,/g, '');
       const val = parseFloat(amountStr);
       return Number.isFinite(val) && val > 0 ? val : null;
     }

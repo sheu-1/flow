@@ -212,7 +212,7 @@ export default function SubscriptionScreen() {
       });
 
       if (result.success && result.authorization_url && result.reference) {
-        navigation.navigate('PaymentWebView' as never, {
+        (navigation as any).navigate('PaymentWebView', {
           url: result.authorization_url,
           reference: result.reference,
           plan: selectedPlan,
@@ -308,14 +308,12 @@ export default function SubscriptionScreen() {
         <Text style={[styles.title, { color: colors.text }]}>
           {isNewUser ? 'Choose Your Plan' : 'Subscription Plans'}
         </Text>
-        {!isNewUser && (
-          <TouchableOpacity
-            onPress={handleClose}
-            style={[styles.closeButton, { backgroundColor: colors.surface }]}
-          >
-            <Ionicons name="close" size={24} color={colors.text} />
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          onPress={handleClose}
+          style={[styles.closeButton, { backgroundColor: colors.surface }]}
+        >
+          <Ionicons name="close" size={24} color={colors.text} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView 
