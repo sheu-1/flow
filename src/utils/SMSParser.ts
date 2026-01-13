@@ -154,26 +154,43 @@ export function parseTransactionFromSms(body: string, dateStr?: string): ParsedT
 
   // Filter 5: Handle Fuliza - strictly only log the Access Fee, ignore outstanding/principal amounts
   if (/fuliza/i.test(body)) {
-    // Examples to match:
+    // Enhanced patterns to match various Fuliza access fee formats:
     // - "Access Fee charged Ksh 0.10"
     // - "Access Fee of KES 0.10"
     // - "Access Fee is Ksh. 0.10"
-    const feeMatch = body.match(/access\s*fee(?:\s*charged)?(?:\s*(?:is|of))?[^0-9]*(?:Ksh\.?|KES|KSH)\s*([0-9,]+(?:\.[0-9]{1,2})?)/i);
-    if (feeMatch) {
-      const feeStr = feeMatch[1]?.replace(/,/g, '');
-      const fee = feeStr ? parseFloat(feeStr) : null;
-      if (fee && fee > 0) {
-        return {
-          amount: fee,
-          type: 'debit',
-          sender: 'Fuliza Fee',
-          reference: parseReference(body),
-          message: body,
-          dateISO: dateStr ? new Date(dateStr).toISOString() : undefined,
-        };
+    // - "Access fee Ksh0.10"
+    // - "Fuliza M-PESA charge of Ksh X"
+    // - "charged an access fee of Ksh X"
+
+    // Try multiple patterns for better coverage
+    const patterns = [
+      /access\s*fee(?:\s*charged)?(?:\s*(?:is|of))?\s*(?:Ksh\.?|KES|KSH)\s*([0-9,]+(?:\.[0-9]{1,2})?)/i,
+      /(?:charged|charge)\s*(?:an\s*)?access\s*fee\s*(?:of\s*)?(?:Ksh\.?|KES|KSH)\s*([0-9,]+(?:\.[0-9]{1,2})?)/i,
+      /fuliza\s*(?:m-?pesa)?\s*(?:charge|fee)\s*(?:of\s*)?(?:Ksh\.?|KES|KSH)\s*([0-9,]+(?:\.[0-9]{1,2})?)/i,
+      /(?:Ksh\.?|KES|KSH)\s*([0-9,]+(?:\.[0-9]{1,2})?)\s*(?:access\s*fee|fuliza\s*fee)/i,
+    ];
+
+    for (const pattern of patterns) {
+      const feeMatch = body.match(pattern);
+      if (feeMatch && feeMatch[1]) {
+        const feeStr = feeMatch[1].replace(/,/g, '');
+        const fee = parseFloat(feeStr);
+        if (Number.isFinite(fee) && fee > 0) {
+          console.log(`[SMS Parser] Fuliza access fee detected: ${fee}`);
+          return {
+            amount: fee,
+            type: 'debit',
+            sender: 'Fuliza Fee',
+            reference: parseReference(body),
+            message: body,
+            dateISO: dateStr ? new Date(dateStr).toISOString() : undefined,
+          };
+        }
       }
     }
+
     // If it's a Fuliza message and we didn't find a valid Access Fee, skip creating any transaction
+    console.log('[SMS Parser] Fuliza message detected but no access fee found, skipping');
     return null;
   }
 
@@ -181,7 +198,7 @@ export function parseTransactionFromSms(body: string, dateStr?: string): ParsedT
   const type = parseType(body);
   const reference = parseReference(body);
   const sender = parseSender(body);
-  
+
   // Strict validation: A real transaction must have:
   // 1. A valid amount
   // 2. A clear transaction type (credit or debit)
@@ -189,7 +206,7 @@ export function parseTransactionFromSms(body: string, dateStr?: string): ParsedT
   if (amount == null || amount <= 0) {
     return null; // No valid amount = not a transaction
   }
-  
+
   if (type == null) {
     return null; // Cannot determine if money in or out = not a transaction
   }
@@ -223,36 +240,36 @@ export const SAMPLE_SMS_CASES: Array<{
   text: string;
   expect: Partial<ParsedTransaction> | null;
 }> = [
-  {
-    text: 'M-PESA: You have received KES 1,250.00 from John Doe Ref ABC123 on 12/09/2025',
-    expect: { amount: 1250, type: 'credit', sender: 'John Doe', reference: 'ABC123' },
-  },
-  {
-    text: 'Payment of KES 2,000 made to SUPERMARKET LTD Ref TRX-789',
-    expect: { amount: 2000, type: 'debit', sender: 'SUPERMARKET LTD', reference: 'TRX-789' },
-  },
-  {
-    text: 'Airtel Money: You have received USD 50.00 from Jane',
-    expect: { amount: 50, type: 'credit', sender: 'Jane' },
-  },
-  {
-    text: 'Your account was debited KES 3,450.25 Purchase at PHARMACY Ref NO123',
-    expect: { amount: 3450.25, type: 'debit', sender: 'PHARMACY', reference: 'NO123' },
-  },
-  {
-    text: 'You spent KES 500 at Cafe Latte',
-    expect: { amount: 500, type: 'debit', sender: 'Cafe Latte' },
-  },
-  {
-    text: 'Deposit: KES 10,000 credited to your account Ref 9XY7',
-    expect: { amount: 10000, type: 'credit', reference: '9XY7' },
-  },
-  {
-    text: 'USD 12.99 purchase at APPSTORE',
-    expect: { amount: 12.99, type: 'debit', sender: 'APPSTORE' },
-  },
-  {
-    text: 'Balance inquiry. No transaction.',
-    expect: null,
-  },
-];
+    {
+      text: 'M-PESA: You have received KES 1,250.00 from John Doe Ref ABC123 on 12/09/2025',
+      expect: { amount: 1250, type: 'credit', sender: 'John Doe', reference: 'ABC123' },
+    },
+    {
+      text: 'Payment of KES 2,000 made to SUPERMARKET LTD Ref TRX-789',
+      expect: { amount: 2000, type: 'debit', sender: 'SUPERMARKET LTD', reference: 'TRX-789' },
+    },
+    {
+      text: 'Airtel Money: You have received USD 50.00 from Jane',
+      expect: { amount: 50, type: 'credit', sender: 'Jane' },
+    },
+    {
+      text: 'Your account was debited KES 3,450.25 Purchase at PHARMACY Ref NO123',
+      expect: { amount: 3450.25, type: 'debit', sender: 'PHARMACY', reference: 'NO123' },
+    },
+    {
+      text: 'You spent KES 500 at Cafe Latte',
+      expect: { amount: 500, type: 'debit', sender: 'Cafe Latte' },
+    },
+    {
+      text: 'Deposit: KES 10,000 credited to your account Ref 9XY7',
+      expect: { amount: 10000, type: 'credit', reference: '9XY7' },
+    },
+    {
+      text: 'USD 12.99 purchase at APPSTORE',
+      expect: { amount: 12.99, type: 'debit', sender: 'APPSTORE' },
+    },
+    {
+      text: 'Balance inquiry. No transaction.',
+      expect: null,
+    },
+  ];

@@ -8,9 +8,13 @@ import { AggregatePeriod } from '../types';
 import { chat as llmChat, ChatMessage } from '../services/LLM';
 import { buildFinancialContext } from '../services/RAG';
 
+import { AIChatService } from '../services/AIChatService';
+
 interface Props {
   userId: string;
   period: AggregatePeriod;
+  currentConversationId: string | null;
+  onConversationCreated: (id: string) => void;
 }
 
 // Remove common Markdown tokens from AI responses for plain text display
@@ -44,7 +48,7 @@ function sanitizeMarkdown(text: string): string {
   return t.trim();
 }
 
-export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
+export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConversationId, onConversationCreated }) => {
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -52,10 +56,39 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [promptStatus, setPromptStatus] = useState<{ count: number; isPremium: boolean }>({ count: 0, isPremium: false });
   const [contextCache, setContextCache] = useState<string | null>(null);
   const [lastContextTime, setLastContextTime] = useState<number>(0);
   const scrollRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
+
+  // Load existing conversation or prompt status
+  useEffect(() => {
+    const init = async () => {
+      setLoading(true);
+      try {
+        const status = await AIChatService.getPromptStatus(userId);
+        setPromptStatus(status);
+
+        if (currentConversationId) {
+          const history = await AIChatService.getMessages(currentConversationId);
+          if (history.length > 0) {
+            setMessages(history);
+          }
+        } else {
+          // Reset to default greeting for new chat
+          setMessages([
+            { role: 'assistant', content: 'Hi! I\'m your AI accountant. Ask me about your spending trends, budgeting ideas, or how to reach your savings goals. 💰\n\nTry asking:\n• "How did I spend this month?"\n• "What are my biggest expenses?"\n• "Give me budgeting tips"' },
+          ]);
+        }
+      } catch (error) {
+        console.error('Error initializing chat:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    init();
+  }, [userId, currentConversationId]);
 
   // Cache context for 5 minutes to improve performance
   const contextPromise = useMemo(() => {
@@ -77,32 +110,64 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
 
   const send = useCallback(async () => {
     if (!input.trim() || loading) return;
-    
-    const userMsg: ChatMessage = { role: 'user', content: input.trim() };
+
+    // Check prompt limit
+    if (!promptStatus.isPremium && promptStatus.count >= 10) {
+      Alert.alert(
+        'Limit Reached',
+        'You have reached the limit of 10 free AI prompts. Upgrade to Premium for unlimited access!',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     const currentInput = input.trim();
+    const userMsg: ChatMessage = { role: 'user', content: currentInput };
+
     setMessages((m) => [...m, userMsg]);
     setInput('');
     setLoading(true);
-    
+
     try {
+      let activeId = currentConversationId;
+
+      // Create conversation if it doesn't exist
+      if (!activeId) {
+        const newConv = await AIChatService.createConversation(userId, currentInput.slice(0, 30) + (currentInput.length > 30 ? '...' : ''));
+        activeId = newConv.id;
+        onConversationCreated(activeId);
+      } else if (messages.length === 1) {
+        // Update title if it's the first user message in an existing empty-ish conversation
+        await AIChatService.updateTitle(activeId, currentInput.slice(0, 30) + (currentInput.length > 30 ? '...' : ''));
+      }
+
+      // Save user message
+      await AIChatService.saveMessage(activeId, userMsg);
+
       const context = await contextPromise;
       // Limit conversation history to last 10 messages for better performance
       const recentMessages = messages.slice(-10);
       const reply = await llmChat([...recentMessages, userMsg], context);
-      setMessages((m) => [...m, { role: 'assistant', content: reply }]);
+
+      const assistantMsg: ChatMessage = { role: 'assistant', content: reply };
+      setMessages((m) => [...m, assistantMsg]);
+
+      // Save assistant message
+      await AIChatService.saveMessage(activeId, assistantMsg);
+
+      // Increment prompt count
+      const newCount = await AIChatService.incrementPromptCount(userId);
+      setPromptStatus(prev => ({ ...prev, count: newCount }));
+
     } catch (e: any) {
       console.error('AI Chat Error:', e);
       const rawMessage = String(e?.message || '');
       const errorMsg = rawMessage.includes('API key')
-        ? 'Please configure your AI API key in Settings to use this feature.'
-        : rawMessage.includes('(402)') || rawMessage.includes('"code":402')
-        ? 'AI request failed due to insufficient OpenRouter credits (or token budget). Reduce usage or add credits in OpenRouter settings.'
-        : rawMessage.toLowerCase().includes('rate limit')
-        ? 'Too many requests. Please wait a moment and try again.'
-        : `Sorry, I couldn\'t process that request. Please try again.`;
-      
+        ? 'Please configure your AI API key in Settings.'
+        : `Sorry, I couldn\'t process that request.`;
+
       setMessages((m) => [...m, { role: 'assistant', content: errorMsg }]);
-      
+
       // Show alert for critical errors
       if (e?.message?.includes('API key')) {
         Alert.alert('AI Setup Required', 'Configure your OpenRouter API key in Settings to enable AI features.');
@@ -117,7 +182,7 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
     } finally {
       setLoading(false);
     }
-  }, [input, loading, messages, contextPromise]);
+  }, [input, loading, messages, contextPromise, userId, currentConversationId, promptStatus, onConversationCreated]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -146,14 +211,14 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
             >
               <View style={[
                 styles.messageBubble,
-                message.role === 'user' ? 
-                  [styles.userBubble, { backgroundColor: colors.primary }] : 
+                message.role === 'user' ?
+                  [styles.userBubble, { backgroundColor: colors.primary }] :
                   [styles.assistantBubble, { backgroundColor: colors.surface }]
               ]}>
                 <Text style={[
                   styles.messageText,
-                  message.role === 'user' ? 
-                    [styles.userText, { color: '#FFFFFF' }] : 
+                  message.role === 'user' ?
+                    [styles.userText, { color: '#FFFFFF' }] :
                     [styles.assistantText, { color: colors.text }]
                 ]}>
                   {message.role === 'assistant' ? sanitizeMarkdown(message.content) : message.content}
@@ -161,6 +226,21 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
               </View>
             </Animated.View>
           ))}
+
+          {!promptStatus.isPremium && promptStatus.count >= 10 && (
+            <Animated.View entering={FadeIn} style={styles.limitReachedWrapper}>
+              <View style={[styles.limitReachedBubble, { backgroundColor: colors.primary + '15', borderColor: colors.primary }]}>
+                <Ionicons name="lock-closed" size={20} color={colors.primary} />
+                <Text style={[styles.limitReachedText, { color: colors.text }]}>
+                  Free prompt limit reached (10/10). Upgrade to Premium for unlimited chats!
+                </Text>
+                <TouchableOpacity style={[styles.upgradeButton, { backgroundColor: colors.primary }]}>
+                  <Text style={styles.upgradeButtonText}>Upgrade Now</Text>
+                </TouchableOpacity>
+              </View>
+            </Animated.View>
+          )}
+
           {loading && (
             <Animated.View entering={FadeIn} style={styles.loadingWrapper}>
               <View style={[styles.loadingBubble, { backgroundColor: colors.surface }]}>
@@ -174,13 +254,13 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
         {/* Input Bar */}
         <View style={[styles.inputContainer, { paddingBottom: Math.max(34, insets.bottom + 10) }]}>
           <View style={[styles.inputBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.iconButton}
               onPress={() => Alert.alert('Voice Input', 'Voice input coming soon!')}
             >
               <Ionicons name="mic" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
-            
+
             <TextInput
               ref={inputRef}
               placeholder="Ask your accountant anything…"
@@ -199,18 +279,18 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
                 setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
               }}
             />
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.iconButton}
               onPress={() => Alert.alert('Attachments', 'File attachments coming soon!')}
             >
               <Ionicons name="attach" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
-            
-            <TouchableOpacity 
-              onPress={send} 
+
+            <TouchableOpacity
+              onPress={send}
               style={[
-                styles.sendButton, 
+                styles.sendButton,
                 { backgroundColor: colors.primary, opacity: input.trim() ? 1 : 0.5 }
               ]}
               disabled={loading || !input.trim()}
@@ -304,6 +384,36 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginLeft: 8,
     fontStyle: 'italic',
+  },
+  limitReachedWrapper: {
+    padding: 20,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  limitReachedBubble: {
+    padding: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    width: '100%',
+  },
+  limitReachedText: {
+    fontSize: 15,
+    textAlign: 'center',
+    marginVertical: 12,
+    fontWeight: '500',
+    lineHeight: 22,
+  },
+  upgradeButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 25,
+    marginTop: 8,
+  },
+  upgradeButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
   inputContainer: {
     paddingHorizontal: 20,
