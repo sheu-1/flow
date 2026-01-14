@@ -3,6 +3,8 @@ import * as BackgroundFetch from 'expo-background-fetch';
 import * as TaskManager from 'expo-task-manager';
 import { supabase } from './SupabaseClient';
 import { readRecentSms, processSmsAndSave, getLastSeenForUser, setLastSeenForUser, canIngestSms } from './SmsService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { sendDailySummaryNotification } from './DailySummaryNotifications';
 
 const TASK_NAME = 'BACKGROUND_SMS_FETCH';
 
@@ -35,11 +37,29 @@ TaskManager.defineTask(TASK_NAME, async () => {
         await processSmsAndSave(sms);
         const ts = Number(sms.date) || 0;
         if (ts > maxTs) maxTs = ts;
-      } catch {}
+      } catch { }
     }
 
     if (maxTs > lastSeen) {
       await setLastSeenForUser(maxTs, userId);
+    }
+
+    // Check for daily summary trigger (8 AM - 9 AM)
+    try {
+      const now = new Date();
+      if (now.getHours() === 8) {
+        const todayStr = now.toISOString().split('T')[0];
+        const lastSentKey = `daily_summary_sent_${userId}`;
+        const lastSent = await AsyncStorage.getItem(lastSentKey);
+
+        if (lastSent !== todayStr) {
+          console.log('[Background] Sending daily summary notification...');
+          await sendDailySummaryNotification(userId);
+          await AsyncStorage.setItem(lastSentKey, todayStr);
+        }
+      }
+    } catch (e) {
+      console.warn('[Background] Daily summary check failed', e);
     }
 
     return newer.length > 0
@@ -78,5 +98,5 @@ export async function unregisterBackgroundSmsTask(): Promise<void> {
     if (isRegistered) {
       await BackgroundFetch.unregisterTaskAsync(TASK_NAME);
     }
-  } catch {}
+  } catch { }
 }

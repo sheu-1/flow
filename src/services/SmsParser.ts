@@ -39,14 +39,14 @@ const providerPatterns = {
 
 export function detectProvider(text: string): ParsedSms['service_provider'] {
   const t = text.toLowerCase();
-  
+
   // Check specific providers first (more specific matches)
   for (const [provider, pattern] of Object.entries(providerPatterns)) {
     if (pattern.test(t)) {
       return provider as ParsedSms['service_provider'];
     }
   }
-  
+
   return 'Other';
 }
 
@@ -59,15 +59,28 @@ export function parseAmount(text: string): number | null {
   // Check if this is a Fuliza message with outstanding amount
   if (/fuliza/i.test(text)) {
     // For Fuliza, only extract "Access Fee charged" amount, not outstanding
-    const accessFeeMatch = text.match(/(?:access fee of|access fee charged).*?(?:KES|Ksh|KSH)?\s*([\d,]+(?:\.\d{1,2})?)/i);
-    if (accessFeeMatch) {
-      const amountStr = accessFeeMatch[1].replace(/,/g, '');
-      const val = parseFloat(amountStr);
-      return Number.isFinite(val) && val > 0 ? val : null;
+    // Try multiple patterns for better coverage
+    const patterns = [
+      /access\s*fee(?:\s*charged)?(?:\s*(?:is|of))?\s*(?:Ksh\.?|KES|KSH)\s*([\d,]+(?:\.\d{1,2})?)/i,
+      /(?:charged|charge)\s*(?:an\s*)?access\s*fee\s*(?:of\s*)?\s*(?:Ksh\.?|KES|KSH)\s*([\d,]+(?:\.\d{1,2})?)/i,
+      /fuliza\s*(?:m-?pesa)?\s*(?:charge|fee)\s*(?:of\s*)?\s*(?:Ksh\.?|KES|KSH)\s*([\d,]+(?:\.\d{1,2})?)/i,
+      /(?:Ksh\.?|KES|KSH)\s*([\d,]+(?:\.\d{1,2})?)\s*(?:access\s*fee|fuliza\s*fee)/i,
+    ];
+
+    for (const pattern of patterns) {
+      const accessFeeMatch = text.match(pattern);
+      if (accessFeeMatch && accessFeeMatch[1]) {
+        const amountStr = accessFeeMatch[1].replace(/,/g, '');
+        const val = parseFloat(amountStr);
+        if (Number.isFinite(val) && val > 0) {
+          console.log(`[SmsParser] Fuliza access fee detected: ${val}`);
+          return val;
+        }
+      }
     }
     return null; // Don't parse other amounts from Fuliza messages
   }
-  
+
   // Check if this contains excluded patterns (outstanding amounts)
   if (excludePatterns.test(text)) {
     // Try to find the actual transaction amount before the excluded part
@@ -83,14 +96,14 @@ export function parseAmount(text: string): number | null {
       }
     }
   }
-  
+
   const m = text.match(amountRegex);
   if (!m) return null;
-  
+
   // Try different capture groups for amount
   const amountStr = (m[2] || m[3] || m[5])?.replace(/,/g, '');
   if (!amountStr) return null;
-  
+
   const val = parseFloat(amountStr);
   return Number.isFinite(val) && val > 0 ? val : null;
 }
@@ -103,32 +116,32 @@ export function parseReference(text: string): string | null {
 
 export function classifyType(text: string): 'income' | 'expense' | null {
   const t = text.toLowerCase();
-  
+
   // Fuliza, airtime, and data are always expenses
   if (/(fuliza|access fee|airtime|data bundle|data purchased)/i.test(t)) {
     return 'expense';
   }
-  
+
   // Check for explicit income/expense indicators
   const isIncome = incomeKeywords.test(t);
   const isExpense = expenseKeywords.test(t);
-  
+
   // Additional context-based classification
   const incomeContext = /(from|sender|source)/i.test(t);
   const expenseContext = /(to|recipient|merchant|shop|store)/i.test(t);
-  
+
   if (isIncome && !isExpense) return 'income';
   if (isExpense && !isIncome) return 'expense';
   if (incomeContext && !expenseContext) return 'income';
   if (expenseContext && !incomeContext) return 'expense';
-  
+
   return null;
 }
 
 // Enhanced category detection
 export function detectCategory(text: string, type: 'income' | 'expense' | null): string {
   const t = text.toLowerCase();
-  
+
   if (type === 'expense') {
     // Specific categories for common expenses
     if (/(fuliza|access fee|loan fee)/i.test(t)) return 'Fees & Charges';
@@ -146,7 +159,7 @@ export function detectCategory(text: string, type: 'income' | 'expense' | null):
     if (/(investment|dividend|interest)/i.test(t)) return 'Investment';
     if (/(gift|bonus|reward)/i.test(t)) return 'Other Income';
   }
-  
+
   return 'Other';
 }
 
@@ -154,7 +167,7 @@ export function parseSms(raw: { body: string; date?: number | string }): ParsedS
   const body = raw.body || '';
   const time = raw.date ? new Date(raw.date) : new Date();
   const transactionType = classifyType(body);
-  
+
   return {
     transaction_type: transactionType,
     amount: parseAmount(body),

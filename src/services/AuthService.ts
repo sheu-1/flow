@@ -12,6 +12,7 @@ import { PermissionService } from './PermissionService';
 import { startSmsListener, stopSmsListener } from './SmsService';
 import { registerBackgroundSmsTask, unregisterBackgroundSmsTask } from './BackgroundSms';
 import { notificationService } from './NotificationService';
+import { scheduleDailySummaryNotification } from './DailySummaryNotifications';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -73,12 +74,12 @@ export async function signInWithGoogle(): Promise<{ error?: string }> {
   try {
     // Determine the correct redirect URI based on environment
     const isExpoGo = Constants.appOwnership === 'expo';
-    
+
     const redirectTo = makeRedirectUri({
       scheme: isExpoGo ? undefined : 'cashflowtracker',
       path: 'auth-callback',
     });
-    
+
     console.log('=== GOOGLE AUTH DEBUG ===');
     console.log('Environment:', isExpoGo ? 'Expo Go' : 'Standalone');
     console.log('Redirect URI:', redirectTo);
@@ -121,12 +122,12 @@ export async function signInWithGoogle(): Promise<{ error?: string }> {
         preferEphemeralSession: false,
       }
     );
-    
+
     console.log('WebBrowser result type:', result.type);
     if (result.type === 'success') {
       console.log('WebBrowser result URL:', result.url);
     }
-    
+
     if (result.type === 'cancel' || result.type === 'dismiss') {
       console.log('User cancelled or dismissed the sign-in');
       return { error: 'Google sign-in was cancelled' };
@@ -134,24 +135,24 @@ export async function signInWithGoogle(): Promise<{ error?: string }> {
 
     if (result.type === 'success') {
       console.log('Processing OAuth response...');
-      
+
       const url = new URL(result.url);
-      
+
       // With PKCE flow, look for authorization code
       const code = url.searchParams.get('code');
-      
+
       // With implicit flow (fallback), look for tokens directly
-      const accessToken = url.searchParams.get('access_token') || 
-                         url.hash.match(/access_token=([^&]+)/)?.[1];
-      const refreshToken = url.searchParams.get('refresh_token') || 
-                          url.hash.match(/refresh_token=([^&]+)/)?.[1];
-      
+      const accessToken = url.searchParams.get('access_token') ||
+        url.hash.match(/access_token=([^&]+)/)?.[1];
+      const refreshToken = url.searchParams.get('refresh_token') ||
+        url.hash.match(/refresh_token=([^&]+)/)?.[1];
+
       if (code) {
         // PKCE flow: exchange code for session
         console.log('PKCE flow: Got authorization code, exchanging for session...');
-        
+
         const { data: sessionData, error: sessionError } = await supabase.auth.exchangeCodeForSession(code);
-        
+
         if (sessionError) {
           console.error('Error exchanging code for session:', sessionError);
           return { error: sessionError.message };
@@ -165,12 +166,12 @@ export async function signInWithGoogle(): Promise<{ error?: string }> {
       } else if (accessToken && refreshToken) {
         // Implicit flow: set session directly with tokens
         console.log('Implicit flow: Setting session with tokens...');
-        
+
         const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
           access_token: accessToken,
           refresh_token: refreshToken,
         });
-        
+
         if (sessionError) {
           console.error('Error setting session:', sessionError);
           return { error: sessionError.message };
@@ -184,12 +185,12 @@ export async function signInWithGoogle(): Promise<{ error?: string }> {
       } else if (accessToken && !refreshToken) {
         console.warn('⚠️ Access token found but no refresh token - session may not persist');
         console.log('Attempting to set session with access token only...');
-        
+
         const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
           access_token: accessToken,
           refresh_token: '',
         });
-        
+
         if (sessionError) {
           console.error('Error setting session:', sessionError);
           return { error: sessionError.message };
@@ -206,7 +207,7 @@ export async function signInWithGoogle(): Promise<{ error?: string }> {
         return { error: 'Failed to get authentication credentials from Google' };
       }
     }
-    
+
     return { error: 'Authentication flow incomplete' };
   } catch (error) {
     console.error('Auth.signInWithGoogle network/unknown error:', error);
@@ -292,7 +293,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn('[Auth] Error handling auth callback URL:', e);
       }
     };
-    
+
     // Set a timeout to prevent infinite loading
     const timeoutId = setTimeout(() => {
       if (isMounted) {
@@ -300,7 +301,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLoading(false);
       }
     }, 3000); // 3 second timeout - faster response
-    
+
     (async () => {
       try {
         console.log('[Auth] init: starting auth bootstrap');
@@ -327,11 +328,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } catch (e) {
             console.warn('[Auth] Failed to start SMS listener:', e);
           }
-          try { await registerBackgroundSmsTask(); } catch {}
+          try { await registerBackgroundSmsTask(); } catch { }
           // Schedule daily notifications for signed-in user
-          try { await notificationService.scheduleDailyNotification(session.user.id); } catch {}
+          try { await scheduleDailySummaryNotification(session.user.id); } catch { }
           // Register Expo push token for this user
-          try { await notificationService.registerPushToken(session.user.id); } catch {}
+          try { await notificationService.registerPushToken(session.user.id); } catch { }
         }
       } catch (e) {
         console.error('[Auth] init error:', e);
@@ -356,45 +357,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.log('[Auth] PASSWORD_RECOVERY event received');
           setNeedsPasswordReset(true);
         }
+        // Any auth event means we have a definitive state; stop loading
+        // This prevents the UI from being stuck on the loading screen when the initial
+        // auth check completes (especially important for web/Expo Go where auth state
+        // might resolve quickly)
         setLoading(false);
-        try { clearTimeout(timeoutId); } catch {}
+        try { clearTimeout(timeoutId); } catch { }
         if (event === 'SIGNED_IN' && newSession?.user) {
           try {
             await PermissionService.initializeSmsPermissions();
-            try { startSmsListener(); smsStarted = true; } catch {}
+            try { startSmsListener(); smsStarted = true; } catch { }
           } catch (error) {
             console.warn('Failed to initialize SMS permissions:', error);
           }
-          try { await registerBackgroundSmsTask(); } catch {}
-          try { await notificationService.scheduleDailyNotification(newSession.user.id); } catch {}
-          try { await notificationService.registerPushToken(newSession.user.id); } catch {}
+          try { await registerBackgroundSmsTask(); } catch { }
+          // Schedule daily notifications whenever user signs in
+          try { await scheduleDailySummaryNotification(newSession.user.id); } catch { }
+          // Register Expo push token whenever user signs in
+          try { await notificationService.registerPushToken(newSession.user.id); } catch { }
         }
         if (event === 'SIGNED_OUT') {
-          try { stopSmsListener(); smsStarted = false; } catch {}
-          try { await unregisterBackgroundSmsTask(); } catch {}
+          try { stopSmsListener(); smsStarted = false; } catch { }
+          try { await unregisterBackgroundSmsTask(); } catch { }
           setNeedsPasswordReset(false);
         }
       }
     );
     subscription = authListener;
-    
+
     return () => {
       isMounted = false;
       clearTimeout(timeoutId);
       subscription?.subscription.unsubscribe();
-      try { urlSubscription.remove(); } catch {}
-      try { stopSmsListener(); } catch {}
+      try { urlSubscription.remove(); } catch { }
+      try { stopSmsListener(); } catch { }
     };
   }, []);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active' && user) {
-        try { startSmsListener(); } catch {}
+        try { startSmsListener(); } catch { }
       }
     });
     return () => {
-      try { sub.remove(); } catch {}
+      try { sub.remove(); } catch { }
     };
   }, [user]);
 
@@ -411,7 +418,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } = await supabase.auth.getSession();
         setSession(session);
         setUser(session?.user ?? null);
-        
+
         // Initialize SMS permissions on successful login
         if (session?.user) {
           try {
@@ -419,9 +426,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } catch (error) {
             console.warn('Failed to initialize SMS permissions:', error);
           }
-          try { await registerBackgroundSmsTask(); } catch {}
+          try { await registerBackgroundSmsTask(); } catch { }
         }
-        
+
         return { success: true };
       } catch (error) {
         const message = (error as any)?.message || 'Authentication failed';
@@ -449,18 +456,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(true);
       try {
         const result = await signInWithGoogle();
-        
+
         if (result.error) {
           return result;
         }
-        
+
         // Get the updated session after Google sign-in
         const {
           data: { session },
         } = await supabase.auth.getSession();
         setSession(session);
         setUser(session?.user ?? null);
-        
+
         // Initialize SMS permissions on successful login
         if (session?.user) {
           try {
@@ -468,9 +475,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } catch (error) {
             console.warn('Failed to initialize SMS permissions:', error);
           }
-          try { await registerBackgroundSmsTask(); } catch {}
+          try { await registerBackgroundSmsTask(); } catch { }
         }
-        
+
         return {};
       } catch (error) {
         const message = (error as any)?.message || 'Google sign in failed';
@@ -486,7 +493,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (error) throw error;
         setSession(null);
         setUser(null);
-        try { await unregisterBackgroundSmsTask(); } catch {}
+        try { await unregisterBackgroundSmsTask(); } catch { }
       } finally {
         setLoading(false);
       }

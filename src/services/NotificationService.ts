@@ -89,7 +89,7 @@ class NotificationService {
     try {
       // Get last 2 weeks of data (14 days)
       const aggregates = await getAggregatesByPeriod(userId, 'weekly', 14);
-      
+
       if (aggregates.length < 2) return; // Need at least 2 weeks to compare
 
       // Get current week (most recent 7 days) and previous week
@@ -98,17 +98,17 @@ class NotificationService {
 
       const currentWeekSpending = currentWeekData.reduce((sum, day) => sum + day.expense, 0);
       const previousWeekSpending = previousWeekData.reduce((sum, day) => sum + day.expense, 0);
-      
+
       const currentWeekIncome = currentWeekData.reduce((sum, day) => sum + day.income, 0);
       const previousWeekIncome = previousWeekData.reduce((sum, day) => sum + day.income, 0);
 
       // Calculate percentage changes
-      const spendingChange = previousWeekSpending > 0 
-        ? ((currentWeekSpending - previousWeekSpending) / previousWeekSpending) * 100 
+      const spendingChange = previousWeekSpending > 0
+        ? ((currentWeekSpending - previousWeekSpending) / previousWeekSpending) * 100
         : 0;
 
-      const incomeChange = previousWeekIncome > 0 
-        ? ((currentWeekIncome - previousWeekIncome) / previousWeekIncome) * 100 
+      const incomeChange = previousWeekIncome > 0
+        ? ((currentWeekIncome - previousWeekIncome) / previousWeekIncome) * 100
         : 0;
 
       // Create spending notifications (threshold: 20% change)
@@ -117,7 +117,7 @@ class NotificationService {
         this.addNotification({
           type: isIncrease ? 'spending_increase' : 'spending_decrease',
           title: isIncrease ? '📈 Spending Alert' : '📉 Spending Reduced',
-          message: isIncrease 
+          message: isIncrease
             ? `You spent ${Math.abs(spendingChange).toFixed(1)}% more this week (${currentWeekSpending.toFixed(2)}) compared to last week (${previousWeekSpending.toFixed(2)})`
             : `Great job! You spent ${Math.abs(spendingChange).toFixed(1)}% less this week (${currentWeekSpending.toFixed(2)}) compared to last week (${previousWeekSpending.toFixed(2)})`,
           data: {
@@ -134,7 +134,7 @@ class NotificationService {
         this.addNotification({
           type: 'income_change',
           title: isIncrease ? '💰 Income Boost' : '💸 Income Drop',
-          message: isIncrease 
+          message: isIncrease
             ? `Your income increased by ${Math.abs(incomeChange).toFixed(1)}% this week (${currentWeekIncome.toFixed(2)}) compared to last week (${previousWeekIncome.toFixed(2)})`
             : `Your income decreased by ${Math.abs(incomeChange).toFixed(1)}% this week (${currentWeekIncome.toFixed(2)}) compared to last week (${previousWeekIncome.toFixed(2)})`,
           data: {
@@ -209,120 +209,7 @@ class NotificationService {
     }
   }
 
-  /**
-   * Schedule daily notification at 11:55 PM
-   * Shows total Money In and Money Out for the day
-   */
-  async scheduleDailyNotification(userId: string): Promise<void> {
-    try {
-      // Request permissions
-      const { status } = await Notifications.requestPermissionsAsync();
-      if (status !== 'granted') {
-        console.log('Notification permissions not granted');
-        return;
-      }
-
-      // Cancel any existing daily notifications
-      await Notifications.cancelAllScheduledNotificationsAsync();
-
-      // Configure notification handler
-      Notifications.setNotificationHandler({
-        handleNotification: async () => ({
-          shouldShowAlert: true,
-          shouldPlaySound: true,
-          shouldSetBadge: true,
-          shouldShowBanner: true,
-          shouldShowList: true,
-        }),
-      });
-
-      // Schedule daily notification at 11:55 PM
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: 'Daily Summary',
-          body: 'Calculating your daily transactions...',
-          data: { type: 'daily_summary', userId },
-        },
-        trigger: {
-          hour: 23,
-          minute: 55,
-          repeats: true,
-          type: Notifications.TriggerType.CALENDAR,
-        },
-      });
-
-      console.log('Daily notification scheduled for 11:55 PM');
-    } catch (error) {
-      console.error('Error scheduling daily notification:', error);
-    }
-  }
-
-  /**
-   * Get today's Money In and Money Out totals
-   */
-  async getDailySummary(userId: string): Promise<{ moneyIn: number; moneyOut: number }> {
-    try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('type, amount')
-        .eq('user_id', userId)
-        .gte('date', today.toISOString())
-        .lt('date', tomorrow.toISOString());
-
-      if (error) throw error;
-
-      const moneyIn = data
-        ?.filter(t => t.type === 'income')
-        .reduce((sum, t) => sum + Math.abs(t.amount), 0) || 0;
-
-      const moneyOut = data
-        ?.filter(t => t.type === 'expense')
-        .reduce((sum, t) => sum + Math.abs(t.amount), 0) || 0;
-
-      return { moneyIn, moneyOut };
-    } catch (error) {
-      console.error('Error getting daily summary:', error);
-      return { moneyIn: 0, moneyOut: 0 };
-    }
-  }
-
-  /**
-   * Send daily summary notification with actual data
-   */
-  async sendDailySummaryNotification(userId: string): Promise<void> {
-    try {
-      const { moneyIn, moneyOut } = await this.getDailySummary(userId);
-      const netBalance = moneyIn - moneyOut;
-
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: '📊 Daily Summary',
-          body: `Today: Money In ${moneyIn.toFixed(2)}, Money Out ${moneyOut.toFixed(2)}, Net ${netBalance.toFixed(2)}.`,
-          data: { type: 'daily_summary', moneyIn, moneyOut },
-        },
-        trigger: null, // Send immediately
-      });
-    } catch (error) {
-      console.error('Error sending daily summary notification:', error);
-    }
-  }
-
-  /**
-   * Cancel all scheduled notifications
-   */
-  async cancelDailyNotifications(): Promise<void> {
-    try {
-      await Notifications.cancelAllScheduledNotificationsAsync();
-      console.log('All scheduled notifications cancelled');
-    } catch (error) {
-      console.error('Error cancelling notifications:', error);
-    }
-  }
+  // Daily summary notifications have been moved to DailySummaryNotifications.ts to consolidate logic.
 }
 
 export const notificationService = new NotificationService();

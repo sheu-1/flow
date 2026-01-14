@@ -154,24 +154,39 @@ export function parseTransactionFromSms(body: string, dateStr?: string): ParsedT
 
   // Filter 5: Handle Fuliza - strictly only log the Access Fee, ignore outstanding/principal amounts
   if (/fuliza/i.test(body)) {
-    // Only log Access Fee as a transaction, never log principal/outstanding
-    // Robust regex for "Access Fee charged Ksh 0.30" etc
-    const feeMatch = body.match(/access\s*fee(?:\s*charged)?(?:\s*(?:is|of))?[^0-9]*(?:Ksh\.?|KES|KSH)?\s*([0-9,]+(?:\.[0-9]{1,2})?)/i);
-    if (feeMatch) {
-      const feeStr = feeMatch[1]?.replace(/,/g, '');
-      const fee = feeStr ? parseFloat(feeStr) : null;
-      if (fee && fee > 0) {
+    // Enhanced patterns to match various Fuliza access fee formats:
+    // - "Access Fee charged Ksh 0.10"
+    // - "Access Fee of KES 0.10"
+    // - "Access Fee Ksh 0.10 has been charged"
+    const feePatterns = [
+      /access\s*fee\s*charged\s*(?:Ksh\.?|KES|KSH)?\s*([0-9,]+(?:\.[0-9]{1,2})?)/i,
+      /access\s*fee\s*of\s*(?:Ksh\.?|KES|KSH)?\s*([0-9,]+(?:\.[0-9]{1,2})?)/i,
+      /access\s*fee\s*(?:Ksh\.?|KES|KSH)?\s*([0-9,]+(?:\.[0-9]{1,2})?)\s*has\s*been\s*charged/i,
+      /access\s*fee\s*(?:Ksh\.?|KES|KSH)?\s*([0-9,]+(?:\.[0-9]{1,2})?)/i
+    ];
+
+    let feeMatch: RegExpMatchArray | null = null;
+    for (const pattern of feePatterns) {
+      feeMatch = body.match(pattern);
+      if (feeMatch) break;
+    }
+
+    if (feeMatch && feeMatch[1]) {
+      const feeAmount = parseFloat(feeMatch[1].replace(/,/g, ''));
+      if (!isNaN(feeAmount) && feeAmount > 0) {
         return {
-          amount: fee,
+          amount: feeAmount,
           type: 'debit',
-          sender: 'Fuliza Fee',
-          reference: parseReference(body),
+          sender: 'Safaricom',
+          reference: 'Fuliza Access Fee',
           message: body,
           dateISO: dateStr ? new Date(dateStr).toISOString() : undefined,
         };
       }
     }
-    // Never log principal or outstanding as a transaction
+
+    // If it's a Fuliza message and we didn't find a valid Access Fee, skip creating any transaction
+    console.log('[SMS Parser] Fuliza message detected but no access fee found, skipping');
     return null;
   }
 
@@ -187,7 +202,7 @@ export function parseTransactionFromSms(body: string, dateStr?: string): ParsedT
   if (amount == null || amount <= 0) {
     return null; // No valid amount = not a transaction
   }
-  
+
   if (type == null) {
     return null; // Cannot determine if money in or out = not a transaction
   }
