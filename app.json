@@ -2,7 +2,7 @@
   "expo": {
     "name": "Cashflow Tracker",
     "slug": "cashflow-tracker",
-    "owner": "transaction",
+    "owner": "alexaaaa",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -30,7 +30,7 @@
         "RECEIVE_SMS",
         "RECEIVE_BOOT_COMPLETED"
       ],
-      "package": "com.alexsheunda.cashflowtracker"
+      "package": "com.alexsheunda.cashflowtrackernew"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -44,7 +44,7 @@
       "SUPABASE_URL": "https://mquwuf1dsbcbkdt4.supabase.co",
       "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1xdXd1ZjFkc2JjYmtkdDQiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTcyOTY3MzEzMCwiZXhwIjoyMDQ1MjQ5MTMwfQ.ZfB1tD",
       "eas": {
-        "projectId": "106f8a36-c073-41a9-b4a3-ae35ea7216e1"
+        "projectId": "425bf3aa-63e7-4894-a7f0-741922035eff"
       }
     }
   }

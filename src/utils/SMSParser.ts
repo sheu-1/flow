@@ -154,11 +154,9 @@ export function parseTransactionFromSms(body: string, dateStr?: string): ParsedT
 
   // Filter 5: Handle Fuliza - strictly only log the Access Fee, ignore outstanding/principal amounts
   if (/fuliza/i.test(body)) {
-    // Examples to match:
-    // - "Access Fee charged Ksh 0.10"
-    // - "Access Fee of KES 0.10"
-    // - "Access Fee is Ksh. 0.10"
-    const feeMatch = body.match(/access\s*fee(?:\s*charged)?(?:\s*(?:is|of))?[^0-9]*(?:Ksh\.?|KES|KSH)\s*([0-9,]+(?:\.[0-9]{1,2})?)/i);
+    // Only log Access Fee as a transaction, never log principal/outstanding
+    // Robust regex for "Access Fee charged Ksh 0.30" etc
+    const feeMatch = body.match(/access\s*fee(?:\s*charged)?(?:\s*(?:is|of))?[^0-9]*(?:Ksh\.?|KES|KSH)?\s*([0-9,]+(?:\.[0-9]{1,2})?)/i);
     if (feeMatch) {
       const feeStr = feeMatch[1]?.replace(/,/g, '');
       const fee = feeStr ? parseFloat(feeStr) : null;
@@ -173,7 +171,7 @@ export function parseTransactionFromSms(body: string, dateStr?: string): ParsedT
         };
       }
     }
-    // If it's a Fuliza message and we didn't find a valid Access Fee, skip creating any transaction
+    // Never log principal or outstanding as a transaction
     return null;
   }
 
@@ -181,7 +179,7 @@ export function parseTransactionFromSms(body: string, dateStr?: string): ParsedT
   const type = parseType(body);
   const reference = parseReference(body);
   const sender = parseSender(body);
-  
+
   // Strict validation: A real transaction must have:
   // 1. A valid amount
   // 2. A clear transaction type (credit or debit)
@@ -223,6 +221,17 @@ export const SAMPLE_SMS_CASES: Array<{
   text: string;
   expect: Partial<ParsedTransaction> | null;
 }> = [
+  // User's provided sample: main transaction (airtime)
+  {
+    text: `TLQ0K25M9C confirmed.You bought Ksh30.00 of airtime on 26/12/25 at 10:15 AM.New M-PESA balance is Ksh0.00, Transaction cost, Ksh0.00.Amount you can transact within the day is 499,960.00. Start Investing today with Ziidii MMF & earn daily. Dial *334#.`,
+    expect: { amount: 30, type: 'debit' },
+  },
+  // User's provided sample: Fuliza fee
+  {
+    text: `TLQ0K25M9C Confirmed. Fuliza M-Pesa amount is Ksh 30.00. Access Fee charged Ksh 0.30. Total Fuliza M-Pesa outstanding amount is Ksh222.51 due on 22/01/26. To check daily charges, Dial *234*0#OK Select Query Charges`,
+    expect: { amount: 0.3, type: 'debit', sender: 'Fuliza Fee' },
+  },
+
   {
     text: 'M-PESA: You have received KES 1,250.00 from John Doe Ref ABC123 on 12/09/2025',
     expect: { amount: 1250, type: 'credit', sender: 'John Doe', reference: 'ABC123' },

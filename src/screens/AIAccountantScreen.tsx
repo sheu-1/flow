@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInUp } from 'react-native-reanimated';
@@ -7,35 +7,55 @@ import { useThemeColors } from '../theme/ThemeProvider';
 import { AggregatePeriod } from '../types';
 import { spacing } from '../theme/colors';
 import AIAccountantPanel from '../components/AIAccountantPanel';
+import ChatHistoryPanel from '../components/ChatHistoryPanel';
 import { useAuth } from '../hooks/useAuth';
 
 export default function AIAccountantScreen() {
   const { user } = useAuth();
   const colors = useThemeColors();
   const [period] = useState<AggregatePeriod>('monthly');
+  const [historyVisible, setHistoryVisible] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       {/* Header harmonized with Dashboard */}
       <Animated.View style={[styles.header, { backgroundColor: colors.background }]} entering={FadeInUp.springify()}> 
         <View style={styles.headerContent}>
-          <View style={[styles.iconContainer, { backgroundColor: colors.primary + '20' }]}>
-            <Ionicons name="sparkles" size={24} color={colors.primary} />
-          </View>
-          <View style={styles.headerText}>
+          <TouchableOpacity onPress={() => setHistoryVisible(true)} style={styles.menuButton}>
+            <Ionicons name="menu" size={28} color={colors.text} />
+          </TouchableOpacity>
+          <View style={styles.headerTextContainer}>
             <Text style={[styles.headerTitle, { color: colors.text }]}>AI Assistant</Text>
-            <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>Your personal financial advisor</Text>
           </View>
         </View>
       </Animated.View>
 
       {user?.id ? (
-        <AIAccountantPanel userId={user.id} period={period} />
+        <AIAccountantPanel 
+          userId={user.id} 
+          period={period} 
+          conversationId={conversationId}
+          onNewConversation={setConversationId}
+        />
       ) : (
         <View style={styles.signInPrompt}>
           <Text style={[styles.signInText, { color: colors.textSecondary }]}>Sign in to use the AI accountant.</Text>
         </View>
       )}
+      <Modal
+        visible={historyVisible}
+        animationType="slide"
+        onRequestClose={() => setHistoryVisible(false)}
+      >
+        <ChatHistoryPanel 
+          onSelectConversation={(id) => {
+            setConversationId(id);
+            setHistoryVisible(false);
+          }}
+          onClose={() => setHistoryVisible(false)}
+        />
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -53,16 +73,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
+  menuButton: {
+    padding: 8,
   },
-  headerText: {
+  headerTextContainer: {
     flex: 1,
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 20,

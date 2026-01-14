@@ -36,9 +36,9 @@ export async function buildFinancialContext(userId: string, period: AggregatePer
   }
 
   // Lines - include ALL period types for comprehensive context
-  const monthlyLines = monthlyAggregates.map((a: any) => `- ${a.periodLabel}: income=${fmt(a.income)}, expense=${fmt(a.expense)}`).join('\n');
-  const weeklyLines = weeklyAggregates.slice(-4).map((a: any) => `- ${a.periodLabel}: income=${fmt(a.income)}, expense=${fmt(a.expense)}`).join('\n'); // Last 4 weeks
-  const dailyLines = dailyAggregates.slice(-7).map((a: any) => `- ${a.periodLabel}: income=${fmt(a.income)}, expense=${fmt(a.expense)}`).join('\n'); // Last 7 days
+  const monthlyLines = monthlyAggregates.map((a: any) => `- ${a.periodLabel}: Money In=${fmt(a.income)}, Money Out=${fmt(a.expense)}`).join('\n');
+  const weeklyLines = weeklyAggregates.slice(-4).map((a: any) => `- ${a.periodLabel}: Money In=${fmt(a.income)}, Money Out=${fmt(a.expense)}`).join('\n'); // Last 4 weeks
+  const dailyLines = dailyAggregates.slice(-7).map((a: any) => `- ${a.periodLabel}: Money In=${fmt(a.income)}, Money Out=${fmt(a.expense)}`).join('\n'); // Last 7 days
   const catLines = Object.entries(categories)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 12)
@@ -51,23 +51,24 @@ export async function buildFinancialContext(userId: string, period: AggregatePer
       const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; // YYYY-MM only
       const amount = Math.abs(t.amount).toFixed(2);
       const category = t.category || 'Other';
+      const typeLabel = t.type === 'income' ? 'Money In' : 'Money Out';
       // Redact sender and exact date to avoid PII leaks
-      return `- ${ym} ${t.type} ${amount} ${category}`;
+      return `- ${ym} ${typeLabel} ${amount} ${category}`;
     })
     .join('\n');
 
   const comparison = curr && prev
     ? [
         `CURRENT PERIOD (${curr.periodLabel}) vs PREVIOUS (${prev.periodLabel})`,
-        `- Income: ${fmt(curr.income)} (${pct(curr.income, prev.income)})`,
-        `- Expense: ${fmt(curr.expense)} (${pct(curr.expense, prev.expense)})`,
+        `- Money In: ${fmt(curr.income)} (${pct(curr.income, prev.income)})`,
+        `- Money Out: ${fmt(curr.expense)} (${pct(curr.expense, prev.expense)})`,
       ].join('\n')
     : `CURRENT PERIOD: ${curr ? curr.periodLabel : 'N/A'}`;
 
   const overview = [
     `OVERVIEW (${startFromAgg.toISOString().slice(0,10)} → ${to.toISOString().slice(0,10)})`,
-    `- Total income: ${fmt(totalIncome)}`,
-    `- Total expense: ${fmt(totalExpense)}`,
+    `- Total Money In: ${fmt(totalIncome)}`,
+    `- Total Money Out: ${fmt(totalExpense)}`,
     `- Net balance: ${fmt(net)}`,
     `- Savings rate: ${(savingsRate * 100).toFixed(1)}%`,
   ].join('\n');

@@ -7,10 +7,13 @@ import { useThemeColors } from '../theme/ThemeProvider';
 import { AggregatePeriod } from '../types';
 import { chat as llmChat, ChatMessage } from '../services/LLM';
 import { buildFinancialContext } from '../services/RAG';
+import { saveChatHistory, loadChatHistory, createNewConversation, ChatMessage as AIChatMessage } from '../services/AIChatService';
 
 interface Props {
   userId: string;
   period: AggregatePeriod;
+  conversationId: string | null;
+  onNewConversation: (id: string | null) => void;
 }
 
 // Remove common Markdown tokens from AI responses for plain text display
@@ -44,12 +47,10 @@ function sanitizeMarkdown(text: string): string {
   return t.trim();
 }
 
-export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
+export const AIAccountantPanel: React.FC<Props> = ({ userId, period, conversationId, onNewConversation }) => {
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: 'assistant', content: 'Hi! I\'m your AI accountant. Ask me about your spending trends, budgeting ideas, or how to reach your savings goals. 💰\n\nTry asking:\n• "How did I spend this month?"\n• "What are my biggest expenses?"\n• "Give me budgeting tips"' },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [contextCache, setContextCache] = useState<string | null>(null);
@@ -71,9 +72,32 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
   }, [userId, period, contextCache, lastContextTime]);
 
   useEffect(() => {
+    // Load chat history when conversationId changes
+    async function loadHistory() {
+      if (conversationId) {
+        const history = await loadChatHistory(conversationId);
+        setMessages(history.length > 0 ? history : [getInitialMessage()]);
+      } else {
+        setMessages([getInitialMessage()]);
+      }
+    }
+    loadHistory();
+  }, [conversationId]);
+
+  useEffect(() => {
     // scroll to bottom when messages change
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
   }, [messages]);
+
+  const getInitialMessage = () => ({
+    role: 'assistant' as const,
+    content: 'Hi! I\'m your AI accountant. Ask me about your spending trends, budgeting ideas, or how to reach your savings goals. 💰\n\nTry asking:\n• "How did I spend this month?"\n• "What are my biggest expenses?"\n• "Give me budgeting tips"',
+  });
+
+  const handleNewChat = () => {
+    onNewConversation(null);
+    setMessages([getInitialMessage()]);
+  };
 
   const send = useCallback(async () => {
     if (!input.trim() || loading) return;
@@ -89,7 +113,18 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
       // Limit conversation history to last 10 messages for better performance
       const recentMessages = messages.slice(-10);
       const reply = await llmChat([...recentMessages, userMsg], context);
-      setMessages((m) => [...m, { role: 'assistant', content: reply }]);
+      const newMessages: AIChatMessage[] = [...messages, userMsg, { role: 'assistant', content: reply }];
+      setMessages(newMessages);
+
+      if (conversationId) {
+        saveChatHistory(conversationId, newMessages);
+      } else {
+        const newConversation = await createNewConversation(userId, currentInput);
+        if (newConversation) {
+          onNewConversation(newConversation.id);
+          saveChatHistory(newConversation.id, newMessages);
+        }
+      }
     } catch (e: any) {
       console.error('AI Chat Error:', e);
       const rawMessage = String(e?.message || '');
@@ -218,6 +253,10 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period }) => {
               <Ionicons name="send" size={18} color={colors.background} />
             </TouchableOpacity>
           </View>
+          <TouchableOpacity style={[styles.newChatButton, { borderColor: colors.primary }]} onPress={handleNewChat}>
+            <Ionicons name="add" size={20} color={colors.primary} />
+            <Text style={[styles.newChatText, { color: colors.primary }]}>New Chat</Text>
+          </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -307,8 +346,8 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     paddingHorizontal: 20,
-    paddingVertical: 16,
-    paddingBottom: 34, // Extra padding for safe area
+    paddingTop: 8,
+    paddingBottom: 16, 
   },
   inputBar: {
     flexDirection: 'row',
@@ -353,6 +392,22 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 8,
     elevation: 6,
+  },
+  newChatButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderRadius: 20,
+    alignSelf: 'flex-end',
+    marginTop: 8,
+  },
+  newChatText: {
+    marginLeft: 8,
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

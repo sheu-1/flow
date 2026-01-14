@@ -260,7 +260,7 @@ export default function SubscriptionScreen() {
     {
       id: 'weekly' as SubscriptionPlan,
       title: 'Weekly Plan',
-      price: '$1.25',
+      price: '$0.5',
       period: 'week',
       features: [
         'Everything in Daily Plan',

@@ -304,19 +304,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     (async () => {
       try {
         console.log('[Auth] init: starting auth bootstrap');
-        const reachable = await pingSupabase(2000); // Reduced timeout
-        console.log('[Auth] health check reachable =', reachable);
-
-        if (!isMounted) return;
-        if (!reachable) {
-          console.warn('[Auth] Supabase unreachable. Starting offline (no user).');
-          setSession(null);
-          setUser(null);
-          setLoading(false);
-          clearTimeout(timeoutId);
-          return;
-        }
-
+        // Always restore cached session from AsyncStorage first, regardless of network.
         const {
           data: { session },
         } = await supabase.auth.getSession();
@@ -325,6 +313,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(session?.user ?? null);
         setLoading(false);
         clearTimeout(timeoutId);
+
+        // Optionally ping Supabase for logging only (never clear session on failure)
+        try {
+          const reachable = await pingSupabase(2000);
+          console.log('[Auth] health check reachable =', reachable);
+        } catch {}
 
         if (session?.user && !smsStarted) {
           try {
@@ -341,11 +335,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } catch (e) {
         console.error('[Auth] init error:', e);
-        if (!isMounted) return;
-        setSession(null);
-        setUser(null);
-        setLoading(false);
-        clearTimeout(timeoutId);
       }
     })();
 
@@ -367,13 +356,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.log('[Auth] PASSWORD_RECOVERY event received');
           setNeedsPasswordReset(true);
         }
-        
-        // Any auth event means we have a definitive state; stop loading
-        // This prevents the UI from being stuck on the loading screen when the initial
-        // session arrives via the auth listener before the bootstrap getSession resolves.
         setLoading(false);
         try { clearTimeout(timeoutId); } catch {}
-        
         if (event === 'SIGNED_IN' && newSession?.user) {
           try {
             await PermissionService.initializeSmsPermissions();
@@ -382,12 +366,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.warn('Failed to initialize SMS permissions:', error);
           }
           try { await registerBackgroundSmsTask(); } catch {}
-          // Schedule daily notifications whenever user signs in
           try { await notificationService.scheduleDailyNotification(newSession.user.id); } catch {}
-          // Register Expo push token whenever user signs in
           try { await notificationService.registerPushToken(newSession.user.id); } catch {}
         }
-
         if (event === 'SIGNED_OUT') {
           try { stopSmsListener(); smsStarted = false; } catch {}
           try { await unregisterBackgroundSmsTask(); } catch {}
