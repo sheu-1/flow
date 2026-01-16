@@ -5,6 +5,9 @@ import { Platform } from 'react-native';
 
 const NOTIFICATION_CHANNEL_ID = 'daily_summary_channel';
 
+// Track if notifications have been scheduled for each user to prevent duplicates
+const scheduledUsers = new Set<string>();
+
 async function createNotificationChannel() {
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync(NOTIFICATION_CHANNEL_ID, {
@@ -37,75 +40,28 @@ async function getTransactionSummary(userId: string, startDate: Date, endDate: D
 }
 
 /**
- * Schedule daily summary notification at 8:00 AM
+ * Schedule daily summary notification at 9:00 AM
  * Consolidates Into/Out/Net into a SINGLE notification.
  */
 export async function scheduleDailySummaryNotification(userId: string) {
   try {
     await createNotificationChannel();
 
-    // Check if already scheduled to prevent duplicates
-    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-    const existingSummary = scheduled.find(
-      (n) => n.content.data?.type === 'daily_summary'
-    );
-
-    if (existingSummary) {
-      console.log('Daily summary notification already scheduled');
+    // Check if already scheduled for this user to prevent duplicates
+    if (scheduledUsers.has(userId)) {
+      console.log('Daily summary notification already scheduled for user:', userId);
       return;
     }
 
-    // Prepare the content (Note: Scheduler uses static content provided at scheduling time unfortunately,
-    // so ideally we want a background task to update this, but for now we set a generic title
-    // or we accept that it might be slightly stale if not updated via background fetch.
-    // However, to make it dynamic without background execution, we can only set a generic message
-    // OR we schedule it every time the app opens for the NEXT 8am.
-    // The user wants it to trigger at 8am.
-
-    // Strategy: We schedule a recurring notification with a generic "Check your daily summary" 
-    // IF we cannot guarantee background execution. 
-    // BUT, the user complained it "sends three notifications at once with summary transactions of the previous day".
-    // This implies we WERE doing dynamic calculation but sending 3 separate ones.
-
-    // To fix "three at once", we send ONE.
-    // To fix "update in background", we rely on the background task to CANCEL and RESCHEDULE 
-    // or SEND IMMEDIATELY if it runs.
-
-    // For the scheduled trigger, we will try to pre-calculate for "Yesterday" (relative to when it runs? No, relative to scheduling).
-    // Actually, Expo local notifications 'body' is static. 
-    // So we will schedule a generic message that prompts the user, 
-    // AND we will try to inject the actual data via the background task if it runs.
-
-    // Wait, the previous implementation fetched data 'now' and scheduled it. 
-    // If the app runs today, it schedules for tomorrow 8am. 
-    // "Yesterday" relative to tomorrow 8am is "Today". 
-    // So we need to calculate "Today's" stats (which will be "Yesterday" when the notif fires tomorrow).
-    // But "Today" isn't over yet. 
-
-    // BEST APPROACH: The background task (running at ~8am) should send the notification with actual data.
-    // The scheduled one is a fallback. 
-
-    const { status } = await Notifications.getPermissionsAsync();
-    if (status !== 'granted') return;
-
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: '📊 Daily Financial Summary',
-        body: 'Your daily transaction summary is ready. Tap to view details.',
-        sound: 'default',
-        data: { type: 'daily_summary', userId },
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
-        hour: 8,
-        minute: 0,
-        repeats: true,
-      } as Notifications.CalendarTriggerInput,
-    });
-
-    console.log('Daily summary placeholder scheduled for 8:00 AM');
+    // We don't schedule a placeholder notification anymore
+    // Instead, we rely on the background task to send the actual notification at 9 AM
+    // This prevents duplicate notifications and ensures the notification contains real data
+    
+    // Mark this user as having notifications scheduled
+    scheduledUsers.add(userId);
+    console.log('Daily summary notification will be sent by background task at 9:00 AM for user:', userId);
   } catch (error) {
-    console.error('Error scheduling daily summary:', error);
+    console.error('Error setting up daily summary:', error);
   }
 }
 
@@ -150,18 +106,18 @@ export async function sendDailySummaryNotification(userId: string) {
   }
 }
 
-export async function cancelDailySummaryNotification() {
+export async function cancelDailySummaryNotification(userId?: string) {
   try {
-    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-    const summaryNotifications = scheduled.filter(
-      (n) => n.content.data?.type === 'daily_summary'
-    );
-
-    for (const notification of summaryNotifications) {
-      await Notifications.cancelScheduledNotificationAsync(notification.identifier);
+    // Since we're not scheduling notifications anymore, we just clear the tracking
+    // Remove user from scheduled set if provided
+    if (userId) {
+      scheduledUsers.delete(userId);
+    } else {
+      // Clear all users if no specific user provided
+      scheduledUsers.clear();
     }
 
-    console.log('Daily summary notifications cancelled');
+    console.log('Daily summary notification setup cancelled');
   } catch (error) {
     console.error('Error cancelling daily summary:', error);
   }

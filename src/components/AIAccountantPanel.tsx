@@ -7,15 +7,14 @@ import { useThemeColors } from '../theme/ThemeProvider';
 import { AggregatePeriod } from '../types';
 import { chat as llmChat, ChatMessage } from '../services/LLM';
 import { buildFinancialContext } from '../services/RAG';
-import { saveChatHistory, loadChatHistory, createNewConversation, ChatMessage as AIChatMessage } from '../services/AIChatService';
-
+import { saveChatHistory, loadChatHistory, createNewConversation } from '../services/AIChatService';
 import { AIChatService } from '../services/AIChatService';
 
 interface Props {
   userId: string;
   period: AggregatePeriod;
   currentConversationId: string | null;
-  onConversationCreated: (id: string) => void;
+  onConversationCreated: (id: string | null) => void;
 }
 
 // Remove common Markdown tokens from AI responses for plain text display
@@ -49,11 +48,7 @@ function sanitizeMarkdown(text: string): string {
   return t.trim();
 }
 
-<<<<<<< HEAD
-export const AIAccountantPanel: React.FC<Props> = ({ userId, period, conversationId, onNewConversation }) => {
-=======
 export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConversationId, onConversationCreated }) => {
->>>>>>> acc11e40da81d4652908f0b8b3680d7ac0e0d5b7
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -107,17 +102,17 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConv
   }, [userId, period, contextCache, lastContextTime]);
 
   useEffect(() => {
-    // Load chat history when conversationId changes
+    // Load chat history when currentConversationId changes
     async function loadHistory() {
-      if (conversationId) {
-        const history = await loadChatHistory(conversationId);
+      if (currentConversationId) {
+        const history = await loadChatHistory(currentConversationId);
         setMessages(history.length > 0 ? history : [getInitialMessage()]);
       } else {
         setMessages([getInitialMessage()]);
       }
     }
     loadHistory();
-  }, [conversationId]);
+  }, [currentConversationId]);
 
   useEffect(() => {
     // scroll to bottom when messages change
@@ -130,7 +125,7 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConv
   });
 
   const handleNewChat = () => {
-    onNewConversation(null);
+    onConversationCreated(null);
     setMessages([getInitialMessage()]);
   };
 
@@ -174,38 +169,31 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConv
       // Limit conversation history to last 10 messages for better performance
       const recentMessages = messages.slice(-10);
       const reply = await llmChat([...recentMessages, userMsg], context);
-<<<<<<< HEAD
-      const newMessages: AIChatMessage[] = [...messages, userMsg, { role: 'assistant', content: reply }];
-      setMessages(newMessages);
-
-      if (conversationId) {
-        saveChatHistory(conversationId, newMessages);
-      } else {
-        const newConversation = await createNewConversation(userId, currentInput);
-        if (newConversation) {
-          onNewConversation(newConversation.id);
-          saveChatHistory(newConversation.id, newMessages);
-        }
-      }
-=======
-
       const assistantMsg: ChatMessage = { role: 'assistant', content: reply };
       setMessages((m) => [...m, assistantMsg]);
 
-      // Save assistant message
-      await AIChatService.saveMessage(activeId, assistantMsg);
+      // Save to conversation if we have one
+      if (currentConversationId) {
+        await saveChatHistory(currentConversationId, [...messages, userMsg, assistantMsg]);
+      } else {
+        // Create new conversation with first message
+        const newConversation = await createNewConversation(userId, 'New Chat');
+        if (newConversation) {
+          onConversationCreated(newConversation.id);
+          const newMessages = [...messages, userMsg, assistantMsg];
+          await saveChatHistory(newConversation.id, newMessages);
+        }
+      }
 
-      // Increment prompt count
+      // Update prompt count
       const newCount = await AIChatService.incrementPromptCount(userId);
       setPromptStatus(prev => ({ ...prev, count: newCount }));
-
->>>>>>> acc11e40da81d4652908f0b8b3680d7ac0e0d5b7
     } catch (e: any) {
       console.error('AI Chat Error:', e);
       const rawMessage = String(e?.message || '');
       const errorMsg = rawMessage.includes('API key')
         ? 'Please configure your AI API key in Settings.'
-        : `Sorry, I couldn\'t process that request.`;
+        : `Sorry, I couldn't process that request.`;
 
       setMessages((m) => [...m, { role: 'assistant', content: errorMsg }]);
 
@@ -410,12 +398,10 @@ const styles = StyleSheet.create({
     marginVertical: 12,
   },
   loadingBubble: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    maxWidth: '85%',
     paddingHorizontal: 18,
     paddingVertical: 14,
     borderRadius: 24,
-    marginRight: 40,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -426,87 +412,65 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   loadingText: {
-    fontSize: 16,
+    fontSize: 14,
     marginLeft: 8,
-    fontStyle: 'italic',
+    color: '#666',
   },
   limitReachedWrapper: {
-    padding: 20,
-    alignItems: 'center',
-    marginBottom: 20,
+    alignItems: 'flex-start',
+    marginVertical: 12,
   },
   limitReachedBubble: {
-    padding: 20,
-    borderRadius: 20,
+    maxWidth: '85%',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderRadius: 24,
     borderWidth: 1,
-    alignItems: 'center',
-    width: '100%',
+    borderStyle: 'dashed',
   },
   limitReachedText: {
-    fontSize: 15,
-    textAlign: 'center',
-    marginVertical: 12,
-    fontWeight: '500',
-    lineHeight: 22,
+    fontSize: 14,
+    marginLeft: 8,
+    flex: 1,
   },
   upgradeButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 25,
-    marginTop: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginLeft: 8,
   },
   upgradeButtonText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '700',
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
   inputContainer: {
     paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 16, 
+    paddingBottom: 20,
   },
   inputBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 28,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    borderRadius: 25,
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
+    height: 50,
+    paddingHorizontal: 12,
   },
   iconButton: {
-    padding: 8,
-    marginHorizontal: 4,
+    padding: 10,
   },
   textInput: {
     flex: 1,
     fontSize: 16,
-    lineHeight: 20,
-    maxHeight: 60, // Reduced from 100 to 60
-    marginHorizontal: 8,
-    fontFamily: 'System',
+    paddingHorizontal: 8,
   },
   sendButton: {
-    borderRadius: 20,
     width: 40,
     height: 40,
-    justifyContent: 'center',
+    borderRadius: 20,
     alignItems: 'center',
+    justifyContent: 'center',
     marginLeft: 8,
-    shadowColor: '#10B981',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
     elevation: 6,
   },
   newChatButton: {

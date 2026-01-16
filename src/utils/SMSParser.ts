@@ -154,39 +154,64 @@ export function parseTransactionFromSms(body: string, dateStr?: string): ParsedT
 
   // Filter 5: Handle Fuliza - strictly only log the Access Fee, ignore outstanding/principal amounts
   if (/fuliza/i.test(body)) {
-    // Enhanced patterns to match various Fuliza access fee formats:
-    // - "Access Fee charged Ksh 0.10"
-    // - "Access Fee of KES 0.10"
-    // - "Access Fee Ksh 0.10 has been charged"
-    const feePatterns = [
-      /access\s*fee\s*charged\s*(?:Ksh\.?|KES|KSH)?\s*([0-9,]+(?:\.[0-9]{1,2})?)/i,
-      /access\s*fee\s*of\s*(?:Ksh\.?|KES|KSH)?\s*([0-9,]+(?:\.[0-9]{1,2})?)/i,
-      /access\s*fee\s*(?:Ksh\.?|KES|KSH)?\s*([0-9,]+(?:\.[0-9]{1,2})?)\s*has\s*been\s*charged/i,
-      /access\s*fee\s*(?:Ksh\.?|KES|KSH)?\s*([0-9,]+(?:\.[0-9]{1,2})?)/i
-    ];
-
-    let feeMatch: RegExpMatchArray | null = null;
-    for (const pattern of feePatterns) {
-      feeMatch = body.match(pattern);
-      if (feeMatch) break;
-    }
-
-    if (feeMatch && feeMatch[1]) {
-      const feeAmount = parseFloat(feeMatch[1].replace(/,/g, ''));
-      if (!isNaN(feeAmount) && feeAmount > 0) {
+<<<<<<< HEAD
+    // Only log Access Fee as a transaction, never log principal/outstanding
+    // Robust regex for "Access Fee charged Ksh 0.30" etc
+    const feeMatch = body.match(/access\s*fee(?:\s*charged)?(?:\s*(?:is|of))?[^0-9]*(?:Ksh\.?|KES|KSH)?\s*([0-9,]+(?:\.[0-9]{1,2})?)/i);
+    if (feeMatch) {
+      const feeStr = feeMatch[1]?.replace(/,/g, '');
+      const fee = feeStr ? parseFloat(feeStr) : null;
+      if (fee && fee > 0) {
         return {
-          amount: feeAmount,
+          amount: fee,
           type: 'debit',
-          sender: 'Safaricom',
-          reference: 'Fuliza Access Fee',
+          sender: 'Fuliza Fee',
+          reference: parseReference(body),
           message: body,
           dateISO: dateStr ? new Date(dateStr).toISOString() : undefined,
         };
       }
     }
+    // Never log principal or outstanding as a transaction
+=======
+    // Enhanced patterns to match various Fuliza access fee formats:
+    // - "Access Fee charged Ksh 0.10"
+    // - "Access Fee of KES 0.10"
+    // - "Access Fee is Ksh. 0.10"
+    // - "Access fee Ksh0.10"
+    // - "Fuliza M-PESA charge of Ksh X"
+    // - "charged an access fee of Ksh X"
+
+    // Try multiple patterns for better coverage
+    const patterns = [
+      /access\s*fee(?:\s*charged)?(?:\s*(?:is|of))?\s*(?:Ksh\.?|KES|KSH)\s*([0-9,]+(?:\.[0-9]{1,2})?)/i,
+      /(?:charged|charge)\s*(?:an\s*)?access\s*fee\s*(?:of\s*)?(?:Ksh\.?|KES|KSH)\s*([0-9,]+(?:\.[0-9]{1,2})?)/i,
+      /fuliza\s*(?:m-?pesa)?\s*(?:charge|fee)\s*(?:of\s*)?(?:Ksh\.?|KES|KSH)\s*([0-9,]+(?:\.[0-9]{1,2})?)/i,
+      /(?:Ksh\.?|KES|KSH)\s*([0-9,]+(?:\.[0-9]{1,2})?)\s*(?:access\s*fee|fuliza\s*fee)/i,
+    ];
+
+    for (const pattern of patterns) {
+      const feeMatch = body.match(pattern);
+      if (feeMatch && feeMatch[1]) {
+        const feeStr = feeMatch[1].replace(/,/g, '');
+        const fee = parseFloat(feeStr);
+        if (Number.isFinite(fee) && fee > 0) {
+          console.log(`[SMS Parser] Fuliza access fee detected: ${fee}`);
+          return {
+            amount: fee,
+            type: 'debit',
+            sender: 'Fuliza Fee',
+            reference: parseReference(body),
+            message: body,
+            dateISO: dateStr ? new Date(dateStr).toISOString() : undefined,
+          };
+        }
+      }
+    }
 
     // If it's a Fuliza message and we didn't find a valid Access Fee, skip creating any transaction
     console.log('[SMS Parser] Fuliza message detected but no access fee found, skipping');
+>>>>>>> acc11e40da81d4652908f0b8b3680d7ac0e0d5b7
     return null;
   }
 
@@ -236,6 +261,7 @@ export const SAMPLE_SMS_CASES: Array<{
   text: string;
   expect: Partial<ParsedTransaction> | null;
 }> = [
+<<<<<<< HEAD
   // User's provided sample: main transaction (airtime)
   {
     text: `TLQ0K25M9C confirmed.You bought Ksh30.00 of airtime on 26/12/25 at 10:15 AM.New M-PESA balance is Ksh0.00, Transaction cost, Ksh0.00.Amount you can transact within the day is 499,960.00. Start Investing today with Ziidii MMF & earn daily. Dial *334#.`,
@@ -280,3 +306,38 @@ export const SAMPLE_SMS_CASES: Array<{
     expect: null,
   },
 ];
+=======
+    {
+      text: 'M-PESA: You have received KES 1,250.00 from John Doe Ref ABC123 on 12/09/2025',
+      expect: { amount: 1250, type: 'credit', sender: 'John Doe', reference: 'ABC123' },
+    },
+    {
+      text: 'Payment of KES 2,000 made to SUPERMARKET LTD Ref TRX-789',
+      expect: { amount: 2000, type: 'debit', sender: 'SUPERMARKET LTD', reference: 'TRX-789' },
+    },
+    {
+      text: 'Airtel Money: You have received USD 50.00 from Jane',
+      expect: { amount: 50, type: 'credit', sender: 'Jane' },
+    },
+    {
+      text: 'Your account was debited KES 3,450.25 Purchase at PHARMACY Ref NO123',
+      expect: { amount: 3450.25, type: 'debit', sender: 'PHARMACY', reference: 'NO123' },
+    },
+    {
+      text: 'You spent KES 500 at Cafe Latte',
+      expect: { amount: 500, type: 'debit', sender: 'Cafe Latte' },
+    },
+    {
+      text: 'Deposit: KES 10,000 credited to your account Ref 9XY7',
+      expect: { amount: 10000, type: 'credit', reference: '9XY7' },
+    },
+    {
+      text: 'USD 12.99 purchase at APPSTORE',
+      expect: { amount: 12.99, type: 'debit', sender: 'APPSTORE' },
+    },
+    {
+      text: 'Balance inquiry. No transaction.',
+      expect: null,
+    },
+  ];
+>>>>>>> acc11e40da81d4652908f0b8b3680d7ac0e0d5b7

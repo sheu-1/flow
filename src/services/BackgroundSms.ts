@@ -44,10 +44,10 @@ TaskManager.defineTask(TASK_NAME, async () => {
       await setLastSeenForUser(maxTs, userId);
     }
 
-    // Check for daily summary trigger (8 AM - 9 AM)
+    // Check for daily summary trigger (9 AM - 10 AM)
     try {
       const now = new Date();
-      if (now.getHours() === 8) {
+      if (now.getHours() === 9) {
         const todayStr = now.toISOString().split('T')[0];
         const lastSentKey = `daily_summary_sent_${userId}`;
         const lastSent = await AsyncStorage.getItem(lastSentKey);
@@ -81,10 +81,6 @@ export async function registerBackgroundSmsTask(): Promise<boolean> {
       minimumInterval: 15 * 60,
       stopOnTerminate: false,
       startOnBoot: true,
-      requiresBatteryNotLow: false,
-      requiresCharging: false,
-      requiresDeviceIdle: false,
-      requiresNetworkConnectivity: false,
     });
     return true;
   } catch (e) {

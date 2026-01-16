@@ -12,7 +12,7 @@ import { PermissionService } from './PermissionService';
 import { startSmsListener, stopSmsListener } from './SmsService';
 import { registerBackgroundSmsTask, unregisterBackgroundSmsTask } from './BackgroundSms';
 import { notificationService } from './NotificationService';
-import { scheduleDailySummaryNotification } from './DailySummaryNotifications';
+import { scheduleDailySummaryNotification, cancelDailySummaryNotification } from './DailySummaryNotifications';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -329,8 +329,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.warn('[Auth] Failed to start SMS listener:', e);
           }
           try { await registerBackgroundSmsTask(); } catch { }
-          // Schedule daily notifications for signed-in user
-          try { await scheduleDailySummaryNotification(session.user.id); } catch { }
           // Register Expo push token for this user
           try { await notificationService.registerPushToken(session.user.id); } catch { }
         }
@@ -357,12 +355,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.log('[Auth] PASSWORD_RECOVERY event received');
           setNeedsPasswordReset(true);
         }
-        // Any auth event means we have a definitive state; stop loading
-        // This prevents the UI from being stuck on the loading screen when the initial
-        // auth check completes (especially important for web/Expo Go where auth state
-        // might resolve quickly)
         setLoading(false);
-        try { clearTimeout(timeoutId); } catch { }
+        try { clearTimeout(timeoutId); } catch {}
         if (event === 'SIGNED_IN' && newSession?.user) {
           try {
             await PermissionService.initializeSmsPermissions();
@@ -379,6 +373,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (event === 'SIGNED_OUT') {
           try { stopSmsListener(); smsStarted = false; } catch { }
           try { await unregisterBackgroundSmsTask(); } catch { }
+          // Cancel daily notifications when user signs out
+          try { await cancelDailySummaryNotification(newSession?.user?.id); } catch { }
           setNeedsPasswordReset(false);
         }
       }

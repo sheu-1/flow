@@ -35,15 +35,10 @@ export const AIChatService = {
     /**
      * Create a new conversation
      */
-    async createConversation(userId: string, title: string): Promise<AIConversation> {
+    async createConversation(userId: string, title: string = 'New Conversation'): Promise<AIConversation> {
         const { data, error } = await supabase
             .from('ai_conversations')
-            .insert({
-                user_id: userId,
-                title,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-            })
+            .insert([{ user_id: userId, title }])
             .select()
             .single();
 
@@ -57,12 +52,12 @@ export const AIChatService = {
     async getMessages(conversationId: string): Promise<AIMessage[]> {
         const { data, error } = await supabase
             .from('ai_messages')
-            .select('*')
+            .select('role, content')
             .eq('conversation_id', conversationId)
             .order('created_at', { ascending: true });
 
         if (error) throw error;
-        return data || [];
+        return (data || []) as AIMessage[];
     },
 
     /**
@@ -71,24 +66,64 @@ export const AIChatService = {
     async addMessage(conversationId: string, role: 'user' | 'assistant', content: string): Promise<AIMessage> {
         const { data, error } = await supabase
             .from('ai_messages')
-            .insert({
+            .insert([{
                 conversation_id: conversationId,
                 role,
                 content,
                 created_at: new Date().toISOString()
-            })
+            }])
             .select()
             .single();
 
         if (error) throw error;
 
-        // Update conversation's updated_at
+        // Update conversation timestamp
         await supabase
             .from('ai_conversations')
             .update({ updated_at: new Date().toISOString() })
             .eq('id', conversationId);
 
         return data;
+    },
+
+    /**
+     * Save a single message to conversation
+     */
+    async saveMessage(conversationId: string, message: ChatMessage): Promise<void> {
+        // Only save user and assistant messages, filter out system messages
+        const role = message.role === 'system' ? 'user' : message.role as 'user' | 'assistant';
+        return await this.addMessage(conversationId, role, message.content);
+    },
+
+    /**
+     * Get prompt status for a user
+     */
+    async getPromptStatus(userId: string): Promise<{ count: number; isPremium: boolean }> {
+        const { data, error } = await supabase
+            .from('ai_usage')
+            .select('prompt_count, is_premium')
+            .eq('user_id', userId)
+            .maybeSingle();
+
+        if (error && error.code !== 'PGRST116') {
+            console.error('Error fetching prompt status:', error);
+        }
+
+        if (!data) {
+            // Create initial usage record
+            const { data: newData, error: createError } = await supabase
+                .from('ai_usage')
+                .insert([{ user_id: userId, prompt_count: 0, is_premium: false }])
+                .select()
+                .single();
+
+            if (createError) {
+                console.error('Error creating usage record:', createError);
+                return { count: 0, isPremium: false };
+            }
+            return { count: newData.prompt_count, isPremium: newData.is_premium };
+        }
+
         return { count: data.prompt_count, isPremium: data.is_premium };
     },
 
@@ -168,7 +203,7 @@ export async function saveChatHistory(conversationId: string, messages: ChatMess
 
     // Add all messages
     for (const message of messages) {
-      await AIChatService.addMessage(conversationId, message.role, message.content);
+      await AIChatService.addMessage(conversationId, message.role as 'user' | 'assistant', message.content);
     }
   } catch (error) {
     console.error('Error saving chat history:', error);
