@@ -40,6 +40,8 @@ export default function NotificationPanel({ visible, onClose }: NotificationPane
         return 'trending-down';
       case 'income_change':
         return 'cash';
+      case 'daily_summary':
+        return 'stats-chart';
       default:
         return 'notifications';
     }
@@ -53,6 +55,8 @@ export default function NotificationPanel({ visible, onClose }: NotificationPane
         return colors.success;
       case 'income_change':
         return colors.primary;
+      case 'daily_summary':
+        return colors.primary; // Or a specific color like deep blue
       default:
         return colors.textSecondary;
     }
@@ -61,13 +65,13 @@ export default function NotificationPanel({ visible, onClose }: NotificationPane
   const formatTime = (date: Date) => {
     const now = new Date();
     const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
-    
+
     if (diffInMinutes < 1) return 'Just now';
     if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
-    
+
     const diffInHours = Math.floor(diffInMinutes / 60);
     if (diffInHours < 24) return `${diffInHours}h ago`;
-    
+
     const diffInDays = Math.floor(diffInHours / 24);
     return `${diffInDays}d ago`;
   };
@@ -118,9 +122,9 @@ export default function NotificationPanel({ visible, onClose }: NotificationPane
                 key={notification.id}
                 style={[
                   styles.notificationItem,
-                  { 
+                  {
                     backgroundColor: notification.isRead ? colors.background : colors.surface,
-                    borderColor: colors.border 
+                    borderColor: colors.border
                   }
                 ]}
                 onPress={() => handleMarkAsRead(notification.id)}
@@ -128,15 +132,15 @@ export default function NotificationPanel({ visible, onClose }: NotificationPane
                 <View style={styles.notificationContent}>
                   <View style={styles.notificationHeader}>
                     <View style={styles.notificationTitleRow}>
-                      <Ionicons 
-                        name={getNotificationIcon(notification.type)} 
-                        size={20} 
-                        color={getNotificationColor(notification.type)} 
+                      <Ionicons
+                        name={getNotificationIcon(notification.type)}
+                        size={20}
+                        color={getNotificationColor(notification.type)}
                         style={styles.notificationIcon}
                       />
                       <Text style={[
-                        styles.notificationTitle, 
-                        { 
+                        styles.notificationTitle,
+                        {
                           color: colors.text,
                           fontWeight: notification.isRead ? '500' : '700'
                         }
@@ -152,9 +156,9 @@ export default function NotificationPanel({ visible, onClose }: NotificationPane
                     </Text>
                   </View>
                   <Text style={[
-                    styles.notificationMessage, 
-                    { 
-                      color: notification.isRead ? colors.textSecondary : colors.text 
+                    styles.notificationMessage,
+                    {
+                      color: notification.isRead ? colors.textSecondary : colors.text
                     }
                   ]}>
                     {notification.message}

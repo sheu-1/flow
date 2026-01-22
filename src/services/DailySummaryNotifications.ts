@@ -56,7 +56,7 @@ export async function scheduleDailySummaryNotification(userId: string) {
     // We don't schedule a placeholder notification anymore
     // Instead, we rely on the background task to send the actual notification at 9 AM
     // This prevents duplicate notifications and ensures the notification contains real data
-    
+
     // Mark this user as having notifications scheduled
     scheduledUsers.add(userId);
     console.log('Daily summary notification will be sent by background task at 9:00 AM for user:', userId);
@@ -65,6 +65,9 @@ export async function scheduleDailySummaryNotification(userId: string) {
   }
 }
 
+/**
+ * Triggered by Background Fetch to send actual data
+ */
 /**
  * Triggered by Background Fetch to send actual data
  */
@@ -81,23 +84,40 @@ export async function sendDailySummaryNotification(userId: string) {
 
     const { moneyIn, moneyOut, netBalance } = await getTransactionSummary(userId, yesterday, today);
 
-    // Don't send if there was no activity? Or send anyway? User wants summary.
-    // If all are 0, maybe skip?
-    if (moneyIn === 0 && moneyOut === 0) {
-      console.log('No activity yesterday, skipping summary.');
-      return;
-    }
+    // If all are 0, we can still send a "No activity" summary or skip.
+    // Let's send it to keep the daily habit alive, but maybe different text?
+    const hasActivity = moneyIn > 0 || moneyOut > 0;
 
-    const summaryText = `Yesterday: In ${formatCurrency(moneyIn)}, Out ${formatCurrency(moneyOut)}, Net ${formatCurrency(netBalance)}`;
+    // Better Emoji & Text Formatting
+    const title = '📊 Daily Financial Summary';
+    const body = hasActivity
+      ? `Yesterday:\n💰 In: ${formatCurrency(moneyIn)}\n💸 Out: ${formatCurrency(moneyOut)}\n⚖️ Net: ${formatCurrency(netBalance)}`
+      : `No transactions recorded yesterday. 📝`;
 
+    // 1. Send System Notification (Push)
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: '📊 Daily Financial Summary',
-        body: summaryText,
+        title,
+        body, // Note: body newlines might not show on all android versions perfectly, but usually fine
         sound: 'default',
         data: { type: 'daily_summary', userId, date: yesterday.toISOString() },
       },
       trigger: null, // Immediate
+    });
+
+    // 2. Add to In-App Notification Panel
+    // We import notificationService dynamically or move it here to avoid circular dependencies if any
+    const { notificationService } = require('./NotificationService');
+    notificationService.addNotification({
+      type: 'daily_summary', // We will need to update the type definition in NotificationService
+      title,
+      message: body.replace(/\n/g, '  '), // Replace newlines with spaces for single-line display if needed
+      data: {
+        moneyIn,
+        moneyOut,
+        netBalance,
+        date: yesterday.toISOString()
+      }
     });
 
     console.log('Immediate daily summary sent via background task');

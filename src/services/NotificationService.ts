@@ -5,7 +5,7 @@ import { supabase } from './SupabaseClient';
 
 export interface SpendingNotification {
   id: string;
-  type: 'spending_increase' | 'spending_decrease' | 'income_change';
+  type: 'spending_increase' | 'spending_decrease' | 'income_change' | 'daily_summary';
   title: string;
   message: string;
   timestamp: Date;
@@ -87,6 +87,10 @@ class NotificationService {
   // Check for spending changes and create notifications
   async checkWeeklySpending(userId: string): Promise<void> {
     try {
+      // PAUSED: User requested to pause in-app generation of these notifications and stick to daily summaries only.
+      // logic commented out below:
+
+      /*
       // Get last 2 weeks of data (14 days)
       const aggregates = await getAggregatesByPeriod(userId, 'weekly', 14);
 
@@ -144,6 +148,7 @@ class NotificationService {
           }
         });
       }
+      */
 
     } catch (error) {
       console.error('Error checking weekly spending:', error);

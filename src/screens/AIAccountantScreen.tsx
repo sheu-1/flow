@@ -1,18 +1,12 @@
-<<<<<<< HEAD
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
-=======
 import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Pressable } from 'react-native';
->>>>>>> acc11e40da81d4652908f0b8b3680d7ac0e0d5b7
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeInUp, SlideInRight, SlideOutRight, FadeIn, FadeOut, useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import Animated, { FadeInUp, SlideInRight, SlideOutRight, FadeIn, FadeOut } from 'react-native-reanimated';
 import { useThemeColors } from '../theme/ThemeProvider';
 import { AggregatePeriod } from '../types';
 import { spacing } from '../theme/colors';
 import AIAccountantPanel from '../components/AIAccountantPanel';
-import ChatHistoryPanel from '../components/ChatHistoryPanel';
 import { useAuth } from '../hooks/useAuth';
 import { AIChatService, AIConversation } from '../services/AIChatService';
 
@@ -23,10 +17,6 @@ export default function AIAccountantScreen() {
   const { user } = useAuth();
   const colors = useThemeColors();
   const [period] = useState<AggregatePeriod>('monthly');
-<<<<<<< HEAD
-  const [historyVisible, setHistoryVisible] = useState(false);
-  const [conversationId, setConversationId] = useState<string | null>(null);
-=======
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [conversations, setConversations] = useState<AIConversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
@@ -56,63 +46,44 @@ export default function AIAccountantScreen() {
     setActiveConversationId(null);
     setIsHistoryOpen(false);
   };
->>>>>>> acc11e40da81d4652908f0b8b3680d7ac0e0d5b7
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       {/* Header harmonized with Dashboard */}
       <Animated.View style={[styles.header, { backgroundColor: colors.background }]} entering={FadeInUp.springify()}>
         <View style={styles.headerContent}>
-          <TouchableOpacity onPress={() => setHistoryVisible(true)} style={styles.menuButton}>
+          <TouchableOpacity onPress={() => setIsHistoryOpen(true)} style={styles.menuButton}>
             <Ionicons name="menu" size={28} color={colors.text} />
           </TouchableOpacity>
           <View style={styles.headerTextContainer}>
             <Text style={[styles.headerTitle, { color: colors.text }]}>AI Assistant</Text>
           </View>
-          <TouchableOpacity
-            style={[styles.historyButton, { backgroundColor: colors.surface }]}
-            onPress={() => setIsHistoryOpen(true)}
-          >
-            <Ionicons name="time-outline" size={24} color={colors.primary} />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity onPress={() => setActiveConversationId(null)} style={[styles.headerButton, { marginRight: 8 }]}>
+              <Ionicons name="add-circle-outline" size={28} color={colors.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.historyButton, { backgroundColor: colors.surface }]}
+              onPress={() => setIsHistoryOpen(true)}
+            >
+              <Ionicons name="time-outline" size={24} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
         </View>
       </Animated.View>
 
       {user?.id ? (
-<<<<<<< HEAD
-        <AIAccountantPanel 
-          userId={user.id} 
-          period={period} 
-          conversationId={conversationId}
-          onNewConversation={setConversationId}
-=======
         <AIAccountantPanel
           userId={user.id}
           period={period}
           currentConversationId={activeConversationId}
           onConversationCreated={(id) => setActiveConversationId(id)}
->>>>>>> acc11e40da81d4652908f0b8b3680d7ac0e0d5b7
         />
       ) : (
         <View style={styles.signInPrompt}>
           <Text style={[styles.signInText, { color: colors.textSecondary }]}>Sign in to use the AI accountant.</Text>
         </View>
       )}
-<<<<<<< HEAD
-      <Modal
-        visible={historyVisible}
-        animationType="slide"
-        onRequestClose={() => setHistoryVisible(false)}
-      >
-        <ChatHistoryPanel 
-          onSelectConversation={(id) => {
-            setConversationId(id);
-            setHistoryVisible(false);
-          }}
-          onClose={() => setHistoryVisible(false)}
-        />
-      </Modal>
-=======
 
       {/* History Side Page (Drawer) */}
       {isHistoryOpen && (
@@ -183,7 +154,6 @@ export default function AIAccountantScreen() {
           </Animated.View>
         </View>
       )}
->>>>>>> acc11e40da81d4652908f0b8b3680d7ac0e0d5b7
     </SafeAreaView>
   );
 }
@@ -295,5 +265,12 @@ const styles = StyleSheet.create({
   },
   historyDate: {
     fontSize: 12,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerButton: {
+    padding: 4,
   },
 });

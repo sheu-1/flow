@@ -172,16 +172,12 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConv
       const assistantMsg: ChatMessage = { role: 'assistant', content: reply };
       setMessages((m) => [...m, assistantMsg]);
 
-      // Save to conversation if we have one
-      if (currentConversationId) {
-        await saveChatHistory(currentConversationId, [...messages, userMsg, assistantMsg]);
-      } else {
-        // Create new conversation with first message
-        const newConversation = await createNewConversation(userId, 'New Chat');
-        if (newConversation) {
-          onConversationCreated(newConversation.id);
-          const newMessages = [...messages, userMsg, assistantMsg];
-          await saveChatHistory(newConversation.id, newMessages);
+      // Save to conversation
+      if (activeId) {
+        await saveChatHistory(activeId, [...messages, userMsg, assistantMsg]);
+        // Ensure state is synced if it wasn't already (though we called onConversationCreated earlier)
+        if (activeId !== currentConversationId) {
+          onConversationCreated(activeId);
         }
       }
 
@@ -327,10 +323,6 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConv
               <Ionicons name="send" size={18} color={colors.background} />
             </TouchableOpacity>
           </View>
-          <TouchableOpacity style={[styles.newChatButton, { borderColor: colors.primary }]} onPress={handleNewChat}>
-            <Ionicons name="add" size={20} color={colors.primary} />
-            <Text style={[styles.newChatText, { color: colors.primary }]}>New Chat</Text>
-          </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -453,7 +445,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 25,
     borderWidth: 1,
-    height: 50,
+    height: 75,
     paddingHorizontal: 12,
   },
   iconButton: {

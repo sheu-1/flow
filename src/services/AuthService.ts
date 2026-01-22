@@ -249,29 +249,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const handleAuthCallbackUrl = async (url: string) => {
       try {
+        console.log('[Auth] Handling callback URL:', url);
         const parsed = Linking.parse(url);
         const rawPath = (parsed.path || parsed.hostname || '').toString();
-        const path = rawPath.replace(/^\//, '');
-        // Accept variants like "reset-password" or "auth/reset-password" etc.
-        if (!path.endsWith('reset-password')) return;
-
+        
+        // More robust detection: check for 'reset-password' anywhere in path or host, OR type=recovery param
         const urlObj = new URL(url);
-        const code = urlObj.searchParams.get('code');
-
         const hash = urlObj.hash ? urlObj.hash.replace(/^#/, '') : '';
         const hashParams = new URLSearchParams(hash);
+        const type = hashParams.get('type') || urlObj.searchParams.get('type');
+        
+        const isResetPath = rawPath.includes('reset-password');
+        const isRecoveryType = type === 'recovery';
+
+        if (!isResetPath && !isRecoveryType) {
+             console.log('[Auth] URL is not for password reset (path:', rawPath, 'type:', type, ')');
+             return;
+        }
+
+        const code = urlObj.searchParams.get('code');
         const accessToken = hashParams.get('access_token') || urlObj.searchParams.get('access_token');
         const refreshToken = hashParams.get('refresh_token') || urlObj.searchParams.get('refresh_token');
-        const type = hashParams.get('type') || urlObj.searchParams.get('type');
 
         // Supabase recovery can arrive either as a PKCE `code` or as implicit tokens in the hash.
         if (code) {
+          console.log('[Auth] Exchange code for session...');
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) {
             console.warn('[Auth] Failed to exchange recovery code for session:', error);
+            // Even if exchange fails, we might want to let them try if we have a session? 
+            // But usually this means invalid link.
             return;
           }
         } else if (accessToken) {
+          console.log('[Auth] Set session from tokens...');
           const { error } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken ?? '',
@@ -285,10 +296,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return;
         }
 
-        // If the URL says it's a recovery link, set state immediately (listener should also fire).
-        if (type === 'recovery') {
-          setNeedsPasswordReset(true);
-        }
+        // Force reset mode if we detected it's a recovery flow
+        console.log('[Auth] Recovery flow detected, setting needsPasswordReset=true');
+        setNeedsPasswordReset(true);
       } catch (e) {
         console.warn('[Auth] Error handling auth callback URL:', e);
       }
