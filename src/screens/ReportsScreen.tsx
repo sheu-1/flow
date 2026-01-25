@@ -33,6 +33,8 @@ export default function ReportsScreen() {
   const [categoryView, setCategoryView] = useState<'income' | 'expense'>('income');
   const [statsView, setStatsView] = useState<'income' | 'expense'>('income');
   const [currentWeek, setCurrentWeek] = useState(0); // 0 = current week, 1 = previous week, etc.
+  const [currentMonth, setCurrentMonth] = useState(0); // 0 = current month, 1 = previous month, etc.
+  const [currentYear, setCurrentYear] = useState(0); // 0 = current year, 1 = previous year, etc.
   const [showDetailedPeriodSelector, setShowDetailedPeriodSelector] = useState(false);
   const [filterLoading, setFilterLoading] = useState(false);
   const [barTooltip, setBarTooltip] = useState<{ label: string; income: number; expense: number; index: number } | null>(null);
@@ -109,29 +111,6 @@ export default function ReportsScreen() {
         wStart = dayStart;
         wEnd = dayEnd;
 
-        // Filter transactions for this specific day
-        const dayTransactions = filteredTransactions.filter(t => {
-          const dt = new Date(t.date);
-          return dt >= dayStart && dt <= dayEnd;
-        });
-
-        // Create 24 hourly buckets
-        for (let h = 0; h < 24; h++) {
-          const hStart = new Date(dayStart);
-          hStart.setHours(h, 0, 0, 0);
-          const hEnd = new Date(dayStart);
-          hEnd.setHours(h, 59, 59, 999);
-
-          labels.push(`${h}:00`);
-
-          const hourTx = dayTransactions.filter(t => {
-            const dt = new Date(t.date);
-            return dt >= hStart && dt <= hEnd;
-          });
-
-          income.push(hourTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
-          expense.push(hourTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
-        }
       } else if (period === 'weekly') {
         // Weekly: ISO-style weeks (Monday-Sunday), showing current week + last 3 weeks
         // Define the overall start/end from the selected dateRange
@@ -164,130 +143,115 @@ export default function ReportsScreen() {
         wStart = activeWeekStart < rangeStart ? rangeStart : activeWeekStart;
         wEnd = activeWeekEnd > rangeEnd ? rangeEnd : activeWeekEnd;
 
-        // Build 7 daily buckets for the active week only (MondaySunday)
-        for (let i = 0; i < 7; i++) {
-          const dayStart = new Date(activeWeekStart);
-          dayStart.setDate(activeWeekStart.getDate() + i);
-          dayStart.setHours(0, 0, 0, 0);
-          const dayEnd = new Date(dayStart);
-          dayEnd.setHours(23, 59, 59, 999);
-
-          // Label by weekday (Mon, Tue, ...)
-          const dayLabel = dayStart.toLocaleDateString('en-US', {
-            weekday: 'short',
-          });
-          labels.push(dayLabel);
-
-          const dayTx = filteredTransactions.filter((t) => {
-            const dt = new Date(t.date);
-            return dt >= dayStart && dt <= dayEnd;
-          });
-
-          income.push(
-            dayTx
-              .filter((t) => t.type === 'income')
-              .reduce((s, t) => s + Math.abs(t.amount), 0)
-          );
-          expense.push(
-            dayTx
-              .filter((t) => t.type === 'expense')
-              .reduce((s, t) => s + Math.abs(t.amount), 0)
-          );
-        }
       } else if (period === 'monthly') {
-        // Monthly: Months of the current year (Jan–Dec), cumulative per month
+        // Monthly: Show daily breakdown for the current month (Day 1 to Last Day)
         const currentYear = end.getFullYear();
         const currentMonth = end.getMonth();
 
-        // Active window for categories/stats = current month only
+        // Active window for categories/stats = current month
         const activeMonthStart = new Date(currentYear, currentMonth, 1, 0, 0, 0, 0);
         const activeMonthEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59, 999);
 
         wStart = activeMonthStart;
         wEnd = activeMonthEnd;
 
-        // Bucket by months of the year (still show full year in the chart)
-        for (let m = 0; m < 12; m++) {
-          const monthStart = new Date(currentYear, m, 1, 0, 0, 0, 0);
-          const monthEnd = new Date(currentYear, m + 1, 0, 23, 59, 59, 999);
+      } else {
+        // Yearly: Show Jan-Dec for the selected year (based on currentYear offset)
+        // Default (offset 0) is the current year of the range (e.g., 2026)
+        const baseYear = end.getFullYear();
+        const targetYearVal = baseYear - currentYear;
 
-          // 3-letter month label: Jan, Feb, Mar, ...
-          const monthLabel = monthStart.toLocaleDateString('en-US', { month: 'short' });
-          labels.push(monthLabel);
+        wStart = new Date(targetYearVal, 0, 1, 0, 0, 0, 0);
+        wEnd = new Date(targetYearVal, 11, 31, 23, 59, 59, 999);
+      }
 
-          const monthTx = filteredTransactions.filter((t) => {
-            const dt = new Date(t.date);
-            return dt >= monthStart && dt <= monthEnd;
-          });
+      // Fetch data for the calculated window directly from Supabase
+      // This ensures we get data even if it's outside the global context filter
+      const { data: fetchedTransactions, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', user.id)
+        .gte('date', wStart.toISOString())
+        .lte('date', wEnd.toISOString())
+        .order('date', { ascending: true });
 
-          income.push(
-            monthTx
-              .filter((t) => t.type === 'income')
-              .reduce((s, t) => s + Math.abs(t.amount), 0)
-          );
-          expense.push(
-            monthTx
-              .filter((t) => t.type === 'expense')
-              .reduce((s, t) => s + Math.abs(t.amount), 0)
-          );
+      if (error) throw error;
+
+      const txList = fetchedTransactions || [];
+
+      // Re-run the bucketing logic using the FETCHED data
+      if (period === 'daily') {
+        const dayStart = wStart;
+        for (let h = 0; h < 24; h++) {
+          const hStart = new Date(dayStart); hStart.setHours(h, 0, 0, 0);
+          const hEnd = new Date(dayStart); hEnd.setHours(h, 59, 59, 999);
+          labels.push(`${h}:00`);
+          const hourTx = txList.filter(t => { const dt = new Date(t.date); return dt >= hStart && dt <= hEnd; });
+          income.push(hourTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
+          expense.push(hourTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
+        }
+      } else if (period === 'weekly') {
+        // ... (Weekly logic re-implementation using txList)
+        // Since weekly logic in code was using `activeWeekStart`, we need to reuse that.
+        // Actually, the previous code block calculated `wStart/wEnd` correctly for the query.
+        // Now just iterate 0..6 days from wStart.
+        for (let i = 0; i < 7; i++) {
+          const dayStart = new Date(wStart); dayStart.setDate(wStart.getDate() + i); dayStart.setHours(0, 0, 0, 0);
+          const dayEnd = new Date(dayStart); dayEnd.setHours(23, 59, 59, 999);
+          labels.push(dayStart.toLocaleDateString('en-US', { weekday: 'short' }));
+          const dayTx = txList.filter(t => { const dt = new Date(t.date); return dt >= dayStart && dt <= dayEnd; });
+          income.push(dayTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
+          expense.push(dayTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
+        }
+      } else if (period === 'monthly') {
+        const currentYear = wStart.getFullYear(); // Derived from wStart which is correct from offset
+        const currentMonth = wStart.getMonth();
+        const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+        for (let d = 1; d <= daysInMonth; d++) {
+          const dayStart = new Date(currentYear, currentMonth, d, 0, 0, 0, 0);
+          const dayEnd = new Date(currentYear, currentMonth, d, 23, 59, 59, 999);
+          labels.push(String(d));
+          const dayTx = txList.filter(t => { const dt = new Date(t.date); return dt >= dayStart && dt <= dayEnd; });
+          income.push(dayTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
+          expense.push(dayTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
         }
       } else {
-        // Yearly: Show last 5 years
-        const currentYear = new Date().getFullYear();
-        const startYear = currentYear - 4; // Show last 5 years including current
-        
-        for (let y = startYear; y <= currentYear; y++) {
-          const yearStart = new Date(y, 0, 1, 0, 0, 0, 0);
-          const yearEnd = new Date(y, 11, 31, 23, 59, 59, 999);
-          
-          labels.push(String(y));
-          
-          const yearTx = filteredTransactions.filter(t => {
-            const dt = new Date(t.date);
-            return dt >= yearStart && dt <= yearEnd;
-          });
-          
-          income.push(yearTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
-          expense.push(yearTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
+        // Yearly
+        const targetYearVal = wStart.getFullYear();
+        for (let m = 0; m < 12; m++) {
+          const monthStart = new Date(targetYearVal, m, 1, 0, 0, 0, 0);
+          const monthEnd = new Date(targetYearVal, m + 1, 0, 23, 59, 59, 999);
+          labels.push(monthStart.toLocaleDateString('en-US', { month: 'short' }));
+          const monthTx = txList.filter(t => { const dt = new Date(t.date); return dt >= monthStart && dt <= monthEnd; });
+          income.push(monthTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
+          expense.push(monthTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
         }
-        
-        wStart = new Date(startYear, 0, 1, 0, 0, 0, 0);
-        wEnd = new Date(currentYear, 11, 31, 23, 59, 59, 999);
       }
 
       setSeries({ labels, income, expense });
       setWindowRange({ start: wStart, end: wEnd });
 
-      // Categories breakdown within the active window (local compute)
+      // Categories breakdown using fetched data
       const incomeMap: Record<string, number> = {};
       const expenseMap: Record<string, number> = {};
-      filteredTransactions.forEach((t) => {
-        const dt = new Date(t.date);
-        if (dt < wStart || dt > wEnd) return;
+      txList.forEach((t) => {
         const key = t.category || 'Other';
         const amt = Math.abs(t.amount);
-        if (t.type === 'income') {
-          incomeMap[key] = (incomeMap[key] || 0) + amt;
-        } else if (t.type === 'expense') {
-          expenseMap[key] = (expenseMap[key] || 0) + amt;
-        }
+        if (t.type === 'income') incomeMap[key] = (incomeMap[key] || 0) + amt;
+        else if (t.type === 'expense') expenseMap[key] = (expenseMap[key] || 0) + amt;
       });
-      const cat = { income: incomeMap, expense: expenseMap };
-      setCategories(cat);
+      setCategories({ income: incomeMap, expense: expenseMap });
 
-      Logger.info('ReportsScreen', `Categories loaded for range: ${start.toISOString()} to ${end.toISOString()}`, {
-        incomeCategories: Object.keys(cat.income).length,
-        expenseCategories: Object.keys(cat.expense).length,
-      });
+      Logger.info('ReportsScreen', `Data loaded for range: ${wStart.toISOString()} - ${wEnd.toISOString()}`);
     } catch (e) {
-      // swallow and show empty
+      console.error('Reports load error:', e);
       setSeries({ labels: [], income: [], expense: [] });
       setCategories({ income: {}, expense: {} });
     } finally {
       if (showLoading) setLoading(false);
       setRefreshing(false);
     }
-  }, [user?.id, period, dateRange, filteredTransactions, currentWeek]);
+  }, [user?.id, period, dateRange, currentWeek, currentMonth, currentYear]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -310,9 +274,11 @@ export default function ReportsScreen() {
 
   // Realtime handled centrally in DateFilterContext
 
-  // Reset current week when period changes
+  // Reset current offset when period changes
   useEffect(() => {
     setCurrentWeek(0);
+    setCurrentMonth(0);
+    setCurrentYear(0);
   }, [period]);
 
   // Auto-scroll to current period when data loads or period changes
@@ -323,18 +289,33 @@ export default function ReportsScreen() {
       if (!chartScrollRef.current) return;
 
       let scrollToIndex = 0;
-      const now = new Date();
+      const now = new Date(); // This logic might need refinement since we are now navigating timeframes
+
+      // If looking at previous periods (offsets > 0), simple autoscroll to end might not be ideal,
+      // but commonly we want to see the filled bars.
+      // For Daily: We show 24 hours. Current hour is relevant if offset=0 (today).
+      // For Weekly: We show 7 days.
+      // For Monthly: We show 30 days.
+      // For Yearly: We show 12 months.
+
+      // Simplified: Just scroll to end for now on load, or specific if offset is 0.
+      const isCurrent = (period === 'daily' || (period === 'weekly' && currentWeek === 0) || (period === 'monthly' && currentMonth === 0) || (period === 'yearly' && currentYear === 0));
 
       if (period === 'daily') {
-        // Scroll to current hour
-        scrollToIndex = now.getHours();
+        scrollToIndex = isCurrent ? now.getHours() : 0;
       } else if (period === 'monthly') {
-        // Scroll to current month
-        scrollToIndex = now.getMonth();
+        scrollToIndex = isCurrent ? now.getDate() - 1 : 0; // Scroll to current day
       } else if (period === 'yearly') {
-        // Scroll to current year (last item in 5-year view)
-        scrollToIndex = 4; // Current year is the last in the array
+        scrollToIndex = isCurrent ? now.getMonth() : 0; // Scroll to current month
       }
+
+      // If we are just viewing a full period (like previous year), scrolling to start (0) or end might be better.
+      // Let's scroll to start (0) for historical views to show the beginning, 
+      // or actually for charts it's often nicer to see the whole thing.
+
+      // Let's stick to the existing behavior for Daily, and for others just ensure we start at 0 if not current?
+      // Actually, if we view 2025, we probably want to see Jan first.
+      if (!isCurrent) scrollToIndex = 0;
 
       // Calculate scroll position (approximate bar width + gap)
       const barWidth = period === 'daily' ? 66 : 50; // Adjust based on bar group width
@@ -387,10 +368,10 @@ export default function ReportsScreen() {
     // Count individual income transactions within active window
     const count = windowRange
       ? filteredTransactions.filter(t => {
-          if (t.type !== 'income') return false;
-          const dt = new Date(t.date);
-          return dt >= windowRange.start && dt <= windowRange.end;
-        }).length
+        if (t.type !== 'income') return false;
+        const dt = new Date(t.date);
+        return dt >= windowRange.start && dt <= windowRange.end;
+      }).length
       : 0;
 
     // Max only considers actual positive transactions
@@ -422,10 +403,10 @@ export default function ReportsScreen() {
     // Count individual expense transactions within active window
     const count = windowRange
       ? filteredTransactions.filter(t => {
-          if (t.type !== 'expense') return false;
-          const dt = new Date(t.date);
-          return dt >= windowRange.start && dt <= windowRange.end;
-        }).length
+        if (t.type !== 'expense') return false;
+        const dt = new Date(t.date);
+        return dt >= windowRange.start && dt <= windowRange.end;
+      }).length
       : 0;
 
     // Max only considers actual positive transactions
@@ -475,7 +456,7 @@ export default function ReportsScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-      <ScrollView 
+      <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
@@ -486,7 +467,7 @@ export default function ReportsScreen() {
         <View style={[styles.header, { backgroundColor: colors.background }]}>
           <Text style={[styles.title, { color: colors.text }]}>Reports</Text>
         </View>
-        
+
         {/* Sticky Unified Period Selector */}
         <View style={[styles.stickyPeriodSelector, { backgroundColor: colors.background }]}>
           <UnifiedPeriodSelector
@@ -502,581 +483,604 @@ export default function ReportsScreen() {
             </View>
           )}
         </View>
-        
+
         {/* Main Content */}
         <View>
 
-        {/* Summary statistics */}
-        {!loading && series.labels.length > 0 ? (
-          <View style={{ paddingHorizontal: spacing.md }}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Summary Statistics</Text>
-            
-            <View style={styles.categoryToggle}>
-              <TouchableOpacity
-                style={styles.categoryToggleButton}
-                onPress={() => setStatsView('income')}
-              >
-                <Animated.View 
-                  style={[
-                    styles.categoryToggleIndicator,
-                    { backgroundColor: colors.success },
-                    incomeIndicatorStyle
-                  ]}
-                />
-                <Animated.Text style={[
-                  styles.categoryToggleText,
-                  { color: statsView === 'income' ? colors.success : colors.textSecondary, fontWeight: statsView === 'income' ? '700' : '500' }
-                ]}>
-                  Money In
-                </Animated.Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.categoryToggleButton}
-                onPress={() => setStatsView('expense')}
-              >
-                <Animated.View 
-                  style={[
-                    styles.categoryToggleIndicator,
-                    { backgroundColor: colors.danger },
-                    expenseIndicatorStyle
-                  ]}
-                />
-                <Animated.Text style={[
-                  styles.categoryToggleText,
-                  { color: statsView === 'expense' ? colors.danger : colors.textSecondary, fontWeight: statsView === 'expense' ? '700' : '500' }
-                ]}>
-                  Money Out
-                </Animated.Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : null}
-
-        {!loading && series.labels.length > 0 ? (
-          <View>
-            {/* Dynamic Stats - 3 circles that adjust based on toggle */}
+          {/* Summary statistics */}
+          {!loading && series.labels.length > 0 ? (
             <View style={{ paddingHorizontal: spacing.md }}>
-              <Text style={[styles.statsSubtitle, { color: statsView === 'income' ? colors.success : colors.danger }]}>
-                {statsView === 'income' ? 'Money In' : 'Money Out'}
-              </Text>
-              <View style={styles.circularStatsContainer}>
-                <Animated.View entering={FadeInUp.delay(50).springify()}>
-                  <AnimatedCircleMetric
-                    value={currentStats.count}
-                    label="Count"
-                    type="count"
-                    period={period}
-                    showCurrency={false}
-                    size={100}
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Summary Statistics</Text>
+
+              <View style={styles.categoryToggle}>
+                <TouchableOpacity
+                  style={styles.categoryToggleButton}
+                  onPress={() => setStatsView('income')}
+                >
+                  <Animated.View
+                    style={[
+                      styles.categoryToggleIndicator,
+                      { backgroundColor: colors.success },
+                      incomeIndicatorStyle
+                    ]}
                   />
-                </Animated.View>
-                
-                <Animated.View entering={FadeInUp.delay(100).springify()}>
-                  <AnimatedCircleMetric
-                    value={currentStats.avg}
-                    label="Avg"
-                    type="average"
-                    period={period}
-                    maxValue={currentStats.max}
-                    size={100}
+                  <Animated.Text style={[
+                    styles.categoryToggleText,
+                    { color: statsView === 'income' ? colors.success : colors.textSecondary, fontWeight: statsView === 'income' ? '700' : '500' }
+                  ]}>
+                    Money In
+                  </Animated.Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.categoryToggleButton}
+                  onPress={() => setStatsView('expense')}
+                >
+                  <Animated.View
+                    style={[
+                      styles.categoryToggleIndicator,
+                      { backgroundColor: colors.danger },
+                      expenseIndicatorStyle
+                    ]}
                   />
-                </Animated.View>
-                
-                <Animated.View entering={FadeInUp.delay(150).springify()}>
-                  <AnimatedCircleMetric
-                    value={currentStats.max}
-                    label="Max"
-                    type="max"
-                    period={period}
-                    maxValue={currentStats.max}
-                    size={100}
-                    colorOverride={statsView === 'income' ? colors.success : colors.danger}
-                  />
-                </Animated.View>
+                  <Animated.Text style={[
+                    styles.categoryToggleText,
+                    { color: statsView === 'expense' ? colors.danger : colors.textSecondary, fontWeight: statsView === 'expense' ? '700' : '500' }
+                  ]}>
+                    Money Out
+                  </Animated.Text>
+                </TouchableOpacity>
               </View>
             </View>
-            
-            {/* Period Total - Styled like Dashboard Net Balance */}
-            <Animated.View 
-              entering={FadeInUp.delay(350).springify()}
-              style={[
-                styles.periodTotalCard, 
-                { 
-                  backgroundColor: colors.surface,
-                  borderWidth: 2,
-                  borderColor: statsView === 'income' ? colors.success : colors.danger,
-                }
-              ]}
-            >
-              <View style={styles.periodTotalContent}>
-                <Ionicons 
-                  name="analytics-outline" 
-                  size={32} 
-                  color={statsView === 'income' ? colors.success : colors.danger} 
-                />
-                <View style={styles.periodTotalText}>
-                  <Text style={[styles.periodTotalLabel, { color: colors.textSecondary }]}>
-                    Period Total • {period.charAt(0).toUpperCase() + period.slice(1)}
-                  </Text>
-                  <Text style={[styles.periodTotalAmount, { color: statsView === 'income' ? colors.success : colors.danger }]}>
-                    {formatCurrency(periodTotal)}
-                  </Text>
-                </View>
-              </View>
-            </Animated.View>
+          ) : null}
 
-            {/* Metrics Explanation - moved below circles */}
-            <View style={{ paddingHorizontal: spacing.md }}>
-              <TouchableOpacity 
-                style={[styles.metricsExplanationHeader, { backgroundColor: colors.surface }]}
-                onPress={() => setShowMetricsExplanation(!showMetricsExplanation)}
-              >
-                <Text style={[styles.metricsExplanationTitle, { color: colors.text }]}>
-                  What do these metrics mean?
+          {!loading && series.labels.length > 0 ? (
+            <View>
+              {/* Dynamic Stats - 3 circles that adjust based on toggle */}
+              <View style={{ paddingHorizontal: spacing.md }}>
+                <Text style={[styles.statsSubtitle, { color: statsView === 'income' ? colors.success : colors.danger }]}>
+                  {statsView === 'income' ? 'Money In' : 'Money Out'}
                 </Text>
-                <Ionicons 
-                  name={showMetricsExplanation ? "chevron-up" : "chevron-down"} 
-                  size={20} 
-                  color={colors.textSecondary} 
-                />
-              </TouchableOpacity>
-              
-              {showMetricsExplanation && (
-                <Animated.View 
-                  entering={FadeInUp.springify()}
-                  style={[styles.metricsExplanationContent, { backgroundColor: colors.surface }]}
-                >
-                  <View style={styles.explanationItem}>
-                    <View style={[styles.explanationDot, { backgroundColor: '#14B8A6' }]} />
-                    <View style={styles.explanationTextContainer}>
-                      <Text style={[styles.explanationLabel, { color: colors.text }]}>Count</Text>
-                      <Text style={[styles.explanationText, { color: colors.textSecondary }]}>
-                        Number of individual {statsView === 'income' ? 'money in' : 'money out'} transactions
-                      </Text>
-                    </View>
-                  </View>
-                  
-                  <View style={styles.explanationItem}>
-                    <View style={[styles.explanationDot, { backgroundColor: '#A855F7' }]} />
-                    <View style={styles.explanationTextContainer}>
-                      <Text style={[styles.explanationLabel, { color: colors.text }]}>Average</Text>
-                      <Text style={[styles.explanationText, { color: colors.textSecondary }]}>
-                        Average amount per period bucket
-                      </Text>
-                    </View>
-                  </View>
-                  
-                  <View style={styles.explanationItem}>
-                    <View style={[styles.explanationDot, { backgroundColor: statsView === 'income' ? colors.success : colors.danger }]} />
-                    <View style={styles.explanationTextContainer}>
-                      <Text style={[styles.explanationLabel, { color: colors.text }]}>Maximum</Text>
-                      <Text style={[styles.explanationText, { color: colors.textSecondary }]}>
-                        Highest amount in a single period bucket
-                      </Text>
-                    </View>
-                  </View>
+                <View style={styles.circularStatsContainer}>
+                  <Animated.View entering={FadeInUp.delay(50).springify()}>
+                    <AnimatedCircleMetric
+                      value={currentStats.count}
+                      label="Count"
+                      type="count"
+                      period={period}
+                      showCurrency={false}
+                      size={100}
+                    />
+                  </Animated.View>
 
-                  <View style={[styles.detailedInsightsSection, { borderTopColor: colors.border }]}>
-                    <View style={styles.insightDetailRow}>
-                      <Ionicons name="information-circle" size={16} color={colors.primary} />
-                      <Text style={[styles.insightDetailLabel, { color: colors.text }]}>Period Total</Text>
-                      <Text style={[styles.insightDetailValue, { color: statsView === 'income' ? colors.success : colors.danger }]}>
-                        {formatCurrency(periodTotal)}
-                      </Text>
-                    </View>
-                    <Text style={[styles.insightDetailDescription, { color: colors.textSecondary }]}>
-                      Total {statsView === 'income' ? 'income' : 'expenses'} for the selected period
-                    </Text>
+                  <Animated.View entering={FadeInUp.delay(100).springify()}>
+                    <AnimatedCircleMetric
+                      value={currentStats.avg}
+                      label="Avg"
+                      type="average"
+                      period={period}
+                      maxValue={currentStats.max}
+                      size={100}
+                    />
+                  </Animated.View>
 
-                    <View style={[styles.insightDetailRow, { marginTop: spacing.sm }]}>
-                      <Ionicons name="calculator" size={16} color={colors.primary} />
-                      <Text style={[styles.insightDetailLabel, { color: colors.text }]}>Average per Period</Text>
-                      <Text style={[styles.insightDetailValue, { color: colors.primary }]}>
-                        {formatCurrency(currentStats.avg)}
-                      </Text>
-                    </View>
-                    <Text style={[styles.insightDetailDescription, { color: colors.textSecondary }]}>
-                      Average {statsView === 'income' ? 'income' : 'spending'} per {period === 'daily' ? 'hour' : period === 'weekly' ? 'day' : period === 'monthly' ? 'month' : 'year'}
-                    </Text>
-                  </View>
-
-                  <View style={[styles.tip, { backgroundColor: colors.primary + '15' }]}>
-                    <Ionicons name="bulb" size={16} color={colors.primary} />
-                    <Text style={[styles.tipText, { color: colors.primary }]}>
-                      {statsView === 'income' 
-                        ? currentStats.count > 0 
-                          ? `You have ${currentStats.count} income transactions. Your highest single income was ${formatCurrency(currentStats.max)}.`
-                          : 'No income recorded for this period.'
-                        : currentStats.count > 0
-                          ? `You made ${currentStats.count} expense transactions. Try to keep daily expenses below ${formatCurrency(currentStats.avg * 0.9)} to reduce spending.`
-                          : 'No expenses recorded for this period.'}
-                    </Text>
-                  </View>
-                </Animated.View>
-              )}
-            </View>
-          </View>
-        ) : null}
-
-        
-
-        {loading ? (
-          <View style={{ paddingVertical: spacing.xl }}>
-            <ActivityIndicator color={colors.primary} />
-          </View>
-        ) : series.labels.length === 0 ? null : (
-          <View style={{ paddingHorizontal: spacing.md }}>
-            {/* Pie Chart Summary */}
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Period Overview</Text>
-            <AnimatedSimplePieChart 
-              income={incomeStats.sum} 
-              expense={expenseStats.sum} 
-            />
-            
-            {/* Simple bar chart: Money In vs Money Out */}
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Money In vs Money Out</Text>
-            
-            <View style={styles.chartContainer}>
-              <View style={styles.chartLegend}>
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendColor, { backgroundColor: colors.success }]} />
-                  <Text style={[styles.legendText, { color: colors.text }]}>Money In</Text>
-                </View>
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendColor, { backgroundColor: colors.danger }]} />
-                  <Text style={[styles.legendText, { color: colors.text }]}>Money Out</Text>
+                  <Animated.View entering={FadeInUp.delay(150).springify()}>
+                    <AnimatedCircleMetric
+                      value={currentStats.max}
+                      label="Max"
+                      type="max"
+                      period={period}
+                      maxValue={currentStats.max}
+                      size={100}
+                      colorOverride={statsView === 'income' ? colors.success : colors.danger}
+                    />
+                  </Animated.View>
                 </View>
               </View>
-              
-              {/* Weekly: show all 7 days within the view (no horizontal scroll) */}
-              {period === 'weekly' ? (
-                <View style={styles.chartBarsWrapper}>
-                  <View style={styles.chartBars}>
-                    {series.labels.map((label, index) => {
-                      const income = series.income[index] || 0;
-                      const expense = series.expense[index] || 0;
-                      const maxValue = Math.max(...series.income, ...series.expense);
-                      const incomeHeight = maxValue > 0 ? (income / maxValue) * 120 : 0;
-                      const expenseHeight = maxValue > 0 ? (expense / maxValue) * 120 : 0;
 
-                      const displayLabel = label;
-
-                      return (
-                        <TouchableOpacity
-                          key={index}
-                          onPress={() => setBarTooltip({ label: displayLabel, income, expense, index })}
-                          activeOpacity={0.7}
-                        >
-                          <Animated.View style={styles.barGroupWeekly} entering={FadeInUp.delay(index * 30).springify()}>
-                            <View style={styles.barContainer}>
-                              <Animated.View
-                                style={[
-                                  styles.bar,
-                                  {
-                                    height: incomeHeight,
-                                    backgroundColor: colors.success,
-                                  },
-                                ]}
-                                entering={FadeInUp.delay(index * 30 + 100).springify()}
-                              />
-                              <Animated.View
-                                style={[
-                                  styles.bar,
-                                  {
-                                    height: expenseHeight,
-                                    backgroundColor: colors.danger,
-                                    marginLeft: 2,
-                                  },
-                                ]}
-                                entering={FadeInUp.delay(index * 30 + 150).springify()}
-                              />
-                            </View>
-                            <Text style={[styles.barLabel, { color: colors.textSecondary }]} numberOfLines={1}>
-                              {displayLabel}
-                            </Text>
-                          </Animated.View>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-              ) : null}
-              
-              {/* Week Navigation Below Bars - Weekly Only */}
-              {period === 'weekly' && windowRange && (() => {
-                // Allow navigating back as many weeks as there is data
-                let maxWeeksBack = 0;
-                if (filteredTransactions && filteredTransactions.length > 0) {
-                  const earliestTx = filteredTransactions.reduce<Date | null>((min, t) => {
-                    const dt = new Date(t.date);
-                    return !min || dt < min ? dt : min;
-                  }, null);
-                  if (earliestTx) {
-                    const msPerWeek = 7 * 24 * 60 * 60 * 1000;
-                    const diffMs = new Date().getTime() - earliestTx.getTime();
-                    maxWeeksBack = diffMs > 0 ? Math.floor(diffMs / msPerWeek) : 0;
+              {/* Period Total - Styled like Dashboard Net Balance */}
+              <Animated.View
+                entering={FadeInUp.delay(350).springify()}
+                style={[
+                  styles.periodTotalCard,
+                  {
+                    backgroundColor: colors.surface,
+                    borderWidth: 2,
+                    borderColor: statsView === 'income' ? colors.success : colors.danger,
                   }
-                }
-
-                return (
-                  <View style={styles.weekNavigationBelow}>
-                    <TouchableOpacity
-                      onPress={() => setCurrentWeek(prev => Math.min(prev + 1, maxWeeksBack))}
-                      disabled={currentWeek >= maxWeeksBack}
-                      style={styles.weekNavButtonSimple}
-                    >
-                      <Ionicons 
-                        name="chevron-back" 
-                        size={28} 
-                        color={currentWeek >= maxWeeksBack ? colors.textSecondary : colors.text} 
-                      />
-                    </TouchableOpacity>
-                    <View style={styles.weekNavCenterSimple}>
-                      <Text style={[styles.weekNavDateRangeSimple, { color: colors.text }]}>
-                        {windowRange.start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {windowRange.end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      onPress={() => setCurrentWeek(prev => Math.max(prev - 1, 0))}
-                      disabled={currentWeek <= 0}
-                      style={styles.weekNavButtonSimple}
-                    >
-                      <Ionicons 
-                        name="chevron-forward" 
-                        size={28} 
-                        color={currentWeek <= 0 ? colors.textSecondary : colors.text} 
-                      />
-                    </TouchableOpacity>
+                ]}
+              >
+                <View style={styles.periodTotalContent}>
+                  <Ionicons
+                    name="analytics-outline"
+                    size={32}
+                    color={statsView === 'income' ? colors.success : colors.danger}
+                  />
+                  <View style={styles.periodTotalText}>
+                    <Text style={[styles.periodTotalLabel, { color: colors.textSecondary }]}>
+                      Period Total • {period.charAt(0).toUpperCase() + period.slice(1)}
+                    </Text>
+                    <Text style={[styles.periodTotalAmount, { color: statsView === 'income' ? colors.success : colors.danger }]}>
+                      {formatCurrency(periodTotal)}
+                    </Text>
                   </View>
-                );
-              })()}
-              
-              {period !== 'weekly' ? (
-                /* For non-weekly periods: horizontal scroll with clustered bars */
-                <ScrollView
-                  horizontal
-                  ref={chartScrollRef}
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.chartScroll}
-                >
-                  <View style={styles.chartBarsScrollable}>
-                    {series.labels.map((label, index) => {
-                      const income = series.income[index] || 0;
-                      const expense = series.expense[index] || 0;
-                      const maxValue = Math.max(...series.income, ...series.expense);
-                      const incomeHeight = maxValue > 0 ? (income / maxValue) * 120 : 0;
-                      const expenseHeight = maxValue > 0 ? (expense / maxValue) * 120 : 0;
+                </View>
+              </Animated.View>
 
-                      return (
-                        <TouchableOpacity
-                          key={`${label}-${index}`}
-                          onPress={() => setBarTooltip({ label, income, expense, index })}
-                          activeOpacity={0.7}
-                        >
-                          <Animated.View style={styles.barGroup} entering={FadeInUp.delay(index * 30).springify()}>
-                            <View style={styles.barContainer}>
-                              <Animated.View 
-                                style={[
-                                  styles.bar, 
-                                  { 
-                                    height: incomeHeight, 
-                                    backgroundColor: colors.success 
-                                  }
-                                ]} 
-                                entering={FadeInUp.delay(index * 30 + 100).springify()}
-                              />
-                              <Animated.View 
-                                style={[
-                                  styles.bar, 
-                                  { 
-                                    height: expenseHeight, 
-                                    backgroundColor: colors.danger, 
-                                    marginLeft: 2 
-                                  }
-                                ]}
-                                entering={FadeInUp.delay(index * 30 + 150).springify()}
-                              />
-                            </View>
-                            <Text style={[styles.barLabel, { color: colors.textSecondary }]} numberOfLines={1}>
-                              {label}
-                            </Text>
-                          </Animated.View>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </ScrollView>
-              ) : null}
-              
-              {/* Dynamic Tooltip (immediately below bar chart / week nav) */}
-              {barTooltip && (
-                <Animated.View 
-                  entering={FadeInUp.springify()}
-                  exiting={FadeOut.duration(200)}
-                  style={[styles.tooltipContainer, { backgroundColor: colors.surface }]}
+              {/* Metrics Explanation - moved below circles */}
+              <View style={{ paddingHorizontal: spacing.md }}>
+                <TouchableOpacity
+                  style={[styles.metricsExplanationHeader, { backgroundColor: colors.surface }]}
+                  onPress={() => setShowMetricsExplanation(!showMetricsExplanation)}
                 >
-                  <TouchableOpacity 
-                    style={styles.tooltipClose}
-                    onPress={() => setBarTooltip(null)}
+                  <Text style={[styles.metricsExplanationTitle, { color: colors.text }]}>
+                    What do these metrics mean?
+                  </Text>
+                  <Ionicons
+                    name={showMetricsExplanation ? "chevron-up" : "chevron-down"}
+                    size={20}
+                    color={colors.textSecondary}
+                  />
+                </TouchableOpacity>
+
+                {showMetricsExplanation && (
+                  <Animated.View
+                    entering={FadeInUp.springify()}
+                    style={[styles.metricsExplanationContent, { backgroundColor: colors.surface }]}
                   >
-                    <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
-                  </TouchableOpacity>
-                  <Text style={[styles.tooltipTitle, { color: colors.text }]}>{barTooltip.label}</Text>
-                  <View style={styles.tooltipRow}>
-                    <View style={styles.tooltipItem}>
-                      <View style={[styles.tooltipDot, { backgroundColor: colors.success }]} />
-                      <Text style={[styles.tooltipLabel, { color: colors.textSecondary }]}>Money In:</Text>
-                      <Text style={[styles.tooltipValue, { color: colors.success }]}> 
-                        {formatCurrency(barTooltip.income)}
-                      </Text>
+                    <View style={styles.explanationItem}>
+                      <View style={[styles.explanationDot, { backgroundColor: '#14B8A6' }]} />
+                      <View style={styles.explanationTextContainer}>
+                        <Text style={[styles.explanationLabel, { color: colors.text }]}>Count</Text>
+                        <Text style={[styles.explanationText, { color: colors.textSecondary }]}>
+                          Number of individual {statsView === 'income' ? 'money in' : 'money out'} transactions
+                        </Text>
+                      </View>
                     </View>
-                    <View style={styles.tooltipItem}>
-                      <View style={[styles.tooltipDot, { backgroundColor: colors.danger }]} />
-                      <Text style={[styles.tooltipLabel, { color: colors.textSecondary }]}>Money Out:</Text>
-                      <Text style={[styles.tooltipValue, { color: colors.danger }]}> 
-                        {formatCurrency(barTooltip.expense)}
-                      </Text>
-                    </View>
-                  </View>
-                  {barTooltip.income > barTooltip.expense ? (
-                    <Text style={[styles.tooltipInsight, { color: colors.success }]}> 
-                      ✓ Positive flow: +{formatCurrency(barTooltip.income - barTooltip.expense)}
-                    </Text>
-                  ) : barTooltip.expense > barTooltip.income ? (
-                    <Text style={[styles.tooltipInsight, { color: colors.danger }]}> 
-                      ⚠ Spending exceeded income by {formatCurrency(barTooltip.expense - barTooltip.income)}
-                    </Text>
-                  ) : (
-                    <Text style={[styles.tooltipInsight, { color: colors.textSecondary }]}> 
-                      ⚖ Balanced
-                    </Text>
-                  )}
-                </Animated.View>
-              )}
 
-              {/* Time-Series Line Chart: Money In vs Money Out */}
-              <View style={styles.lineChartSection}>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>Line graph of money in against money out</Text>
-                <LineChart
-                  data={{
-                    // Daily view: simple fixed hour labels, with 24 at the last tick
-                    labels: period === 'daily' ? ['0', '4', '8', '12', '16', '20', '24'] : series.labels,
-                    datasets: [
-                      {
-                        data: series.income,
-                        color: () => colors.success,
-                        strokeWidth: 2,
-                      },
-                      {
-                        data: series.expense,
-                        color: () => colors.danger,
-                        strokeWidth: 2,
-                      },
-                    ],
-                    legend: ['Money In', 'Money Out'],
-                  }}
-                  // Slightly wider than the viewport so the last tick (24) sits on the final grid line
-                  width={Dimensions.get('window').width + spacing.md * 2}
-                  height={220}
-                  yAxisLabel=""
-                  yAxisSuffix=""
-                  chartConfig={{
-                    backgroundColor: 'transparent',
-                    backgroundGradientFrom: colors.background,
-                    backgroundGradientTo: colors.background,
-                    decimalPlaces: 0,
-                    color: (opacity = 1) => `rgba(148, 163, 184, ${opacity})`,
-                    labelColor: (opacity = 1) => `rgba(148, 163, 184, ${opacity})`,
-                    propsForDots: {
-                      r: '2',
-                    },
-                    propsForBackgroundLines: {
-                      stroke: colors.border,
-                      strokeDasharray: '4 4',
-                    },
-                    useShadowColorFromDataset: false,
-                  }}
-                  bezier
-                  // Shift left while compensating with extra chart width so 24 remains on the last grid line
-                  style={{ marginLeft: -spacing.md * 2, marginRight: 0 }}
-                />
+                    <View style={styles.explanationItem}>
+                      <View style={[styles.explanationDot, { backgroundColor: '#A855F7' }]} />
+                      <View style={styles.explanationTextContainer}>
+                        <Text style={[styles.explanationLabel, { color: colors.text }]}>Average</Text>
+                        <Text style={[styles.explanationText, { color: colors.textSecondary }]}>
+                          Average amount per period bucket
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.explanationItem}>
+                      <View style={[styles.explanationDot, { backgroundColor: statsView === 'income' ? colors.success : colors.danger }]} />
+                      <View style={styles.explanationTextContainer}>
+                        <Text style={[styles.explanationLabel, { color: colors.text }]}>Maximum</Text>
+                        <Text style={[styles.explanationText, { color: colors.textSecondary }]}>
+                          Highest amount in a single period bucket
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={[styles.detailedInsightsSection, { borderTopColor: colors.border }]}>
+                      <View style={styles.insightDetailRow}>
+                        <Ionicons name="information-circle" size={16} color={colors.primary} />
+                        <Text style={[styles.insightDetailLabel, { color: colors.text }]}>Period Total</Text>
+                        <Text style={[styles.insightDetailValue, { color: statsView === 'income' ? colors.success : colors.danger }]}>
+                          {formatCurrency(periodTotal)}
+                        </Text>
+                      </View>
+                      <Text style={[styles.insightDetailDescription, { color: colors.textSecondary }]}>
+                        Total {statsView === 'income' ? 'income' : 'expenses'} for the selected period
+                      </Text>
+
+                      <View style={[styles.insightDetailRow, { marginTop: spacing.sm }]}>
+                        <Ionicons name="calculator" size={16} color={colors.primary} />
+                        <Text style={[styles.insightDetailLabel, { color: colors.text }]}>Average per Period</Text>
+                        <Text style={[styles.insightDetailValue, { color: colors.primary }]}>
+                          {formatCurrency(currentStats.avg)}
+                        </Text>
+                      </View>
+                      <Text style={[styles.insightDetailDescription, { color: colors.textSecondary }]}>
+                        Average {statsView === 'income' ? 'income' : 'spending'} per {period === 'daily' ? 'hour' : period === 'weekly' ? 'day' : period === 'monthly' ? 'month' : 'year'}
+                      </Text>
+                    </View>
+
+                    <View style={[styles.tip, { backgroundColor: colors.primary + '15' }]}>
+                      <Ionicons name="bulb" size={16} color={colors.primary} />
+                      <Text style={[styles.tipText, { color: colors.primary }]}>
+                        {statsView === 'income'
+                          ? currentStats.count > 0
+                            ? `You have ${currentStats.count} income transactions. Your highest single income was ${formatCurrency(currentStats.max)}.`
+                            : 'No income recorded for this period.'
+                          : currentStats.count > 0
+                            ? `You made ${currentStats.count} expense transactions. Try to keep daily expenses below ${formatCurrency(currentStats.avg * 0.9)} to reduce spending.`
+                            : 'No expenses recorded for this period.'}
+                      </Text>
+                    </View>
+                  </Animated.View>
+                )}
               </View>
             </View>
+          ) : null}
 
 
-            {/* Category breakdown - filtered by statsView toggle */}
-            <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                {statsView === 'income' ? 'Money In Categories' : 'Money Out Categories'}
-              </Text>
 
-              {statsView === 'income' ? (
-                /* Money In Categories */
-                Object.keys(categories.income).length > 0 ? (
-                  (() => {
-                    const incomeSorted = Object.entries(categories.income).sort((a, b) => (b[1] as number) - (a[1] as number));
-                    const maxIncome = Math.max(...incomeSorted.map(([, v]) => v as number), 1);
-                    return incomeSorted.map(([cat, amount], idx) => (
-                      <Animated.View key={`inc-${cat}`} style={styles.categoryItemHorizontal} entering={FadeInUp.delay(idx * 25).springify()}> 
-                        <View style={styles.categoryBarContainer}>
-                          <Text style={[styles.categoryNameLeft, { color: colors.text }]}>{cat}</Text>
-                          <View style={styles.categoryBarWrapper}>
-                            <View style={[styles.categoryBarBackground, { backgroundColor: colors.surface }]}>
-                              <Animated.View 
-                                entering={FadeInUp.delay(idx * 25 + 100).springify()}
-                                style={[styles.categoryBarFillHorizontal, { width: `${((amount as number) / maxIncome) * 100}%`, backgroundColor: colors.success }]} 
-                              />
-                            </View>
-                            <Text style={[styles.categoryValueRight, { color: colors.success }]}>
-                              {(amount as number).toFixed(0)}
-                            </Text>
-                          </View>
-                        </View>
-                      </Animated.View>
-                    ));
-                  })()
-                ) : (
-                  <View style={styles.emptyState}>
-                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No money in for this period</Text>
-                  </View>
-                )
-              ) : (
-                /* Money Out Categories */
-                Object.keys(categories.expense).length > 0 ? (
-                  (() => {
-                    const expenseSorted = Object.entries(categories.expense).sort((a, b) => (b[1] as number) - (a[1] as number));
-                    const maxExpense = Math.max(...expenseSorted.map(([, v]) => v as number), 1);
-                    return expenseSorted.map(([cat, amount], idx) => (
-                      <Animated.View key={`exp-${cat}`} style={styles.categoryItemHorizontal} entering={FadeInUp.delay(idx * 25).springify()}> 
-                        <View style={styles.categoryBarContainer}>
-                          <Text style={[styles.categoryNameLeft, { color: colors.text }]}>{cat}</Text>
-                          <View style={styles.categoryBarWrapper}>
-                            <View style={[styles.categoryBarBackground, { backgroundColor: colors.surface }]}>
-                              <Animated.View 
-                                entering={FadeInUp.delay(idx * 25 + 100).springify()}
-                                style={[styles.categoryBarFillHorizontal, { width: `${((amount as number) / maxExpense) * 100}%`, backgroundColor: colors.danger }]} 
-                              />
-                            </View>
-                            <Text style={[styles.categoryValueRight, { color: colors.danger }]}>
-                              {(amount as number).toFixed(0)}
-                            </Text>
-                          </View>
-                        </View>
-                      </Animated.View>
-                    ));
-                  })()
-                ) : (
-                  <View style={styles.emptyState}>
-                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No money out for this period</Text>
-                  </View>
-                )
-              )}
+          {loading ? (
+            <View style={{ paddingVertical: spacing.xl }}>
+              <ActivityIndicator color={colors.primary} />
             </View>
-          </View>
-        )}
+          ) : series.labels.length === 0 ? null : (
+            <View style={{ paddingHorizontal: spacing.md }}>
+              {/* Pie Chart Summary */}
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Period Overview</Text>
+              <AnimatedSimplePieChart
+                income={incomeStats.sum}
+                expense={expenseStats.sum}
+              />
+
+              {/* Simple bar chart: Money In vs Money Out */}
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Money In vs Money Out</Text>
+
+              <View style={styles.chartContainer}>
+                <View style={styles.chartLegend}>
+                  <View style={styles.legendItem}>
+                    <View style={[styles.legendColor, { backgroundColor: colors.success }]} />
+                    <Text style={[styles.legendText, { color: colors.text }]}>Money In</Text>
+                  </View>
+                  <View style={styles.legendItem}>
+                    <View style={[styles.legendColor, { backgroundColor: colors.danger }]} />
+                    <Text style={[styles.legendText, { color: colors.text }]}>Money Out</Text>
+                  </View>
+                </View>
+
+                {/* Weekly: show all 7 days within the view (no horizontal scroll) */}
+                {period === 'weekly' ? (
+                  <View style={styles.chartBarsWrapper}>
+                    <View style={styles.chartBars}>
+                      {series.labels.map((label, index) => {
+                        const income = series.income[index] || 0;
+                        const expense = series.expense[index] || 0;
+                        const maxValue = Math.max(...series.income, ...series.expense);
+                        const incomeHeight = maxValue > 0 ? (income / maxValue) * 120 : 0;
+                        const expenseHeight = maxValue > 0 ? (expense / maxValue) * 120 : 0;
+
+                        const displayLabel = label;
+
+                        return (
+                          <TouchableOpacity
+                            key={index}
+                            onPress={() => setBarTooltip({ label: displayLabel, income, expense, index })}
+                            activeOpacity={0.7}
+                          >
+                            <Animated.View style={styles.barGroupWeekly} entering={FadeInUp.delay(index * 30).springify()}>
+                              <View style={styles.barContainer}>
+                                <Animated.View
+                                  style={[
+                                    styles.bar,
+                                    {
+                                      height: incomeHeight,
+                                      backgroundColor: colors.success,
+                                    },
+                                  ]}
+                                  entering={FadeInUp.delay(index * 30 + 100).springify()}
+                                />
+                                <Animated.View
+                                  style={[
+                                    styles.bar,
+                                    {
+                                      height: expenseHeight,
+                                      backgroundColor: colors.danger,
+                                      marginLeft: 2,
+                                    },
+                                  ]}
+                                  entering={FadeInUp.delay(index * 30 + 150).springify()}
+                                />
+                              </View>
+                              <Text style={[styles.barLabel, { color: colors.textSecondary }]} numberOfLines={1}>
+                                {displayLabel}
+                              </Text>
+                            </Animated.View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ) : null}
+
+                {/* Week Navigation Below Bars - Weekly Only */}
+                {period !== 'weekly' ? (
+                  /* For non-weekly periods: horizontal scroll with clustered bars */
+                  <ScrollView
+                    horizontal
+                    ref={chartScrollRef}
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.chartScroll}
+                  >
+                    <View style={styles.chartBarsScrollable}>
+                      {series.labels.map((label, index) => {
+                        const income = series.income[index] || 0;
+                        const expense = series.expense[index] || 0;
+                        const maxValue = Math.max(...series.income, ...series.expense);
+                        const incomeHeight = maxValue > 0 ? (income / maxValue) * 120 : 0;
+                        const expenseHeight = maxValue > 0 ? (expense / maxValue) * 120 : 0;
+
+                        return (
+                          <TouchableOpacity
+                            key={`${label}-${index}`}
+                            onPress={() => setBarTooltip({ label, income, expense, index })}
+                            activeOpacity={0.7}
+                          >
+                            <Animated.View style={styles.barGroup} entering={FadeInUp.delay(index * 30).springify()}>
+                              <View style={styles.barContainer}>
+                                <Animated.View
+                                  style={[
+                                    styles.bar,
+                                    {
+                                      height: incomeHeight,
+                                      backgroundColor: colors.success
+                                    }
+                                  ]}
+                                  entering={FadeInUp.delay(index * 30 + 100).springify()}
+                                />
+                                <Animated.View
+                                  style={[
+                                    styles.bar,
+                                    {
+                                      height: expenseHeight,
+                                      backgroundColor: colors.danger,
+                                      marginLeft: 2
+                                    }
+                                  ]}
+                                  entering={FadeInUp.delay(index * 30 + 150).springify()}
+                                />
+                              </View>
+                              <Text style={[styles.barLabel, { color: colors.textSecondary }]} numberOfLines={1}>
+                                {label}
+                              </Text>
+                            </Animated.View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
+                ) : null}
+
+                {/* Navigation Controls (Weekly, Monthly, Yearly) */}
+                {windowRange && (period === 'weekly' || period === 'monthly' || period === 'yearly') && (() => {
+                  let onPrev = () => { };
+                  let onNext = () => { };
+                  let canNext = false;
+                  let label = '';
+
+                  if (period === 'weekly') {
+                    // Weekly Logic
+                    let maxWeeksBack = 0;
+                    if (filteredTransactions && filteredTransactions.length > 0) {
+                      const earliestTx = filteredTransactions.reduce<Date | null>((min, t) => {
+                        const dt = new Date(t.date);
+                        return !min || dt < min ? dt : min;
+                      }, null);
+                      if (earliestTx) {
+                        const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+                        const diffMs = new Date().getTime() - earliestTx.getTime();
+                        maxWeeksBack = diffMs > 0 ? Math.floor(diffMs / msPerWeek) : 0;
+                      }
+                    }
+                    onPrev = () => setCurrentWeek(prev => Math.min(prev + 1, maxWeeksBack));
+                    onNext = () => setCurrentWeek(prev => Math.max(prev - 1, 0));
+                    canNext = currentWeek > 0;
+                    label = `${windowRange.start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${windowRange.end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                  } else if (period === 'monthly') {
+                    // Monthly Logic
+                    onPrev = () => setCurrentMonth(prev => prev + 1);
+                    onNext = () => setCurrentMonth(prev => Math.max(prev - 1, 0));
+                    canNext = currentMonth > 0;
+                    label = windowRange.start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                  } else if (period === 'yearly') {
+                    // Yearly Logic
+                    onPrev = () => setCurrentYear(prev => prev + 1);
+                    onNext = () => setCurrentYear(prev => Math.max(prev - 1, 0));
+                    canNext = currentYear > 0;
+                    label = windowRange.start.getFullYear().toString();
+                  }
+
+                  return (
+                    <View style={styles.weekNavigationBelow}>
+                      <TouchableOpacity
+                        onPress={onPrev}
+                        style={styles.weekNavButtonSimple}
+                      >
+                        <Ionicons
+                          name="chevron-back"
+                          size={28}
+                          color={colors.text}
+                        />
+                      </TouchableOpacity>
+                      <View style={styles.weekNavCenterSimple}>
+                        <Text style={[styles.weekNavDateRangeSimple, { color: colors.text }]}>
+                          {label}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={onNext}
+                        disabled={!canNext}
+                        style={styles.weekNavButtonSimple}
+                      >
+                        <Ionicons
+                          name="chevron-forward"
+                          size={28}
+                          color={!canNext ? colors.textSecondary : colors.text}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })()}
+
+                {/* Dynamic Tooltip (immediately below bar chart / week nav) */}
+                {barTooltip && (
+                  <Animated.View
+                    entering={FadeInUp.springify()}
+                    exiting={FadeOut.duration(200)}
+                    style={[styles.tooltipContainer, { backgroundColor: colors.surface }]}
+                  >
+                    <TouchableOpacity
+                      style={styles.tooltipClose}
+                      onPress={() => setBarTooltip(null)}
+                    >
+                      <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                    <Text style={[styles.tooltipTitle, { color: colors.text }]}>{barTooltip.label}</Text>
+                    <View style={styles.tooltipRow}>
+                      <View style={styles.tooltipItem}>
+                        <View style={[styles.tooltipDot, { backgroundColor: colors.success }]} />
+                        <Text style={[styles.tooltipLabel, { color: colors.textSecondary }]}>Money In:</Text>
+                        <Text style={[styles.tooltipValue, { color: colors.success }]}>
+                          {formatCurrency(barTooltip.income)}
+                        </Text>
+                      </View>
+                      <View style={styles.tooltipItem}>
+                        <View style={[styles.tooltipDot, { backgroundColor: colors.danger }]} />
+                        <Text style={[styles.tooltipLabel, { color: colors.textSecondary }]}>Money Out:</Text>
+                        <Text style={[styles.tooltipValue, { color: colors.danger }]}>
+                          {formatCurrency(barTooltip.expense)}
+                        </Text>
+                      </View>
+                    </View>
+                    {barTooltip.income > barTooltip.expense ? (
+                      <Text style={[styles.tooltipInsight, { color: colors.success }]}>
+                        ✓ Positive flow: +{formatCurrency(barTooltip.income - barTooltip.expense)}
+                      </Text>
+                    ) : barTooltip.expense > barTooltip.income ? (
+                      <Text style={[styles.tooltipInsight, { color: colors.danger }]}>
+                        ⚠ Spending exceeded income by {formatCurrency(barTooltip.expense - barTooltip.income)}
+                      </Text>
+                    ) : (
+                      <Text style={[styles.tooltipInsight, { color: colors.textSecondary }]}>
+                        ⚖ Balanced
+                      </Text>
+                    )}
+                  </Animated.View>
+                )}
+
+                {/* Time-Series Line Chart: Money In vs Money Out */}
+                <View style={styles.lineChartSection}>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>Line graph of money in against money out</Text>
+                  <LineChart
+                    data={{
+                      // Daily view: simple fixed hour labels, with 24 at the last tick
+                      labels: period === 'daily' ? ['0', '4', '8', '12', '16', '20', '24'] : series.labels,
+                      datasets: [
+                        {
+                          data: series.income,
+                          color: () => colors.success,
+                          strokeWidth: 2,
+                        },
+                        {
+                          data: series.expense,
+                          color: () => colors.danger,
+                          strokeWidth: 2,
+                        },
+                      ],
+                      legend: ['Money In', 'Money Out'],
+                    }}
+                    // Slightly wider than the viewport so the last tick (24) sits on the final grid line
+                    width={Dimensions.get('window').width + spacing.md * 2}
+                    height={220}
+                    yAxisLabel=""
+                    yAxisSuffix=""
+                    chartConfig={{
+                      backgroundColor: 'transparent',
+                      backgroundGradientFrom: colors.background,
+                      backgroundGradientTo: colors.background,
+                      decimalPlaces: 0,
+                      color: (opacity = 1) => `rgba(148, 163, 184, ${opacity})`,
+                      labelColor: (opacity = 1) => `rgba(148, 163, 184, ${opacity})`,
+                      propsForDots: {
+                        r: '2',
+                      },
+                      propsForBackgroundLines: {
+                        stroke: colors.border,
+                        strokeDasharray: '4 4',
+                      },
+                      useShadowColorFromDataset: false,
+                    }}
+                    bezier
+                    // Shift left while compensating with extra chart width so 24 remains on the last grid line
+                    style={{ marginLeft: -spacing.md * 2, marginRight: 0 }}
+                  />
+                </View>
+              </View>
+
+
+              {/* Category breakdown - filtered by statsView toggle */}
+              <View style={styles.section}>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                  {statsView === 'income' ? 'Money In Categories' : 'Money Out Categories'}
+                </Text>
+
+                {statsView === 'income' ? (
+                  /* Money In Categories */
+                  Object.keys(categories.income).length > 0 ? (
+                    (() => {
+                      const incomeSorted = Object.entries(categories.income).sort((a, b) => (b[1] as number) - (a[1] as number));
+                      const maxIncome = Math.max(...incomeSorted.map(([, v]) => v as number), 1);
+                      return incomeSorted.map(([cat, amount], idx) => (
+                        <Animated.View key={`inc-${cat}`} style={styles.categoryItemHorizontal} entering={FadeInUp.delay(idx * 25).springify()}>
+                          <View style={styles.categoryBarContainer}>
+                            <Text style={[styles.categoryNameLeft, { color: colors.text }]}>{cat}</Text>
+                            <View style={styles.categoryBarWrapper}>
+                              <View style={[styles.categoryBarBackground, { backgroundColor: colors.surface }]}>
+                                <Animated.View
+                                  entering={FadeInUp.delay(idx * 25 + 100).springify()}
+                                  style={[styles.categoryBarFillHorizontal, { width: `${((amount as number) / maxIncome) * 100}%`, backgroundColor: colors.success }]}
+                                />
+                              </View>
+                              <Text style={[styles.categoryValueRight, { color: colors.success }]}>
+                                {(amount as number).toFixed(0)}
+                              </Text>
+                            </View>
+                          </View>
+                        </Animated.View>
+                      ));
+                    })()
+                  ) : (
+                    <View style={styles.emptyState}>
+                      <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No money in for this period</Text>
+                    </View>
+                  )
+                ) : (
+                  /* Money Out Categories */
+                  Object.keys(categories.expense).length > 0 ? (
+                    (() => {
+                      const expenseSorted = Object.entries(categories.expense).sort((a, b) => (b[1] as number) - (a[1] as number));
+                      const maxExpense = Math.max(...expenseSorted.map(([, v]) => v as number), 1);
+                      return expenseSorted.map(([cat, amount], idx) => (
+                        <Animated.View key={`exp-${cat}`} style={styles.categoryItemHorizontal} entering={FadeInUp.delay(idx * 25).springify()}>
+                          <View style={styles.categoryBarContainer}>
+                            <Text style={[styles.categoryNameLeft, { color: colors.text }]}>{cat}</Text>
+                            <View style={styles.categoryBarWrapper}>
+                              <View style={[styles.categoryBarBackground, { backgroundColor: colors.surface }]}>
+                                <Animated.View
+                                  entering={FadeInUp.delay(idx * 25 + 100).springify()}
+                                  style={[styles.categoryBarFillHorizontal, { width: `${((amount as number) / maxExpense) * 100}%`, backgroundColor: colors.danger }]}
+                                />
+                              </View>
+                              <Text style={[styles.categoryValueRight, { color: colors.danger }]}>
+                                {(amount as number).toFixed(0)}
+                              </Text>
+                            </View>
+                          </View>
+                        </Animated.View>
+                      ));
+                    })()
+                  ) : (
+                    <View style={styles.emptyState}>
+                      <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No money out for this period</Text>
+                    </View>
+                  )
+                )}
+              </View>
+            </View>
+          )}
         </View>
       </ScrollView>
-      
+
       {/* Detailed Period Selector */}
       <DetailedPeriodSelector
         visible={showDetailedPeriodSelector}

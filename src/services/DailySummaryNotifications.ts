@@ -54,12 +54,10 @@ export async function scheduleDailySummaryNotification(userId: string) {
     }
 
     // We don't schedule a placeholder notification anymore
-    // Instead, we rely on the background task to send the actual notification at 9 AM
-    // This prevents duplicate notifications and ensures the notification contains real data
+    // We rely on the background task to send the actual notification at 9 AM
 
-    // Mark this user as having notifications scheduled
     scheduledUsers.add(userId);
-    console.log('Daily summary notification will be sent by background task at 9:00 AM for user:', userId);
+    console.log('Daily summary notification setup for user:', userId);
   } catch (error) {
     console.error('Error setting up daily summary:', error);
   }

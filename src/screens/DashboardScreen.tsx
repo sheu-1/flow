@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, ActivityIndicator, Alert, AppState, AppStateStatus } from 'react-native';
+import { getBackgroundAddedCount, resetBackgroundAddedCount } from '../services/SmsService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -38,7 +39,7 @@ export default function DashboardScreen() {
   const [filterLoading, setFilterLoading] = useState(false);
   const [showMetricsInsights, setShowMetricsInsights] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState<any>(null);
-  
+
   // Date filtering from shared context
   const {
     dateRange,
@@ -83,6 +84,8 @@ export default function DashboardScreen() {
     }
   }, [user?.id, refetchTransactions]);
 
+  // ... (inside component)
+
   // Listen for notification updates
   useEffect(() => {
     const unsubscribe = notificationService.addListener((notifications) => {
@@ -91,6 +94,37 @@ export default function DashboardScreen() {
     setUnreadCount(notificationService.getUnreadCount());
     return unsubscribe;
   }, []);
+
+  // Auto-refresh on App Foreground and check background additions
+  useEffect(() => {
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active') {
+        console.log('⚡ App came to foreground, refreshing data...');
+        refresh();
+
+        // Check for background SMS additions
+        const count = await getBackgroundAddedCount();
+        if (count > 0) {
+          Alert.alert('New Transactions', `${count} transaction${count > 1 ? 's' : ''} added from SMS while you were away.`);
+          await resetBackgroundAddedCount();
+        }
+      }
+    };
+
+    const sub = AppState.addEventListener('change', handleAppStateChange);
+
+    // Also check on initial mount
+    getBackgroundAddedCount().then(async (count) => {
+      if (count > 0) {
+        Alert.alert('New Transactions', `${count} transaction${count > 1 ? 's' : ''} added from SMS while you were away.`);
+        await resetBackgroundAddedCount();
+      }
+    });
+
+    return () => {
+      sub.remove();
+    };
+  }, [refresh]);
 
   // Initial load handled by DateFilterContext; no screen-level realtime/refetch
 
@@ -222,7 +256,7 @@ export default function DashboardScreen() {
     ...t,
     description: (t as any).description || (t as any).sender || t.category || '',
   }));
-  
+
   const avgTransaction = transactionCount > 0 ? (Math.abs(moneyIn) + Math.abs(moneyOut)) / transactionCount : 0;
   const maxAmount = Math.max(moneyIn, moneyOut);
 
@@ -341,7 +375,7 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-      <ScrollView 
+      <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
@@ -357,7 +391,7 @@ export default function DashboardScreen() {
               <TouchableOpacity style={styles.iconButton} onPress={() => setShowNotifications(true)}>
                 <Ionicons name="notifications-outline" size={24} color={colors.text} />
                 {unreadCount > 0 && (
-                  <View style={[styles.notificationBadge, { backgroundColor: colors.danger }]}> 
+                  <View style={[styles.notificationBadge, { backgroundColor: colors.danger }]}>
                     <Text style={[styles.notificationBadgeText, { color: colors.background }]}>
                       {unreadCount > 99 ? '99+' : unreadCount}
                     </Text>
@@ -367,12 +401,12 @@ export default function DashboardScreen() {
               <ProfileMenu />
             </View>
           </View>
-          
+
           <View style={styles.dateRow}>
             <Text style={[styles.dateText, { color: colors.textSecondary }]}>{new Date().toLocaleDateString()}</Text>
           </View>
         </View>
-        
+
         {/* Sticky Unified Period Selector - Update styles */}
         <View style={[styles.stickyPeriodSelector, { backgroundColor: colors.background }]}>
           <View style={styles.stickyContent}>
@@ -392,226 +426,226 @@ export default function DashboardScreen() {
             )}
           </View>
         </View>
-        
+
         {/* Main Content */}
         <View>
-        {/* Animated Circular Metrics */}
-        <View style={styles.circularMetricsContainer}>
-          <Animated.View entering={FadeInUp.delay(50).springify()} style={styles.circleWrapper}>
-            <AnimatedCircleMetric
-              value={moneyIn}
-              label="Money In"
-              type="total"
-              period={selectedPeriod}
-              maxValue={maxAmount}
-              size={110}
-            />
-          </Animated.View>
-          
-          <Animated.View entering={FadeInUp.delay(100).springify()} style={styles.circleWrapper}>
-            <AnimatedCircleMetric
-              value={transactionCount}
-              label="Count"
-              type="count"
-              period={selectedPeriod}
-              showCurrency={false}
-              size={110}
-            />
-          </Animated.View>
-          
-          <Animated.View entering={FadeInUp.delay(150).springify()} style={styles.circleWrapper}>
-            <AnimatedCircleMetric
-              value={moneyOut}
-              label="Money Out"
-              type="max"
-              period={selectedPeriod}
-              maxValue={maxAmount}
-              size={110}
-            />
-          </Animated.View>
-        </View>
+          {/* Animated Circular Metrics */}
+          <View style={styles.circularMetricsContainer}>
+            <Animated.View entering={FadeInUp.delay(50).springify()} style={styles.circleWrapper}>
+              <AnimatedCircleMetric
+                value={moneyIn}
+                label="Money In"
+                type="total"
+                period={selectedPeriod}
+                maxValue={maxAmount}
+                size={110}
+              />
+            </Animated.View>
 
-        {/* Net Balance Card */}
-        <Animated.View 
-          entering={FadeInUp.delay(200).springify()}
-          style={[
-            styles.netBalanceCard, 
-            { 
-              backgroundColor: colors.surface,
-              borderWidth: 2,
-              borderColor: netBalance >= 0 ? colors.success : colors.danger,
-            }
-          ]}
-        >
-          <View style={styles.netBalanceContent}>
-            <Ionicons 
-              name="analytics-outline" 
-              size={32} 
-              color={netBalance >= 0 ? colors.success : colors.danger} 
-            />
-            <View style={styles.netBalanceText}>
-              <Text style={[styles.netBalanceLabel, { color: colors.textSecondary }]}>
-                Net Balance • {periodLabel}
-              </Text>
-              <Text style={[styles.netBalanceAmount, { color: netBalance >= 0 ? colors.success : colors.danger }]}>
-                {netBalance >= 0 ? '+' : ''}{(moneyIn - moneyOut).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </Text>
-            </View>
-          </View>
-          
-          {/* Insight Summary inside Net Balance Card */}
-          <View style={[styles.netBalanceInsight, { backgroundColor: (netBalance >= 0 ? colors.success : colors.danger) + '15', borderTopColor: colors.border }]}>
-            <Ionicons name="bulb-outline" size={16} color={netBalance >= 0 ? colors.success : colors.danger} />
-            <Text style={[styles.netBalanceInsightText, { color: colors.text }]}>
-              {netBalance > 0 
-                ? `${Math.abs(netBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} surplus this period`
-                : netBalance < 0
-                ? `${Math.abs(netBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} deficit this period`
-                : 'Balanced income and expenses'}
-            </Text>
-          </View>
-        </Animated.View>
+            <Animated.View entering={FadeInUp.delay(100).springify()} style={styles.circleWrapper}>
+              <AnimatedCircleMetric
+                value={transactionCount}
+                label="Count"
+                type="count"
+                period={selectedPeriod}
+                showCurrency={false}
+                size={110}
+              />
+            </Animated.View>
 
-        {/* Metrics Insights Section - Moved below Net Balance */}
-        <TouchableOpacity
-          style={[styles.insightsCard, { backgroundColor: colors.surface }]}
-          onPress={() => setShowMetricsInsights(!showMetricsInsights)}
-          activeOpacity={0.8}
-        >
-          <View style={styles.insightsHeader}>
-            <Text style={[styles.insightsTitle, { color: colors.text }]}>Period Insights</Text>
-            <Ionicons 
-              name={showMetricsInsights ? 'chevron-up' : 'chevron-down'} 
-              size={20} 
-              color={colors.textSecondary} 
-            />
+            <Animated.View entering={FadeInUp.delay(150).springify()} style={styles.circleWrapper}>
+              <AnimatedCircleMetric
+                value={moneyOut}
+                label="Money Out"
+                type="max"
+                period={selectedPeriod}
+                maxValue={maxAmount}
+                size={110}
+              />
+            </Animated.View>
           </View>
 
-        {showMetricsInsights && (
-          <Animated.View 
-            style={styles.insightsDropdown}
-            entering={FadeInUp.springify()}
+          {/* Net Balance Card */}
+          <Animated.View
+            entering={FadeInUp.delay(200).springify()}
+            style={[
+              styles.netBalanceCard,
+              {
+                backgroundColor: colors.surface,
+                borderWidth: 3,
+                borderColor: netBalance >= 0 ? colors.success : colors.danger,
+              }
+            ]}
           >
-            {/* Pill row */}
-            <View style={styles.insightsPillRow}>
-              {/* Money In pill */}
-              <View style={[styles.insightPill, { backgroundColor: colors.success + '15' }]}> 
-                <View style={styles.insightPillHeader}>
-                  <Ionicons name="trending-up" size={16} color={colors.success} />
-                  <Text style={[styles.insightPillLabel, { color: colors.textSecondary }]}>Money In</Text>
-                </View>
-                <Text style={[styles.insightPillValue, { color: colors.success }]}>
-                  {moneyIn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <View style={styles.netBalanceContent}>
+              <Ionicons
+                name="analytics-outline"
+                size={32}
+                color={netBalance >= 0 ? colors.success : colors.danger}
+              />
+              <View style={styles.netBalanceText}>
+                <Text style={[styles.netBalanceLabel, { color: colors.textSecondary }]}>
+                  Net Balance • {periodLabel}
                 </Text>
-              </View>
-
-              {/* Transaction Count pill */}
-              <View style={[styles.insightPill, { backgroundColor: colors.primary + '15' }]}> 
-                <View style={styles.insightPillHeader}>
-                  <Ionicons name="receipt" size={16} color={colors.primary} />
-                  <Text style={[styles.insightPillLabel, { color: colors.textSecondary }]}>Transactions</Text>
-                </View>
-                <Text style={[styles.insightPillValue, { color: colors.primary }]}>
-                  {transactionCount}
-                </Text>
-              </View>
-
-              {/* Money Out pill */}
-              <View style={[styles.insightPill, { backgroundColor: colors.danger + '15' }]}> 
-                <View style={styles.insightPillHeader}>
-                  <Ionicons name="trending-down" size={16} color={colors.danger} />
-                  <Text style={[styles.insightPillLabel, { color: colors.textSecondary }]}>Money Out</Text>
-                </View>
-                <Text style={[styles.insightPillValue, { color: colors.danger }]}>
-                  {moneyOut.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                <Text style={[styles.netBalanceAmount, { color: netBalance >= 0 ? colors.success : colors.danger }]}>
+                  {netBalance >= 0 ? '+' : ''}{(moneyIn - moneyOut).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </Text>
               </View>
             </View>
 
-            {/* Short summary line */}
-            <Text style={[styles.insightSummary, { color: colors.textSecondary }]}>
-              {netBalance > 0
-                ? `Positive cash flow of ${Math.abs(netBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} this ${periodLabel.toLowerCase()}.`
-                : netBalance < 0
-                ? `Negative cash flow of ${Math.abs(netBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} this ${periodLabel.toLowerCase()}.`
-                : `Balanced income and expenses this ${periodLabel.toLowerCase()}.`}
-            </Text>
+            {/* Insight Summary inside Net Balance Card */}
+            <View style={[styles.netBalanceInsight, { backgroundColor: (netBalance >= 0 ? colors.success : colors.danger) + '15', borderTopColor: colors.border }]}>
+              <Ionicons name="bulb-outline" size={16} color={netBalance >= 0 ? colors.success : colors.danger} />
+              <Text style={[styles.netBalanceInsightText, { color: colors.text }]}>
+                {netBalance > 0
+                  ? `${Math.abs(netBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} surplus this period`
+                  : netBalance < 0
+                    ? `${Math.abs(netBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} deficit this period`
+                    : 'Balanced income and expenses'}
+              </Text>
+            </View>
           </Animated.View>
-        )}
-        </TouchableOpacity>
 
-        <AnimatedPieChart moneyIn={moneyIn} moneyOut={moneyOut} />
+          {/* Metrics Insights Section - Moved below Net Balance */}
+          <TouchableOpacity
+            style={[styles.insightsCard, { backgroundColor: colors.surface }]}
+            onPress={() => setShowMetricsInsights(!showMetricsInsights)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.insightsHeader}>
+              <Text style={[styles.insightsTitle, { color: colors.text }]}>Period Insights</Text>
+              <Ionicons
+                name={showMetricsInsights ? 'chevron-up' : 'chevron-down'}
+                size={20}
+                color={colors.textSecondary}
+              />
+            </View>
 
-        {/* Financial Health Score */}
-        <FinancialHealthScore
-          totalIncome={moneyIn}
-          totalExpense={moneyOut}
-          savingsRate={moneyIn > 0 ? ((moneyIn - moneyOut) / moneyIn) * 100 : 0}
-          transactionCount={filteredTransactions.length}
-          onPress={() => console.log('Health score pressed')}
-        />
+            {showMetricsInsights && (
+              <Animated.View
+                style={styles.insightsDropdown}
+                entering={FadeInUp.springify()}
+              >
+                {/* Pill row */}
+                <View style={styles.insightsPillRow}>
+                  {/* Money In pill */}
+                  <View style={[styles.insightPill, { backgroundColor: colors.success + '15' }]}>
+                    <View style={styles.insightPillHeader}>
+                      <Ionicons name="trending-up" size={16} color={colors.success} />
+                      <Text style={[styles.insightPillLabel, { color: colors.textSecondary }]}>Money In</Text>
+                    </View>
+                    <Text style={[styles.insightPillValue, { color: colors.success }]}>
+                      {moneyIn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </Text>
+                  </View>
 
-        {/* Smart Insights */}
-        <SmartInsights
-          transactions={filteredTransactions}
-          userId={user?.id || ''}
-        />
+                  {/* Transaction Count pill */}
+                  <View style={[styles.insightPill, { backgroundColor: colors.primary + '15' }]}>
+                    <View style={styles.insightPillHeader}>
+                      <Ionicons name="receipt" size={16} color={colors.primary} />
+                      <Text style={[styles.insightPillLabel, { color: colors.textSecondary }]}>Transactions</Text>
+                    </View>
+                    <Text style={[styles.insightPillValue, { color: colors.primary }]}>
+                      {transactionCount}
+                    </Text>
+                  </View>
 
-        {/* Total Transactions Line Graph */}
-        {transactionCountSeries.labels.length > 0 && (
-          <View style={styles.lineChartSection}>
-            <Text style={[styles.lineChartTitle, { color: colors.text }]}>Trend of total transactions</Text>
-            <LineChart
-              data={{
-                // Daily view: match Reports daily styling with fixed hour labels
-                labels:
-                  selectedPeriod === 'daily'
-                    ? ['0', '4', '8', '12', '16', '20', '24']
-                    : transactionCountSeries.labels,
-                datasets: [
-                  {
-                    data: transactionCountSeries.counts,
-                    color: () => colors.primary,
-                    strokeWidth: 2,
-                  },
-                ],
-              }}
-              // Slightly wider than the viewport so the last tick (24) sits on the final grid line
-              width={Dimensions.get('window').width + spacing.md * 2}
-              height={220}
-              fromZero
-              chartConfig={{
-                backgroundColor: 'transparent',
-                backgroundGradientFrom: colors.background,
-                backgroundGradientTo: colors.background,
-                decimalPlaces: 0,
-                color: (opacity = 1) => `rgba(148, 163, 184, ${opacity})`,
-                labelColor: (opacity = 1) => `rgba(148, 163, 184, ${opacity})`,
-                propsForDots: {
-                  r: '2',
-                },
-                propsForBackgroundLines: {
-                  stroke: colors.border,
-                  strokeDasharray: '4 4',
-                },
-                useShadowColorFromDataset: false,
-              }}
-              bezier
-              // Shift left while compensating with extra chart width so the last tick remains on the last grid line
-              style={{ marginLeft: -spacing.md * 2, marginRight: 0, borderRadius: borderRadius.lg }}
-            />
-          </View>
-        )}
+                  {/* Money Out pill */}
+                  <View style={[styles.insightPill, { backgroundColor: colors.danger + '15' }]}>
+                    <View style={styles.insightPillHeader}>
+                      <Ionicons name="trending-down" size={16} color={colors.danger} />
+                      <Text style={[styles.insightPillLabel, { color: colors.textSecondary }]}>Money Out</Text>
+                    </View>
+                    <Text style={[styles.insightPillValue, { color: colors.danger }]}>
+                      {moneyOut.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </Text>
+                  </View>
+                </View>
 
-        {/* Savings Goals temporarily disabled due to backend schema issues */}
-        {false && (
-          <SavingsGoals
-            userId={user?.id || ''}
-            totalSavings={netBalance}
+                {/* Short summary line */}
+                <Text style={[styles.insightSummary, { color: colors.textSecondary }]}>
+                  {netBalance > 0
+                    ? `Positive cash flow of ${Math.abs(netBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} this ${periodLabel.toLowerCase()}.`
+                    : netBalance < 0
+                      ? `Negative cash flow of ${Math.abs(netBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} this ${periodLabel.toLowerCase()}.`
+                      : `Balanced income and expenses this ${periodLabel.toLowerCase()}.`}
+                </Text>
+              </Animated.View>
+            )}
+          </TouchableOpacity>
+
+          <AnimatedPieChart moneyIn={moneyIn} moneyOut={moneyOut} />
+
+          {/* Financial Health Score */}
+          <FinancialHealthScore
+            totalIncome={moneyIn}
+            totalExpense={moneyOut}
+            savingsRate={moneyIn > 0 ? ((moneyIn - moneyOut) / moneyIn) * 100 : 0}
+            transactionCount={filteredTransactions.length}
+            onPress={() => console.log('Health score pressed')}
           />
-        )}
 
-        {/* Debug panels removed for production */}
+          {/* Smart Insights */}
+          <SmartInsights
+            transactions={filteredTransactions}
+            userId={user?.id || ''}
+          />
+
+          {/* Total Transactions Line Graph */}
+          {transactionCountSeries.labels.length > 0 && (
+            <View style={styles.lineChartSection}>
+              <Text style={[styles.lineChartTitle, { color: colors.text }]}>Trend of total transactions</Text>
+              <LineChart
+                data={{
+                  // Daily view: match Reports daily styling with fixed hour labels
+                  labels:
+                    selectedPeriod === 'daily'
+                      ? ['0', '4', '8', '12', '16', '20', '24']
+                      : transactionCountSeries.labels,
+                  datasets: [
+                    {
+                      data: transactionCountSeries.counts,
+                      color: () => colors.primary,
+                      strokeWidth: 2,
+                    },
+                  ],
+                }}
+                // Slightly wider than the viewport so the last tick (24) sits on the final grid line
+                width={Dimensions.get('window').width + spacing.md * 2}
+                height={220}
+                fromZero
+                chartConfig={{
+                  backgroundColor: 'transparent',
+                  backgroundGradientFrom: colors.background,
+                  backgroundGradientTo: colors.background,
+                  decimalPlaces: 0,
+                  color: (opacity = 1) => `rgba(148, 163, 184, ${opacity})`,
+                  labelColor: (opacity = 1) => `rgba(148, 163, 184, ${opacity})`,
+                  propsForDots: {
+                    r: '2',
+                  },
+                  propsForBackgroundLines: {
+                    stroke: colors.border,
+                    strokeDasharray: '4 4',
+                  },
+                  useShadowColorFromDataset: false,
+                }}
+                bezier
+                // Shift left while compensating with extra chart width so the last tick remains on the last grid line
+                style={{ marginLeft: -spacing.md * 2, marginRight: 0, borderRadius: borderRadius.lg }}
+              />
+            </View>
+          )}
+
+          {/* Savings Goals temporarily disabled due to backend schema issues */}
+          {false && (
+            <SavingsGoals
+              userId={user?.id || ''}
+              totalSavings={netBalance}
+            />
+          )}
+
+          {/* Debug panels removed for production */}
 
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Transactions</Text>
@@ -628,13 +662,13 @@ export default function DashboardScreen() {
           </View>
         </View>
       </ScrollView>
-      
+
       {/* Notification Panel */}
-      <NotificationPanel 
-        visible={showNotifications} 
-        onClose={() => setShowNotifications(false)} 
+      <NotificationPanel
+        visible={showNotifications}
+        onClose={() => setShowNotifications(false)}
       />
-      
+
       {/* Detailed Period Selector */}
       <DetailedPeriodSelector
         visible={showDetailedPeriodSelector}

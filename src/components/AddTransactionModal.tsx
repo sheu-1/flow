@@ -25,12 +25,19 @@ interface AddTransactionModalProps {
     category: string;
     type: 'income' | 'expense';
   }) => void;
+  initialValues?: {
+    amount?: number;
+    description?: string;
+    category?: string;
+    type?: 'income' | 'expense';
+  } | null;
 }
 
 export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   visible,
   onClose,
   onAdd,
+  initialValues,
 }) => {
   const colors = useThemeColors();
   const [amount, setAmount] = useState('');
@@ -38,6 +45,21 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   const [selectedCategory, setSelectedCategory] = useState('');
   const [type, setType] = useState<'income' | 'expense'>('income');
   const [showReceiptScanner, setShowReceiptScanner] = useState(false);
+
+  React.useEffect(() => {
+    if (visible && initialValues) {
+      if (initialValues.amount) setAmount(initialValues.amount.toString());
+      if (initialValues.description) setDescription(initialValues.description);
+      if (initialValues.category) setSelectedCategory(initialValues.category);
+      if (initialValues.type) setType(initialValues.type);
+    } else if (visible && !initialValues) {
+      // Reset if opening empty
+      setAmount('');
+      setDescription('');
+      setSelectedCategory('');
+      setType('income');
+    }
+  }, [visible, initialValues]);
 
   const handleSubmit = () => {
     if (!amount || !description || !selectedCategory) {
@@ -74,7 +96,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
     setShowReceiptScanner(false);
   };
 
-  const filteredCategories = mockCategories.filter(cat => 
+  const filteredCategories = mockCategories.filter(cat =>
     (type === 'income' && cat.color === colors.success) ||
     (type === 'expense' && cat.color === colors.danger)
   );
@@ -87,7 +109,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
             <Ionicons name="close" size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={[styles.title, { color: colors.text }]}>Add Transaction</Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.scanButton, { backgroundColor: colors.primary }]}
             onPress={() => setShowReceiptScanner(true)}
           >
@@ -171,7 +193,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
           </View>
 
           {/* Save Button */}
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.saveButtonBottom, { backgroundColor: colors.primary }]}
             onPress={handleSubmit}
           >

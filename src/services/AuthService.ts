@@ -252,19 +252,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log('[Auth] Handling callback URL:', url);
         const parsed = Linking.parse(url);
         const rawPath = (parsed.path || parsed.hostname || '').toString();
-        
+
         // More robust detection: check for 'reset-password' anywhere in path or host, OR type=recovery param
         const urlObj = new URL(url);
         const hash = urlObj.hash ? urlObj.hash.replace(/^#/, '') : '';
         const hashParams = new URLSearchParams(hash);
         const type = hashParams.get('type') || urlObj.searchParams.get('type');
-        
+
         const isResetPath = rawPath.includes('reset-password');
         const isRecoveryType = type === 'recovery';
 
         if (!isResetPath && !isRecoveryType) {
-             console.log('[Auth] URL is not for password reset (path:', rawPath, 'type:', type, ')');
-             return;
+          console.log('[Auth] URL is not for password reset (path:', rawPath, 'type:', type, ')');
+          return;
         }
 
         const code = urlObj.searchParams.get('code');
@@ -329,7 +329,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           const reachable = await pingSupabase(2000);
           console.log('[Auth] health check reachable =', reachable);
-        } catch {}
+        } catch { }
 
         if (session?.user && !smsStarted) {
           try {
@@ -366,7 +366,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setNeedsPasswordReset(true);
         }
         setLoading(false);
-        try { clearTimeout(timeoutId); } catch {}
+        try { clearTimeout(timeoutId); } catch { }
         if (event === 'SIGNED_IN' && newSession?.user) {
           try {
             await PermissionService.initializeSmsPermissions();
@@ -527,6 +527,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const { error } = await supabase.auth.updateUser({ password: newPassword });
         if (error) throw error;
+
+        // Force header-based redirect to Auth screen by signing out
+        // The user must sign in again with the new password
+        const { error: signOutError } = await supabase.auth.signOut();
+        if (signOutError) console.warn('Error signing out after password update:', signOutError);
+
+        setSession(null);
+        setUser(null);
         setNeedsPasswordReset(false);
       } catch (error) {
         const message = (error as any)?.message || 'Failed to update password';

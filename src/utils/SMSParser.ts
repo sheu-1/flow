@@ -250,6 +250,11 @@ export const SAMPLE_SMS_CASES: Array<{
       text: `TLQ0K25M9C Confirmed. Fuliza M-Pesa amount is Ksh 30.00. Access Fee charged Ksh 0.30. Total Fuliza M-Pesa outstanding amount is Ksh222.51 due on 22/01/26. To check daily charges, Dial *234*0#OK Select Query Charges`,
       expect: { amount: 0.3, type: 'debit', sender: 'Fuliza Fee' },
     },
+    // User provided example
+    {
+      text: `TK4OK9BABX Confirmed. Fuliza M-PESA amount is Ksh 10.00. Access Fee charged Ksh 0.10. Total Fuliza M-PESA outstanding amount is Ksh 202.71 due on 27/11/25. To check daily charges, Dial *334#OK Select Fuliza M-PESA to Query Charges.`,
+      expect: { amount: 0.10, type: 'debit', sender: 'Fuliza Fee' },
+    },
 
     {
       text: 'M-PESA: You have received KES 1,250.00 from John Doe Ref ABC123 on 12/09/2025',

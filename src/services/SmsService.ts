@@ -12,33 +12,33 @@ type SmsListenerModule = {
   addListener: (cb: (msg: { originatingAddress?: string; body: string; timestamp?: number }) => void) => { remove: () => void };
 };
 
- const inFlightSmsIds = new Set<string>();
- const recentSmsIds = new Map<string, number>();
- const RECENT_SMS_TTL_MS = 5 * 60 * 1000;
+const inFlightSmsIds = new Set<string>();
+const recentSmsIds = new Map<string, number>();
+const RECENT_SMS_TTL_MS = 5 * 60 * 1000;
 
- function hashString(input: string): string {
-   let hash = 0;
-   for (let i = 0; i < input.length; i++) {
-     hash = (hash << 5) - hash + input.charCodeAt(i);
-     hash |= 0;
-   }
-   return (hash >>> 0).toString(16);
- }
+function hashString(input: string): string {
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    hash = (hash << 5) - hash + input.charCodeAt(i);
+    hash |= 0;
+  }
+  return (hash >>> 0).toString(16);
+}
 
- function getSmsId(raw: RawSms, userId: string): string {
-   const ts = raw.date != null ? String(raw.date) : '';
-   const from = raw.originatingAddress ?? '';
-   const body = (raw.body ?? '').trim();
-   return `${userId}:${ts}:${from}:${hashString(body)}`;
- }
+function getSmsId(raw: RawSms, userId: string): string {
+  const ts = raw.date != null ? String(raw.date) : '';
+  const from = raw.originatingAddress ?? '';
+  const body = (raw.body ?? '').trim();
+  return `${userId}:${ts}:${from}:${hashString(body)}`;
+}
 
- function pruneRecentSms(now: number) {
-   for (const [key, seenAt] of recentSmsIds.entries()) {
-     if (now - seenAt > RECENT_SMS_TTL_MS) {
-       recentSmsIds.delete(key);
-     }
-   }
- }
+function pruneRecentSms(now: number) {
+  for (const [key, seenAt] of recentSmsIds.entries()) {
+    if (now - seenAt > RECENT_SMS_TTL_MS) {
+      recentSmsIds.delete(key);
+    }
+  }
+}
 
 // react-native-get-sms-android: allows querying SMS inbox (fallback/polling)
 type SmsAndroidModule = {
@@ -65,7 +65,7 @@ async function loadLastSeen(userId?: string) {
     const n = raw ? Number(raw) : 0;
     if (Number.isFinite(n) && n > 0) lastSeenTimestamp = n;
     lastSeenUserId = userId;
-  } catch {}
+  } catch { }
 }
 
 async function saveLastSeen(ts: number, userId?: string) {
@@ -74,7 +74,7 @@ async function saveLastSeen(ts: number, userId?: string) {
     const key = getLastSeenKey(userId);
     await AsyncStorage.setItem(key, String(lastSeenTimestamp));
     lastSeenUserId = userId;
-  } catch {}
+  } catch { }
 }
 
 export async function getLastSeenForUser(userId?: string): Promise<number> {
@@ -92,7 +92,29 @@ export async function setLastSeenForUser(ts: number, userId?: string): Promise<v
   try {
     const key = getLastSeenKey(userId);
     await AsyncStorage.setItem(key, String(ts));
-  } catch {}
+  } catch { }
+}
+
+const BG_COUNT_KEY = 'background_sms_added_count';
+
+export async function getBackgroundAddedCount(): Promise<number> {
+  try {
+    const val = await AsyncStorage.getItem(BG_COUNT_KEY);
+    return val ? parseInt(val, 10) : 0;
+  } catch { return 0; }
+}
+
+export async function resetBackgroundAddedCount(): Promise<void> {
+  try {
+    await AsyncStorage.setItem(BG_COUNT_KEY, '0');
+  } catch { }
+}
+
+async function incrementBackgroundCount(count = 1) {
+  try {
+    const current = await getBackgroundAddedCount();
+    await AsyncStorage.setItem(BG_COUNT_KEY, String(current + count));
+  } catch { }
 }
 
 export async function requestSmsPermission(): Promise<boolean> {
@@ -112,14 +134,14 @@ export async function canIngestSms(): Promise<boolean> {
  */
 export async function readRecentSms(limit = 50): Promise<RawSms[]> {
   if (Platform.OS !== 'android') return [];
-  
+
   // Check if SMS ingestion is allowed
   const canIngest = await canIngestSms();
   if (!canIngest) {
     console.warn('[SMS] SMS ingestion not allowed - check permissions and settings');
     return [];
   }
-  
+
   const hasPerm = await ensureReadPermissions();
   if (!hasPerm) return [];
   const SmsAndroid: SmsAndroidModule | undefined = loadSmsAndroidModule();
@@ -197,7 +219,7 @@ export async function startSmsListener(onMessage?: (raw: RawSms) => void): Promi
             await saveLastSeen(ts, userId);
           } catch (e) { console.warn('[SMS] catch-up failed', e); }
         }
-      } catch {}
+      } catch { }
       return subscription;
     }
   } catch (e) {
@@ -270,6 +292,7 @@ export async function processSmsAndSave(raw: RawSms): Promise<void> {
         return;
       }
 
+      await incrementBackgroundCount();
       recentSmsIds.set(smsId, now);
     } finally {
       inFlightSmsIds.delete(smsId);

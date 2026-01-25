@@ -24,6 +24,7 @@ import { getTransactions, createTransaction, updateTransaction, deleteTransactio
 import { useRealtimeTransactions } from '../hooks/useRealtimeTransactions';
 import ExportDataModal from '../components/ExportDataModal';
 import { useDateFilterContext } from '../contexts/DateFilterContext';
+import { ScanService } from '../services/ScanService';
 
 const ITEMS_PER_PAGE = 100;
 
@@ -71,7 +72,7 @@ function TransactionsScreen() {
         sender: r.sender || undefined,
       }));
       setTransactions(mapped);
-      
+
       // Get total count for pagination (approximate)
       if (page === 1) {
         // Fetch a larger set to estimate total (still constrained for performance)
@@ -141,15 +142,85 @@ function TransactionsScreen() {
         description: newTransaction.description,
         date: new Date().toISOString(),
       });
-      
+
       if (!result.success) {
         throw new Error(result.error?.message || 'Failed to create transaction');
       }
-      
+
       await refresh();
       setModalVisible(false);
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Failed to add transaction');
+    }
+  };
+
+  const [prefilledTx, setPrefilledTx] = useState<any>(null);
+
+  const handleScanPress = () => {
+    Alert.alert(
+      'Scan & Upload',
+      'Choose an option:',
+      [
+        { text: 'Scan Shopping List', onPress: () => performScan('receipt') },
+        { text: 'Upload Statement', onPress: () => performScan('statement') },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
+  const performScan = async (type: 'receipt' | 'statement') => {
+    try {
+      setLoading(true);
+      const imageUri = await ScanService.pickImage();
+      if (!imageUri) {
+        setLoading(false);
+        return;
+      }
+
+      if (type === 'receipt') {
+        const data = await ScanService.parseReceipt(imageUri);
+        // Prefill modal
+        setPrefilledTx({
+          amount: data.amount,
+          description: `Shopping: ${data.items?.map(i => i.name).join(', ')}`,
+          type: 'expense',
+          category: 'Shopping',
+        });
+        setModalVisible(true);
+      } else {
+        const transactions = await ScanService.parseStatement(imageUri);
+        Alert.alert(
+          'Statement Parsed',
+          `Found ${transactions.length} transactions.\nTotal In: ${transactions.filter(t => t.type === 'income').length}\nTotal Out: ${transactions.filter(t => t.type === 'expense').length}\n\nImport them?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Import All',
+              onPress: async () => {
+                let count = 0;
+                for (const t of transactions) {
+                  if (user?.id) {
+                    await createTransaction(user.id, {
+                      type: t.type,
+                      amount: t.amount,
+                      description: t.description,
+                      category: 'Uncategorized',
+                      date: t.date.toISOString(),
+                    });
+                    count++;
+                  }
+                }
+                Alert.alert('Success', `Imported ${count} transactions.`);
+                refresh();
+              }
+            }
+          ]
+        );
+      }
+    } catch (e) {
+      Alert.alert('Scan Failed', 'Could not process the image.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -225,8 +296,8 @@ function TransactionsScreen() {
 
   const renderTransaction = ({ item, index }: { item: Transaction; index: number }) => (
     <Animated.View entering={FadeInUp.delay(Math.min(index, 20) * 20).springify()}>
-      <TransactionCard 
-        transaction={item} 
+      <TransactionCard
+        transaction={item}
         onEditCategory={() => onEditCategory(item)}
         onDelete={() => handleDeleteTransaction(item)}
       />
@@ -246,6 +317,12 @@ function TransactionsScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.addButton, { backgroundColor: colors.surface }]}
+            onPress={() => handleScanPress()}
+          >
+            <Ionicons name="scan-outline" size={22} color={colors.text} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.addButton, { backgroundColor: colors.surface }]}
             onPress={() => setShowExport(true)}
           >
             <Ionicons name="download-outline" size={22} color={colors.text} />
@@ -260,7 +337,7 @@ function TransactionsScreen() {
       </View>
 
       {showSearch && (
-        <View style={[styles.searchContainer, { borderColor: colors.border }]}> 
+        <View style={[styles.searchContainer, { borderColor: colors.border }]}>
           <Ionicons name="search" size={18} color={colors.textSecondary} style={{ marginHorizontal: 8 }} />
           <TextInput
             style={[styles.searchInput, { color: colors.text }]}
@@ -301,8 +378,9 @@ function TransactionsScreen() {
 
       <AddTransactionModal
         visible={modalVisible}
-        onClose={() => setModalVisible(false)}
+        onClose={() => { setModalVisible(false); setPrefilledTx(null); }}
         onAdd={handleAddTransaction}
+        initialValues={prefilledTx}
       />
 
       {/* Export Data Modal - uses globally filtered transactions */}
@@ -321,10 +399,10 @@ function TransactionsScreen() {
         onClose={() => { setCategoryPickerVisible(false); setSelectedTxId(null); }}
         title="Edit Category"
       />
-      
+
       {/* Floating Pagination Controls */}
       {totalPages > 1 && (
-        <Animated.View 
+        <Animated.View
           entering={FadeIn.duration(300)}
           exiting={FadeOut.duration(300)}
           style={[styles.floatingPagination, { backgroundColor: colors.surface }]}
@@ -337,13 +415,13 @@ function TransactionsScreen() {
               !hasPrevPage && styles.floatingArrowDisabled,
             ]}
           >
-            <Ionicons 
-              name="chevron-back" 
-              size={24} 
-              color={hasPrevPage ? colors.primary : colors.textMuted} 
+            <Ionicons
+              name="chevron-back"
+              size={24}
+              color={hasPrevPage ? colors.primary : colors.textMuted}
             />
           </TouchableOpacity>
-          
+
           <View style={styles.floatingPageInfo}>
             <Text style={[styles.floatingPageText, { color: colors.text }]}>
               {currentPage}
@@ -353,7 +431,7 @@ function TransactionsScreen() {
               {totalPages}
             </Text>
           </View>
-          
+
           <TouchableOpacity
             onPress={handleNextPage}
             disabled={!hasNextPage}
@@ -362,10 +440,10 @@ function TransactionsScreen() {
               !hasNextPage && styles.floatingArrowDisabled,
             ]}
           >
-            <Ionicons 
-              name="chevron-forward" 
-              size={24} 
-              color={hasNextPage ? colors.primary : colors.textMuted} 
+            <Ionicons
+              name="chevron-forward"
+              size={24}
+              color={hasNextPage ? colors.primary : colors.textMuted}
             />
           </TouchableOpacity>
         </Animated.View>

@@ -61,10 +61,6 @@ TaskManager.defineTask(TASK_NAME, async () => {
     } catch (e) {
       console.warn('[Background] Daily summary check failed', e);
     }
-
-    return newer.length > 0
-      ? BackgroundFetch.BackgroundFetchResult.NewData
-      : BackgroundFetch.BackgroundFetchResult.NoData;
   } catch (e) {
     return BackgroundFetch.BackgroundFetchResult.Failed;
   }
