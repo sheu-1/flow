@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, ActivityIndicator, Alert, AppState, AppStateStatus } from 'react-native';
-import { getBackgroundAddedCount, resetBackgroundAddedCount } from '../services/SmsService';
+import { resetBackgroundAddedCount } from '../services/SmsService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -95,31 +95,22 @@ export default function DashboardScreen() {
     return unsubscribe;
   }, []);
 
-  // Auto-refresh on App Foreground and check background additions
+  // Auto-refresh on App Foreground and reset background SMS count silently
   useEffect(() => {
     const handleAppStateChange = async (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active') {
         console.log('⚡ App came to foreground, refreshing data...');
         refresh();
 
-        // Check for background SMS additions
-        const count = await getBackgroundAddedCount();
-        if (count > 0) {
-          Alert.alert('New Transactions', `${count} transaction${count > 1 ? 's' : ''} added from SMS while you were away.`);
-          await resetBackgroundAddedCount();
-        }
+        // Reset background SMS count silently (no popup)
+        await resetBackgroundAddedCount();
       }
     };
 
     const sub = AppState.addEventListener('change', handleAppStateChange);
 
-    // Also check on initial mount
-    getBackgroundAddedCount().then(async (count) => {
-      if (count > 0) {
-        Alert.alert('New Transactions', `${count} transaction${count > 1 ? 's' : ''} added from SMS while you were away.`);
-        await resetBackgroundAddedCount();
-      }
-    });
+    // Reset background SMS count silently on initial mount
+    resetBackgroundAddedCount();
 
     return () => {
       sub.remove();

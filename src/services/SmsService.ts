@@ -283,16 +283,24 @@ export async function processSmsAndSave(raw: RawSms): Promise<void> {
 
     inFlightSmsIds.add(smsId);
     try {
-      const parsed = parseTransactionFromSms(raw.body, raw.date ? new Date(raw.date).toISOString() : undefined);
-      if (!parsed) return;
+      const parsedResults = parseTransactionFromSms(raw.body, raw.date ? new Date(raw.date).toISOString() : undefined);
+      if (!parsedResults || parsedResults.length === 0) return;
 
-      const res = await insertTransactionEnhanced(parsed, userId);
-      if (!res.success) {
-        console.warn('[SMS] Supabase insert failed', res.error);
-        return;
+      for (const parsed of parsedResults) {
+        // We create a unique sub-ID component (using hash of body + index?) or just rely on existing dedup logic?
+        // Existing dedup logic uses smsId which hashes the *whole body*. 
+        // If we insert multiple transactions from 1 body, they need distinct Supabase IDs used by insertion?
+        // `insertTransactionEnhanced` creates a new row. Deduping is handled by `inFlightSmsIds` preventing *processing the same SMS twice*. 
+        // So we are safe to insert multiple rows for 1 SMS.
+
+        const res = await insertTransactionEnhanced(parsed, userId);
+        if (!res.success) {
+          console.warn('[SMS] Supabase insert failed', res.error);
+          continue; // Try next if one fails
+        }
+        await incrementBackgroundCount();
       }
 
-      await incrementBackgroundCount();
       recentSmsIds.set(smsId, now);
     } finally {
       inFlightSmsIds.delete(smsId);

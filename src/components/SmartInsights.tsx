@@ -36,15 +36,15 @@ export const SmartInsights: React.FC<Props> = ({ transactions, userId }) => {
   const getMonthlyData = (transactions: Transaction[]) => {
     // Simplified monthly aggregation
     const monthlyMap = new Map();
-    
+
     transactions.forEach(t => {
       const date = new Date(t.date);
       const key = `${date.getFullYear()}-${date.getMonth()}`;
-      
+
       if (!monthlyMap.has(key)) {
         monthlyMap.set(key, { income: 0, expense: 0 });
       }
-      
+
       const month = monthlyMap.get(key);
       if (t.type === 'income') {
         month.income += Math.abs(t.amount);
@@ -63,7 +63,7 @@ export const SmartInsights: React.FC<Props> = ({ transactions, userId }) => {
     // Simplified calculation - would need more sophisticated logic
     const monthlyData = getMonthlyData(transactions);
     let streak = 0;
-    
+
     for (let i = monthlyData.length - 1; i >= 0; i--) {
       if (monthlyData[i].savings > 0) {
         streak++;
@@ -71,7 +71,7 @@ export const SmartInsights: React.FC<Props> = ({ transactions, userId }) => {
         break;
       }
     }
-    
+
     return streak;
   };
 
@@ -112,7 +112,7 @@ export const SmartInsights: React.FC<Props> = ({ transactions, userId }) => {
       const daySpending = transactions
         .filter(t => new Date(t.date).getDay() === i && t.type === 'expense')
         .reduce((sum, t) => sum + Math.abs(t.amount), 0);
-      
+
       return { x: i + 1, y: daySpending };
     });
 
@@ -130,16 +130,16 @@ export const SmartInsights: React.FC<Props> = ({ transactions, userId }) => {
     const loadInsights = async () => {
       try {
         setLoading(true);
-        
+
         // Always start with local insights for immediate feedback
         const localInsights = generateLocalInsights();
         setInsights(localInsights);
-        
+
         // Try to load database insights if user is authenticated
         if (userId) {
           try {
             const dbInsights = await AnalyticsService.getFinancialInsights(userId);
-            
+
             // Convert database insights to component format
             const formattedInsights: Insight[] = dbInsights.map((insight, index) => ({
               id: `insight_${index}`,
@@ -177,7 +177,7 @@ export const SmartInsights: React.FC<Props> = ({ transactions, userId }) => {
       const txnDate = new Date(t.date);
       return txnDate.getMonth() === now.getMonth() && txnDate.getFullYear() === now.getFullYear();
     });
-    
+
     const lastMonth = transactions.filter(t => {
       const txnDate = new Date(t.date);
       const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -188,7 +188,7 @@ export const SmartInsights: React.FC<Props> = ({ transactions, userId }) => {
 
     const thisMonthSpending = thisMonth.filter(t => t.type === 'expense').reduce((sum, t) => sum + Math.abs(t.amount), 0);
     const lastMonthSpending = lastMonth.filter(t => t.type === 'expense').reduce((sum, t) => sum + Math.abs(t.amount), 0);
-    
+
     if (thisMonthSpending > lastMonthSpending * 1.2 && lastMonthSpending > 0) {
       localInsights.push({
         id: 'spending_spike',
@@ -214,6 +214,38 @@ export const SmartInsights: React.FC<Props> = ({ transactions, userId }) => {
         icon: 'calendar',
         priority: 4,
         chartData: weekendSpending.chartData,
+      });
+    }
+
+    // Transaction Charges Insight - tracks Fuliza fees, transaction fees, etc.
+    const chargesKeywords = ['fee', 'charge', 'fuliza', 'cost'];
+    const chargesCategories = ['Fees & Charges', 'Other'];
+    const totalCharges = thisMonth
+      .filter(t => {
+        if (t.type !== 'expense') return false;
+        const category = (t.category || '').toLowerCase();
+        const sender = ((t as any).sender || '').toLowerCase();
+        const description = ((t as any).description || '').toLowerCase();
+
+        // Check if it's a fee/charge transaction
+        return chargesKeywords.some(keyword =>
+          category.includes(keyword) ||
+          sender.includes(keyword) ||
+          description.includes(keyword)
+        ) || chargesCategories.some(cat => category.includes(cat.toLowerCase()));
+      })
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+    if (totalCharges > 0) {
+      localInsights.push({
+        id: 'total_charges',
+        type: 'warning',
+        title: 'Transaction Charges',
+        description: `You've paid ${formatCurrency(totalCharges)} in fees & charges this month (Fuliza, transaction costs, etc.)`,
+        value: formatCurrency(totalCharges),
+        action: 'Review your charges',
+        icon: 'cash-outline',
+        priority: 2,
       });
     }
 
@@ -263,7 +295,7 @@ export const SmartInsights: React.FC<Props> = ({ transactions, userId }) => {
   return (
     <View style={[styles.container, { backgroundColor: colors.surface }]}>
       <Text style={[styles.title, { color: colors.text }]}>Smart Insights</Text>
-      
+
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.insightsScroll}>
         {insights.map((insight, index) => (
           <Animated.View
@@ -280,35 +312,35 @@ export const SmartInsights: React.FC<Props> = ({ transactions, userId }) => {
             >
               <View style={styles.insightHeader}>
                 <View style={[styles.iconContainer, { backgroundColor: getInsightColor(insight.type) + '20' }]}>
-                  <Ionicons 
-                    name={insight.icon as any} 
-                    size={20} 
-                    color={getInsightColor(insight.type)} 
+                  <Ionicons
+                    name={insight.icon as any}
+                    size={20}
+                    color={getInsightColor(insight.type)}
                   />
                 </View>
                 <View style={styles.typeIndicator}>
-                  <Ionicons 
-                    name={getInsightIcon(insight.type) as any} 
-                    size={12} 
-                    color={getInsightColor(insight.type)} 
+                  <Ionicons
+                    name={getInsightIcon(insight.type) as any}
+                    size={12}
+                    color={getInsightColor(insight.type)}
                   />
                 </View>
               </View>
-              
+
               <Text style={[styles.insightTitle, { color: colors.text }]}>
                 {insight.title}
               </Text>
-              
+
               <Text style={[styles.insightDescription, { color: colors.textSecondary }]}>
                 {insight.description}
               </Text>
-              
+
               {insight.value && (
                 <Text style={[styles.insightValue, { color: getInsightColor(insight.type) }]}>
                   {insight.value}
                 </Text>
               )}
-              
+
               {insight.action && (
                 <TouchableOpacity style={[styles.actionButton, { borderColor: getInsightColor(insight.type) }]}>
                   <Text style={[styles.actionText, { color: getInsightColor(insight.type) }]}>
@@ -322,7 +354,7 @@ export const SmartInsights: React.FC<Props> = ({ transactions, userId }) => {
       </ScrollView>
 
       {selectedInsight && insights.find(i => i.id === selectedInsight)?.chartData && (
-        <Animated.View 
+        <Animated.View
           style={styles.chartContainer}
           entering={FadeInUp.springify()}
         >

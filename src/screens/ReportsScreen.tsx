@@ -112,54 +112,45 @@ export default function ReportsScreen() {
         wEnd = dayEnd;
 
       } else if (period === 'weekly') {
-        // Weekly: ISO-style weeks (Monday-Sunday), showing current week + last 3 weeks
-        // Define the overall start/end from the selected dateRange
-        const rangeStart = new Date(start);
-        rangeStart.setHours(0, 0, 0, 0);
-        const rangeEnd = new Date(end);
-        rangeEnd.setHours(23, 59, 59, 999);
+        // Weekly: Anchor to the end of the selected range (Dashboard context).
+        // This ensures if the user filtered to 'Last Month' on Dashboard, Reports starts relevant to that.
+        const baseAnchor = new Date(end);
+        baseAnchor.setHours(0, 0, 0, 0);
 
-        // Base on "today" so that current week always reflects the real current week
-        const today = new Date();
-        const baseEnd = new Date(today);
-        baseEnd.setHours(23, 59, 59, 999);
+        // Find Monday relative to the anchor
+        const dayOfWeek = baseAnchor.getDay(); // 0-6
+        const diffToMonday = (dayOfWeek + 6) % 7;
+        baseAnchor.setDate(baseAnchor.getDate() - diffToMonday);
 
-        // Find Monday of the current week
-        const baseStart = new Date(baseEnd);
-        const dayOfWeek = baseStart.getDay(); // 0 = Sunday, 1 = Monday, ...
-        const diffToMonday = (dayOfWeek + 6) % 7; // 0 if Monday, 1 if Tuesday, ..., 6 if Sunday
-        baseStart.setDate(baseStart.getDate() - diffToMonday);
-        baseStart.setHours(0, 0, 0, 0);
+        // Apply offset (currentWeek is 0 for the anchor week, 1 for previous...)
+        const activeWeekStart = new Date(baseAnchor);
+        activeWeekStart.setDate(baseAnchor.getDate() - (currentWeek * 7));
 
-        // Active window for stats/categories = week selected by currentWeek (0 = current, 1 = previous, etc.)
-        const activeWeekStart = new Date(baseStart);
-        activeWeekStart.setDate(baseStart.getDate() - currentWeek * 7);
-        activeWeekStart.setHours(0, 0, 0, 0);
         const activeWeekEnd = new Date(activeWeekStart);
-        activeWeekEnd.setDate(activeWeekStart.getDate() + 6);
+        activeWeekEnd.setDate(activeWeekEnd.getDate() + 6);
         activeWeekEnd.setHours(23, 59, 59, 999);
 
-        // Clamp the active window to the selected dateRange
-        wStart = activeWeekStart < rangeStart ? rangeStart : activeWeekStart;
-        wEnd = activeWeekEnd > rangeEnd ? rangeEnd : activeWeekEnd;
+        wStart = activeWeekStart;
+        wEnd = activeWeekEnd;
 
       } else if (period === 'monthly') {
-        // Monthly: Show daily breakdown for the current month (Day 1 to Last Day)
-        const currentYear = end.getFullYear();
-        const currentMonth = end.getMonth();
+        // Monthly: Anchor to the end of the selected range (Dashboard context).
+        const baseAnchor = new Date(end);
 
-        // Active window for categories/stats = current month
-        const activeMonthStart = new Date(currentYear, currentMonth, 1, 0, 0, 0, 0);
-        const activeMonthEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59, 999);
+        // Calculate target month based on offset relative to the anchor
+        // currentMonth offset: 0 = Anchor Month, 1 = Previous Month...
+        const targetDate = new Date(baseAnchor.getFullYear(), baseAnchor.getMonth() - currentMonth, 1);
+
+        const activeMonthStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1, 0, 0, 0, 0);
+        const activeMonthEnd = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0, 23, 59, 59, 999);
 
         wStart = activeMonthStart;
         wEnd = activeMonthEnd;
 
       } else {
-        // Yearly: Show Jan-Dec for the selected year (based on currentYear offset)
-        // Default (offset 0) is the current year of the range (e.g., 2026)
-        const baseYear = end.getFullYear();
-        const targetYearVal = baseYear - currentYear;
+        // Yearly: Anchor to the end of the selected range.
+        const baseAnchor = new Date(end);
+        const targetYearVal = baseAnchor.getFullYear() - currentYear;
 
         wStart = new Date(targetYearVal, 0, 1, 0, 0, 0, 0);
         wEnd = new Date(targetYearVal, 11, 31, 23, 59, 59, 999);
@@ -344,75 +335,47 @@ export default function ReportsScreen() {
 
   // Compute summary stats from the current period data
   // Count = number of individual transactions, Max = highest transaction
+  // Compute summary stats from the current period data (Raw Transactions)
+  // Count = number of individual transactions, Max = highest transaction, Min = lowest transaction
   const incomeStats = useMemo(() => {
-    let arr = periodData.income || [];
+    if (!windowRange) return { sum: 0, avg: 0, count: 0, max: 0, min: 0 };
 
-    // For monthly period, focus stats on the current month only
-    if (period === 'monthly' && windowRange) {
-      const monthIndex = windowRange.start.getMonth();
-      if (monthIndex >= 0 && monthIndex < arr.length) {
-        arr = [arr[monthIndex]];
-      } else {
-        arr = [];
-      }
-    }
+    // Get raw transactions for this period
+    const rawTxs = filteredTransactions.filter(t => {
+      if (t.type !== 'income') return false;
+      const dt = new Date(t.date);
+      return dt >= windowRange.start && dt <= windowRange.end;
+    });
 
-    // Filter out non-finite values, zeros, and nulls
-    const positiveValues = arr.filter((n) => Number.isFinite(n) && n > 0);
+    const values = rawTxs.map(t => t.amount).filter(n => Number.isFinite(n) && n > 0);
+    const count = values.length;
+    const sum = values.reduce((a, b) => a + b, 0);
+    const avg = count ? sum / count : 0;
+    const max = count ? Math.max(...values) : 0;
+    const min = count ? Math.min(...values) : 0;
 
-    // For sum and avg, include all valid values (including zeros)
-    const validForSum = arr.filter((n) => Number.isFinite(n));
-    const sum = validForSum.reduce((a, b) => a + b, 0);
-    const avg = validForSum.length ? sum / validForSum.length : 0;
-
-    // Count individual income transactions within active window
-    const count = windowRange
-      ? filteredTransactions.filter(t => {
-        if (t.type !== 'income') return false;
-        const dt = new Date(t.date);
-        return dt >= windowRange.start && dt <= windowRange.end;
-      }).length
-      : 0;
-
-    // Max only considers actual positive transactions
-    const max = positiveValues.length ? Math.max(...positiveValues) : 0;
-    return { sum, avg, count, max };
-  }, [period, periodData.income, filteredTransactions, windowRange]);
+    return { sum, avg, count, max, min };
+  }, [filteredTransactions, windowRange]);
 
   const expenseStats = useMemo(() => {
-    let arr = periodData.expense || [];
+    if (!windowRange) return { sum: 0, avg: 0, count: 0, max: 0, min: 0 };
 
-    // For monthly period, focus stats on the current month only
-    if (period === 'monthly' && windowRange) {
-      const monthIndex = windowRange.start.getMonth();
-      if (monthIndex >= 0 && monthIndex < arr.length) {
-        arr = [arr[monthIndex]];
-      } else {
-        arr = [];
-      }
-    }
+    // Get raw transactions for this period
+    const rawTxs = filteredTransactions.filter(t => {
+      if (t.type !== 'expense') return false;
+      const dt = new Date(t.date);
+      return dt >= windowRange.start && dt <= windowRange.end;
+    });
 
-    // Filter out non-finite values, zeros, and nulls
-    const positiveValues = arr.filter((n) => Number.isFinite(n) && n > 0);
+    const values = rawTxs.map(t => Math.abs(t.amount)).filter(n => Number.isFinite(n) && n > 0);
+    const count = values.length;
+    const sum = values.reduce((a, b) => a + b, 0);
+    const avg = count ? sum / count : 0;
+    const max = count ? Math.max(...values) : 0;
+    const min = count ? Math.min(...values) : 0;
 
-    // For sum and avg, include all valid values (including zeros)
-    const validForSum = arr.filter((n) => Number.isFinite(n));
-    const sum = validForSum.reduce((a, b) => a + b, 0);
-    const avg = validForSum.length ? sum / validForSum.length : 0;
-
-    // Count individual expense transactions within active window
-    const count = windowRange
-      ? filteredTransactions.filter(t => {
-        if (t.type !== 'expense') return false;
-        const dt = new Date(t.date);
-        return dt >= windowRange.start && dt <= windowRange.end;
-      }).length
-      : 0;
-
-    // Max only considers actual positive transactions
-    const max = positiveValues.length ? Math.max(...positiveValues) : 0;
-    return { sum, avg, count, max };
-  }, [period, periodData.expense, filteredTransactions, windowRange]);
+    return { sum, avg, count, max, min };
+  }, [filteredTransactions, windowRange]);
 
   // Get current stats based on selected view
   const currentStats = useMemo(() => {
@@ -800,6 +763,11 @@ export default function ReportsScreen() {
                         const incomeHeight = maxValue > 0 ? (income / maxValue) * 120 : 0;
                         const expenseHeight = maxValue > 0 ? (expense / maxValue) * 120 : 0;
 
+                        const shouldShowLabel = () => {
+                          // Show all labels for all periods
+                          return true;
+                        };
+
                         return (
                           <TouchableOpacity
                             key={`${label}-${index}`}
@@ -830,8 +798,8 @@ export default function ReportsScreen() {
                                   entering={FadeInUp.delay(index * 30 + 150).springify()}
                                 />
                               </View>
-                              <Text style={[styles.barLabel, { color: colors.textSecondary }]} numberOfLines={1}>
-                                {label}
+                              <Text style={[styles.barLabel, { color: colors.textSecondary }]}>
+                                {shouldShowLabel() ? label : ''}
                               </Text>
                             </Animated.View>
                           </TouchableOpacity>

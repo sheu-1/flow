@@ -75,7 +75,8 @@ function parseSender(body: string): string | null {
   return null;
 }
 
-export function parseTransactionFromSms(body: string, dateStr?: string): ParsedTransaction | null {
+export function parseTransactionFromSms(body: string, dateStr?: string): ParsedTransaction[] | null {
+  console.log('[SMS Parser] Parsing SMS:', body.substring(0, 100).replace(/\n/g, ' ') + '...');
   // Filter 1: Ignore failed transactions (insufficient funds, failed, etc.)
   if (/failed|insufficient funds|transaction failed|not successful|could not be completed/i.test(body)) {
     return null;
@@ -91,38 +92,33 @@ export function parseTransactionFromSms(body: string, dateStr?: string): ParsedT
     return null;
   }
 
-  // Filter 4: Ignore any M-Shwari related messages (never log these)
+  // Filter 4: Ignore M-Shwari messages
   if (/m\s*shwari|mshwari/i.test(body)) {
     return null;
   }
 
-  // Filter 5: Ignore SMS cost/promotion-only messages (no real money transfer)
+  // Filter 5: Ignore SMS cost/promotion-only messages
   if (/sms\s+costs\s*Ksh|sms\s+costs\s*KSh|sms\s+costs\s*KES|cost\s+of\s+sms/i.test(body)) {
     return null;
   }
 
-  // Filter 6: Ignore mini-statement style messages that bundle multiple transactions
-  // Example pattern: multiple square-bracketed segments with semicolon-delimited fields and a final
-  // "Transaction cost" summary line.
+  // Filter 6: Ignore mini-statement style messages
   const bracketSegments = body.match(/\[[^\]]*\]/g);
   if (bracketSegments && bracketSegments.length >= 2 && /Transaction cost,?\s*Ksh/i.test(body)) {
     return null;
   }
 
-  // Filter 7: Ignore promotional, marketing, and reward messages
-  // These often contain amounts but are not real financial transactions
+  // Filter 7: Ignore promotional/reward messages
   if (/\b(offer|offers|reward|rewards|promo|promotion|win|bonus|free|gift|deal|sale)\b/i.test(body)) {
     return null;
   }
 
-  // Filter 8: Ignore service expiry/renewal reminders
-  // These mention amounts but are notifications, not transactions
+  // Filter 8: Ignore expiry/renewal reminders
   if (/\b(expire|expires|expiring|expiry|renew|renewal|plan will expire|days to go|remind|reminder)\b/i.test(body)) {
     return null;
   }
 
   // Filter 9: Ignore marketing calls-to-action
-  // Messages asking users to dial, reply, click, or buy are usually promotional
   if (/\b(dial|reply|click|buy|get|call|visit|download|install)\b.*\b(now|today|here|link|app)\b/i.test(body)) {
     const looksLikeTransaction =
       AMOUNT_REGEX.test(body) &&
@@ -137,32 +133,11 @@ export function parseTransactionFromSms(body: string, dateStr?: string): ParsedT
     return null;
   }
 
-  // Filter 4: Handle recharge/airtime purchases as debit (money out)
-  if (/recharge.*successful|airtime.*successful|recharge of/i.test(body)) {
-    const amount = parseAmount(body);
-    if (amount && amount > 0) {
-      return {
-        amount,
-        type: 'debit',
-        sender: 'Airtime Recharge',
-        reference: parseReference(body),
-        message: body,
-        dateISO: dateStr ? new Date(dateStr).toISOString() : undefined,
-      };
-    }
-  }
+  const results: ParsedTransaction[] = [];
+  const dateISO = dateStr ? new Date(dateStr).toISOString() : undefined;
 
-  // Filter 5: Handle Fuliza - strictly only log the Access Fee, ignore outstanding/principal amounts
+  // 1. Check for Fuliza Access Fee
   if (/fuliza/i.test(body)) {
-    // Enhanced patterns to match various Fuliza access fee formats:
-    // - "Access Fee charged Ksh 0.10"
-    // - "Access Fee of KES 0.10"
-    // - "Access Fee is Ksh. 0.10"
-    // - "Access fee Ksh0.10"
-    // - "Fuliza M-PESA charge of Ksh X"
-    // - "charged an access fee of Ksh X"
-
-    // Try multiple patterns for better coverage
     const patterns = [
       /access\s*fee(?:\s*charged)?(?:\s*(?:is|of))?\s*(?:Ksh\.?|KES|KSH)\s*([0-9,]+(?:\.[0-9]{1,2})?)/i,
       /(?:charged|charge)\s*(?:an\s*)?access\s*fee\s*(?:of\s*)?(?:Ksh\.?|KES|KSH)\s*([0-9,]+(?:\.[0-9]{1,2})?)/i,
@@ -177,21 +152,47 @@ export function parseTransactionFromSms(body: string, dateStr?: string): ParsedT
         const fee = parseFloat(feeStr);
         if (Number.isFinite(fee) && fee > 0) {
           console.log(`[SMS Parser] Fuliza access fee detected: ${fee}`);
-          return {
+          results.push({
             amount: fee,
             type: 'debit',
             sender: 'Fuliza Fee',
             reference: parseReference(body),
             message: body,
-            dateISO: dateStr ? new Date(dateStr).toISOString() : undefined,
-          };
+            dateISO,
+          });
+          // User Confirmation: Fuliza SMS is separate from Main Transaction SMS.
+          // We ONLY want to log the Access Fee from this message.
+          // We return immediately so we don't accidentally parse the "Fuliza Amount" (principal) as a generic debit.
+          return results;
         }
       }
     }
 
-    // If it's a Fuliza message and we didn't find a valid Access Fee, skip creating any transaction
-    console.log('[SMS Parser] Fuliza message detected but no access fee found, skipping');
+    // If it's a Fuliza message and we didn't find a valid Access Fee, generic logic might pick it up?
+    // User said "from the fuliza we only log the access fee".
+    // So if we fail to find an Access Fee in a Fuliza message, we should probably ignore it to be safe 
+    // (rather than logging the principal as an expense).
+    console.log('[SMS Parser] Fuliza message detected but no access fee found, skipping to avoid duplicate principal logging');
     return null;
+  }
+
+  // 2. Main Transaction Parsing
+  // Check for airtime recharge
+  if (/recharge.*successful|airtime.*successful|recharge of/i.test(body)) {
+    console.log('[SMS Parser] Detected airtime message');
+    const amount = parseAmount(body);
+    if (amount && amount > 0) {
+      results.push({
+        amount,
+        type: 'debit',
+        sender: 'Airtime Recharge',
+        reference: parseReference(body),
+        message: body,
+        dateISO,
+      });
+      console.log('[SMS Parser] Parsed airtime recharge:', results);
+      return results.length > 0 ? results : null;
+    }
   }
 
   const amount = parseAmount(body);
@@ -199,90 +200,84 @@ export function parseTransactionFromSms(body: string, dateStr?: string): ParsedT
   const reference = parseReference(body);
   const sender = parseSender(body);
 
-  // Strict validation: A real transaction must have:
-  // 1. A valid amount
-  // 2. A clear transaction type (credit or debit)
-  // 3. Either a reference number OR a recognized sender (M-Pesa, bank, Airtel Money)
-  if (amount == null || amount <= 0) {
-    return null; // No valid amount = not a transaction
+  // Strict validation for Generic Transaction
+  if (amount != null && amount > 0 && type != null) {
+    // Check validation
+    const isFromKnownService =
+      /mpesa|m-pesa/i.test(body) ||
+      /airtel\s*money/i.test(body) ||
+      /\bbank\b/i.test(body) ||
+      (sender != null && (/mpesa|m-pesa/i.test(sender) || /bank/i.test(sender) || /airtel\s*money/i.test(sender)));
+
+    if (reference || isFromKnownService) {
+      // Check if this is the SAME amount/event as the Airtime one? (We already returned if airtime matched)
+
+      results.push({
+        amount,
+        type,
+        sender: sender ?? null,
+        reference: reference ?? null,
+        message: body,
+        dateISO,
+      });
+      console.log('[SMS Parser] Parsed generic transaction:', results);
+    } else {
+      console.log('[SMS Parser] Generic parsing skipped - validation failed:', { amount, type, reference, sender, isFromKnownService });
+    }
+  } else {
+    console.log('[SMS Parser] Generic parsing skipped - field extracting failed:', { amount, type });
   }
 
-  if (type == null) {
-    return null; // Cannot determine if money in or out = not a transaction
-  }
-
-  // For messages from known financial services, we allow missing reference as they may be valid.
-  // Many transactional messages don't include a "Ref" token, but can still be confirmed by keywords.
-  const isFromKnownService =
-    /mpesa|m-pesa/i.test(body) ||
-    /airtel\s*money/i.test(body) ||
-    /\bbank\b/i.test(body) ||
-    (sender != null && (/mpesa|m-pesa/i.test(sender) || /bank/i.test(sender) || /airtel\s*money/i.test(sender)));
-
-  // If not from a known service and no reference, it's likely promotional
-  if (!reference && !isFromKnownService) {
-    return null;
-  }
-
-  const dateISO = dateStr ? new Date(dateStr).toISOString() : undefined;
-  return {
-    amount,
-    type,
-    sender: sender ?? null,
-    reference: reference ?? null,
-    message: body,
-    dateISO,
-  };
+  return results.length > 0 ? results : null;
 }
 
 // Sample messages and expected outputs (unit-test style examples)
 export const SAMPLE_SMS_CASES: Array<{
   text: string;
-  expect: Partial<ParsedTransaction> | null;
+  expect: Partial<ParsedTransaction>[] | null;
 }> = [
     // User's provided sample: main transaction (airtime)
     {
       text: `TLQ0K25M9C confirmed.You bought Ksh30.00 of airtime on 26/12/25 at 10:15 AM.New M-PESA balance is Ksh0.00, Transaction cost, Ksh0.00.Amount you can transact within the day is 499,960.00. Start Investing today with Ziidii MMF & earn daily. Dial *334#.`,
-      expect: { amount: 30, type: 'debit' },
+      expect: [{ amount: 30, type: 'debit' }],
     },
-    // User's provided sample: Fuliza fee
     {
       text: `TLQ0K25M9C Confirmed. Fuliza M-Pesa amount is Ksh 30.00. Access Fee charged Ksh 0.30. Total Fuliza M-Pesa outstanding amount is Ksh222.51 due on 22/01/26. To check daily charges, Dial *234*0#OK Select Query Charges`,
-      expect: { amount: 0.3, type: 'debit', sender: 'Fuliza Fee' },
+      expect: [{ amount: 0.3, type: 'debit', sender: 'Fuliza Fee' }],
     },
     // User provided example
     {
       text: `TK4OK9BABX Confirmed. Fuliza M-PESA amount is Ksh 10.00. Access Fee charged Ksh 0.10. Total Fuliza M-PESA outstanding amount is Ksh 202.71 due on 27/11/25. To check daily charges, Dial *334#OK Select Fuliza M-PESA to Query Charges.`,
-      expect: { amount: 0.10, type: 'debit', sender: 'Fuliza Fee' },
+      expect: [{ amount: 0.10, type: 'debit', sender: 'Fuliza Fee' }],
     },
 
     {
       text: 'M-PESA: You have received KES 1,250.00 from John Doe Ref ABC123 on 12/09/2025',
-      expect: { amount: 1250, type: 'credit', sender: 'John Doe', reference: 'ABC123' },
+      expect: [{ amount: 1250, type: 'credit', sender: 'John Doe', reference: 'ABC123' }],
     },
     {
       text: 'Payment of KES 2,000 made to SUPERMARKET LTD Ref TRX-789',
-      expect: { amount: 2000, type: 'debit', sender: 'SUPERMARKET LTD', reference: 'TRX-789' },
+      expect: [{ amount: 2000, type: 'debit', sender: 'SUPERMARKET LTD', reference: 'TRX-789' }],
     },
     {
       text: 'Airtel Money: You have received USD 50.00 from Jane',
-      expect: { amount: 50, type: 'credit', sender: 'Jane' },
+      expect: [{ amount: 50, type: 'credit', sender: 'Jane' }],
     },
     {
       text: 'Your account was debited KES 3,450.25 Purchase at PHARMACY Ref NO123',
-      expect: { amount: 3450.25, type: 'debit', sender: 'PHARMACY', reference: 'NO123' },
+      expect: [{ amount: 3450.25, type: 'debit', sender: 'PHARMACY', reference: 'NO123' }],
     },
     {
       text: 'You spent KES 500 at Cafe Latte',
-      expect: { amount: 500, type: 'debit', sender: 'Cafe Latte' },
+      expect: [{ amount: 500, type: 'debit', sender: 'Cafe Latte' }],
     },
     {
       text: 'Deposit: KES 10,000 credited to your account Ref 9XY7',
-      expect: { amount: 10000, type: 'credit', reference: '9XY7' },
+      expect: [{ amount: 10000, type: 'credit', reference: '9XY7' }],
     },
     {
       text: 'USD 12.99 purchase at APPSTORE',
-      expect: { amount: 12.99, type: 'debit', sender: 'APPSTORE' },
+      expect: [{ amount: 12.99, type: 'debit', sender: 'APPSTORE' }],
     },
     {
       text: 'Balance inquiry. No transaction.',

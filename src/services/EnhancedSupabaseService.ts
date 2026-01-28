@@ -32,7 +32,7 @@ let lastCacheUpdate = 0;
  * Get or create appropriate category for SMS transaction
  */
 async function getOrCreateCategory(
-  userId: string, 
+  userId: string,
   parsed: ParsedTransaction
 ): Promise<string | null> {
   try {
@@ -48,7 +48,7 @@ async function getOrCreateCategory(
         .from('categories')
         .select('id, name, type')
         .eq('user_id', userId);
-      
+
       if (error) throw error;
       userCategories = data || [];
       categoryCache.set(userId, userCategories);
@@ -56,12 +56,12 @@ async function getOrCreateCategory(
     }
 
     const transactionType = parsed.type === 'credit' ? 'income' : 'expense';
-    
+
     // Smart category mapping based on sender and transaction patterns
     const categoryName = determineCategoryFromSms(parsed, transactionType);
-    
+
     // Find existing category
-    let category = userCategories.find(c => 
+    let category = userCategories.find(c =>
       c.name.toLowerCase() === categoryName.toLowerCase() && c.type === transactionType
     );
 
@@ -136,7 +136,7 @@ function determineCategoryFromSms(parsed: ParsedTransaction, type: 'income' | 'e
   if (message.includes('transport') || message.includes('uber') || message.includes('taxi')) return 'Transportation';
   if (message.includes('shop') || message.includes('store')) return 'Shopping';
   if (message.includes('medical') || message.includes('hospital')) return 'Healthcare';
-  
+
   return 'Other';
 }
 
@@ -153,7 +153,7 @@ function detectPaymentMethod(parsed: ParsedTransaction): string {
   if (sender.includes('bank') || message.includes('bank')) return 'bank_transfer';
   if (message.includes('card') || message.includes('visa') || message.includes('mastercard')) return 'card';
   if (message.includes('cash') || message.includes('withdraw')) return 'cash';
-  
+
   return 'mobile_money'; // Default for Kenya
 }
 
@@ -167,21 +167,27 @@ async function detectDuplicate(userId: string, parsed: ParsedTransaction) {
   const plus5 = new Date(date.getTime() + 5 * 60 * 1000).toISOString();
 
   // Check by reference number first (most reliable)
+  // Check by reference number first (most reliable)
   if (parsed.reference) {
     const { data, error } = await supabase
       .from('transactions')
-      .select('id')
+      .select('id, amount')
       .eq('user_id', userId)
       .or(
         `reference_number.eq.${parsed.reference},` +
         `metadata->>reference.eq.${parsed.reference}`
-      )
-      .limit(1);
-    if (!error && data && data.length > 0) return data[0];
+      );
 
-    // If we have a reference but no existing row, we intentionally do NOT fall back to
-    // amount/time matching. The reference is the single source of truth for de-duplication.
-    return null;
+    if (!error && data && data.length > 0) {
+      // If reference matches, check if amount is also the same.
+      // Fuliza fees often share the same Reference ID as the main transaction but have different amounts.
+      // If amounts differ, we treat it as a separate (related) transaction.
+      const exactMatch = data.find(t => Math.abs(t.amount - parsed.amount) < 0.01);
+      if (exactMatch) {
+        return exactMatch;
+      }
+      // If reference exists but amount is different, fall through to allow insertion (it's likely a fee).
+    }
   }
 
   // Fallback: check by amount and time window, and try to match on original message
@@ -236,7 +242,7 @@ export async function insertTransactionEnhanced(
 
     const categoryId = await getOrCreateCategory(userId, parsed);
     const paymentMethod = detectPaymentMethod(parsed);
-    
+
     const payload: EnhancedSupabaseInsertPayload = {
       user_id: userId,
       type: parsed.type === 'credit' ? 'income' : 'expense',
@@ -261,10 +267,10 @@ export async function insertTransactionEnhanced(
 
     const { error } = await supabase.from('transactions').insert([payload]);
     if (error) throw error;
-    
-    return { 
-      success: true, 
-      categoryCreated: !!categoryId 
+
+    return {
+      success: true,
+      categoryCreated: !!categoryId
     };
   } catch (error) {
     return { success: false, error };
@@ -276,7 +282,7 @@ export async function insertTransactionEnhanced(
  */
 function generateDescription(parsed: ParsedTransaction): string {
   const { sender, message, amount, type } = parsed;
-  
+
   if (type === 'credit') {
     return `Received ${amount} from ${sender || 'Unknown'}`;
   } else {
@@ -292,7 +298,7 @@ function generateDescription(parsed: ParsedTransaction): string {
     }
     if (msg.includes('airtime')) return 'Airtime purchase';
     if (msg.includes('withdraw')) return 'Cash withdrawal';
-    
+
     return `Payment via ${sender || 'SMS'}`;
   }
 }
@@ -303,14 +309,14 @@ function generateDescription(parsed: ParsedTransaction): string {
 function generateTags(parsed: ParsedTransaction): string[] {
   const tags: string[] = ['sms-import'];
   const message = parsed.message?.toLowerCase() || '';
-  
+
   if (message.includes('mpesa')) tags.push('mpesa');
   if (message.includes('paybill')) tags.push('paybill');
   if (message.includes('till')) tags.push('till-number');
   if (message.includes('airtime')) tags.push('airtime');
   if (message.includes('withdraw')) tags.push('withdrawal');
   if (parsed.reference) tags.push('has-reference');
-  
+
   return tags;
 }
 
@@ -321,10 +327,10 @@ export async function clearUserTransactions(userId: string): Promise<{ success: 
   try {
     const { error } = await supabase.from('transactions').delete().eq('user_id', userId);
     if (error) throw error;
-    
+
     // Clear category cache for user
     categoryCache.delete(userId);
-    
+
     return { success: true };
   } catch (error) {
     return { success: false, error };

@@ -43,29 +43,37 @@ async function getTransactionSummary(userId: string, startDate: Date, endDate: D
  * Schedule daily summary notification at 9:00 AM
  * Consolidates Into/Out/Net into a SINGLE notification.
  */
-export async function scheduleDailySummaryNotification(userId: string) {
+export async function scheduleDailySummaryNotification(userId: string): Promise<void> {
   try {
+    console.log('[DailySummaryNotifications] Scheduling daily summary for user', userId);
+
+    // Cancel any existing notification for this user
+    await cancelDailySummaryNotification();
+
+    // Create notification channel for Android
     await createNotificationChannel();
 
-    // Check if already scheduled for this user to prevent duplicates
-    if (scheduledUsers.has(userId)) {
-      console.log('Daily summary notification already scheduled for user:', userId);
-      return;
-    }
+    // Schedule daily notification at 9 AM using daily trigger
+    const notificationId = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Cash Flow Summary',
+        body: 'Tap to view your daily financial summary',
+        data: { type: 'daily_summary', userId },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DAILY,
+        hour: 9,
+        minute: 0,
+      },
+    });
 
-    // We don't schedule a placeholder notification anymore
-    // We rely on the background task to send the actual notification at 9 AM
-
+    console.log('[DailySummaryNotifications] Scheduled notification ID:', notificationId);
     scheduledUsers.add(userId);
-    console.log('Daily summary notification setup for user:', userId);
   } catch (error) {
-    console.error('Error setting up daily summary:', error);
+    console.error('[DailySummaryNotifications] Error scheduling notification:', error);
   }
 }
 
-/**
- * Triggered by Background Fetch to send actual data
- */
 /**
  * Triggered by Background Fetch to send actual data
  */
@@ -126,7 +134,9 @@ export async function sendDailySummaryNotification(userId: string) {
 
 export async function cancelDailySummaryNotification(userId?: string) {
   try {
-    // Since we're not scheduling notifications anymore, we just clear the tracking
+    // Cancel all scheduled notifications
+    await Notifications.cancelAllScheduledNotificationsAsync();
+
     // Remove user from scheduled set if provided
     if (userId) {
       scheduledUsers.delete(userId);

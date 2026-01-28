@@ -61,6 +61,7 @@ TaskManager.defineTask(TASK_NAME, async () => {
     } catch (e) {
       console.warn('[Background] Daily summary check failed', e);
     }
+    return BackgroundFetch.BackgroundFetchResult.NewData;
   } catch (e) {
     return BackgroundFetch.BackgroundFetchResult.Failed;
   }
@@ -74,7 +75,7 @@ export async function registerBackgroundSmsTask(): Promise<boolean> {
     if (isRegistered) return true;
 
     await BackgroundFetch.registerTaskAsync(TASK_NAME, {
-      minimumInterval: 15 * 60,
+      minimumInterval: 10 * 60, // 10 minutes
       stopOnTerminate: false,
       startOnBoot: true,
     });
