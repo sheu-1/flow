@@ -38,6 +38,8 @@ import AuthScreen from './src/screens/AuthScreen';
 import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
 // import { SplashScreen as CustomSplashScreen } from './src/components/SplashScreen'; // Commented out
 // Debug panel removed from production UI
+import { SubscriptionProvider } from './src/contexts/SubscriptionContext';
+import { BannerAd } from './src/components/BannerAd';
 
 // Keep the native splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync().catch(() => {
@@ -89,69 +91,72 @@ function makeNavTheme(pal: typeof DarkColors) {
 
 function MainTabNavigator() {
   const { colors } = useTheme();
-  
+
   return (
-    <Tab.Navigator
-      initialRouteName="Dashboard"
-      screenOptions={({ route }: { route: RouteProp<RootTabParamList, keyof RootTabParamList> }) => ({
-        tabBarIcon: (
-          { focused, color, size }: { focused: boolean; color: string; size: number }
-        ) => {
-          let iconName: keyof typeof Ionicons.glyphMap;
+    <>
+      <Tab.Navigator
+        initialRouteName="Dashboard"
+        screenOptions={({ route }: { route: RouteProp<RootTabParamList, keyof RootTabParamList> }) => ({
+          tabBarIcon: (
+            { focused, color, size }: { focused: boolean; color: string; size: number }
+          ) => {
+            let iconName: keyof typeof Ionicons.glyphMap;
 
-          if (route.name === 'Dashboard') {
-            iconName = 'home-outline';
-          } else if (route.name === 'Transactions') {
-            iconName = 'list-outline';
-          } else if (route.name === 'Reports') {
-            iconName = 'bar-chart-outline';
-          } else if (route.name === 'AI') {
-            iconName = 'chatbubbles-outline';
-          } else {
-            iconName = 'home-outline';
-          }
+            if (route.name === 'Dashboard') {
+              iconName = 'home-outline';
+            } else if (route.name === 'Transactions') {
+              iconName = 'list-outline';
+            } else if (route.name === 'Reports') {
+              iconName = 'bar-chart-outline';
+            } else if (route.name === 'AI') {
+              iconName = 'chatbubbles-outline';
+            } else {
+              iconName = 'home-outline';
+            }
 
-          return <Ionicons name={iconName} size={size} color={color} />;
-        },
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.inactive,
-        tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopColor: colors.border,
-        },
-        headerStyle: {
-          backgroundColor: colors.surface,
-        },
-        headerTintColor: colors.text,
-        headerTitleStyle: {
-          fontWeight: 'bold',
-        },
-      })}
-    >
-      <Tab.Screen 
-        name="Dashboard" 
-        component={DashboardScreen}
-        options={{ headerShown: false }}
-      />
-      <Tab.Screen 
-        name="Transactions" 
-        component={TransactionsScreen}
-        options={{ headerShown: false }}
-      />
-      <Tab.Screen 
-        name="Reports" 
-        component={ReportsScreen}
-        options={{ headerShown: false }}
-      />
-      <Tab.Screen 
-        name="AI" 
-        component={AIAccountantScreen}
-        options={{ 
-          headerShown: false,
-          tabBarLabel: 'AI',
-        }}
-      />
-    </Tab.Navigator>
+            return <Ionicons name={iconName} size={size} color={color} />;
+          },
+          tabBarActiveTintColor: colors.primary,
+          tabBarInactiveTintColor: colors.inactive,
+          tabBarStyle: {
+            backgroundColor: colors.surface,
+            borderTopColor: colors.border,
+          },
+          headerStyle: {
+            backgroundColor: colors.surface,
+          },
+          headerTintColor: colors.text,
+          headerTitleStyle: {
+            fontWeight: 'bold',
+          },
+        })}
+      >
+        <Tab.Screen
+          name="Dashboard"
+          component={DashboardScreen}
+          options={{ headerShown: false }}
+        />
+        <Tab.Screen
+          name="Transactions"
+          component={TransactionsScreen}
+          options={{ headerShown: false }}
+        />
+        <Tab.Screen
+          name="Reports"
+          component={ReportsScreen}
+          options={{ headerShown: false }}
+        />
+        <Tab.Screen
+          name="AI"
+          component={AIAccountantScreen}
+          options={{
+            headerShown: false,
+            tabBarLabel: 'AI',
+          }}
+        />
+      </Tab.Navigator>
+      <BannerAd />
+    </>
   );
 }
 
@@ -221,7 +226,7 @@ function AppContainer() {
   // Hide the native splash when custom splash is ready
   useEffect(() => {
     if (!loading) {
-      SplashScreen.hideAsync().catch(() => {});
+      SplashScreen.hideAsync().catch(() => { });
     }
   }, [loading]);
 
@@ -233,7 +238,7 @@ function AppContainer() {
   if (showSplash) {
     return <CustomSplashScreen onFinish={handleSplashFinish} />;
   }
-  
+
   // If still loading and we don't yet know the user, show a simple loading indicator
   if (loading && !user) {
     return (
@@ -277,16 +282,16 @@ function AppContainer() {
         initialRouteName={getInitialRoute()}
       >
         <RootStack.Screen name="MainTabs" component={MainTabNavigator} />
-        <RootStack.Screen 
-          name="Profile" 
+        <RootStack.Screen
+          name="Profile"
           component={ProfileScreen}
           options={{
             presentation: 'card',
             animation: 'slide_from_right',
           }}
         />
-        <RootStack.Screen 
-          name="Welcome" 
+        <RootStack.Screen
+          name="Welcome"
           component={WelcomeScreen}
           options={{
             presentation: 'card',
@@ -294,24 +299,24 @@ function AppContainer() {
             gestureEnabled: false,
           }}
         />
-        <RootStack.Screen 
-          name="Subscription" 
+        <RootStack.Screen
+          name="Subscription"
           component={SubscriptionScreen}
           options={{
             presentation: 'card',
             animation: 'slide_from_right',
           }}
         />
-        <RootStack.Screen 
-          name="PaymentMethod" 
+        <RootStack.Screen
+          name="PaymentMethod"
           component={PaymentMethodScreen}
           options={{
             presentation: 'card',
             animation: 'slide_from_right',
           }}
         />
-        <RootStack.Screen 
-          name="PaymentWebView" 
+        <RootStack.Screen
+          name="PaymentWebView"
           component={PaymentWebViewScreen}
           options={{
             presentation: 'modal',
@@ -322,6 +327,12 @@ function AppContainer() {
     </NavigationContainer>
   );
 }
+
+const AppInner: React.FC = () => {
+  return (
+    <AppContainer />
+  );
+};
 
 export default function App() {
   return (
@@ -334,9 +345,11 @@ export default function App() {
       <CurrencyProvider>
         <ThemeProvider>
           <AuthProvider>
-            <DateFilterProvider>
-              <AppContainer />
-            </DateFilterProvider>
+            <SubscriptionProvider>
+              <DateFilterProvider>
+                <AppContainer />
+              </DateFilterProvider>
+            </SubscriptionProvider>
           </AuthProvider>
         </ThemeProvider>
       </CurrencyProvider>

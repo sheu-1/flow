@@ -1,14 +1,31 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform, Modal, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { spacing, fontSize, borderRadius } from '../theme/colors';
 import { useThemeColors } from '../theme/ThemeProvider';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../services/SupabaseClient';
-import { getSubscriptionStatus } from '../services/SubscriptionManager';
+import { getSubscriptionStatus, grantRewardedAccess } from '../services/SubscriptionManager';
 import { initializePaystackPayment } from '../services/PaystackService';
+import { useSubscription } from '../contexts/SubscriptionContext';
+import { AdMobConfig } from '../services/AdMobService';
+
+// Dynamically load AdMob for native only
+let RewardedAd: any = null;
+let RewardedAdEventType: any = null;
+
+if (Platform.OS !== 'web') {
+  try {
+    const mobileAds = require('react-native-google-mobile-ads');
+    RewardedAd = mobileAds.RewardedAd;
+    RewardedAdEventType = mobileAds.RewardedAdEventType;
+  } catch (e) {
+    // Safe to ignore on web or if module missing
+  }
+}
 
 type SubscriptionPlan = 'free' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 
@@ -23,20 +40,20 @@ interface PlanCardProps {
   colors: any;
 }
 
-const PlanCard: React.FC<PlanCardProps> = ({ 
-  title, 
-  price, 
-  period, 
-  features, 
-  isPopular, 
-  onSelect, 
+const PlanCard: React.FC<PlanCardProps> = ({
+  title,
+  price,
+  period,
+  features,
+  isPopular,
+  onSelect,
   selected,
-  colors 
+  colors
 }) => (
   <TouchableOpacity
     style={[
       styles.planCard,
-      { 
+      {
         backgroundColor: colors.surface,
         borderColor: selected ? colors.primary : colors.border,
         borderWidth: selected ? 2 : 1,
@@ -51,7 +68,7 @@ const PlanCard: React.FC<PlanCardProps> = ({
         <Text style={styles.popularText}>MOST POPULAR</Text>
       </View>
     )}
-    
+
     <View style={styles.planHeader}>
       <Text style={[styles.planTitle, { color: colors.text }]}>{title}</Text>
       <View style={styles.priceContainer}>
@@ -63,10 +80,10 @@ const PlanCard: React.FC<PlanCardProps> = ({
     <View style={styles.featuresContainer}>
       {features.map((feature, index) => (
         <View key={index} style={styles.featureRow}>
-          <Ionicons 
-            name="checkmark-circle" 
-            size={20} 
-            color={colors.success || colors.primary} 
+          <Ionicons
+            name="checkmark-circle"
+            size={20}
+            color={colors.success || colors.primary}
             style={styles.featureIcon}
           />
           <Text style={[styles.featureText, { color: colors.textSecondary }]}>{feature}</Text>
@@ -77,7 +94,7 @@ const PlanCard: React.FC<PlanCardProps> = ({
     <TouchableOpacity
       style={[
         styles.selectButton,
-        { 
+        {
           backgroundColor: selected ? colors.primary : 'transparent',
           borderColor: colors.primary,
           borderWidth: 1,
@@ -114,7 +131,7 @@ export default function SubscriptionScreen() {
           // Check if trial has been used
           const status = await getSubscriptionStatus(user.id);
           setTrialUsed(status.trialEnded || !status.isTrial);
-          
+
           // Don't allow free trial selection if already used
           if (status.trialEnded || !status.isTrial) {
             setSelectedPlan('daily'); // Default to daily plan
@@ -167,6 +184,110 @@ export default function SubscriptionScreen() {
         index: 0,
         routes: [{ name: 'MainTabs' as never }],
       });
+    }
+  };
+
+  const [adLoading, setAdLoading] = useState(false);
+  const { refreshSubscription } = useSubscription();
+  const [rewardedAd, setRewardedAd] = useState<any | null>(null);
+
+  useEffect(() => {
+    if (!RewardedAd) {
+      console.warn('RewardedAd is not initialized (native module missing or web).');
+      return;
+    }
+
+    // Initialize Rewarded Ad
+    let ad: any;
+    try {
+      ad = RewardedAd.createForAdRequest(AdMobConfig.rewardedId, {
+        requestNonPersonalizedAdsOnly: true,
+      });
+    } catch (e) {
+      console.warn('Failed to create RewardedAd:', e);
+      return;
+    }
+
+    const unsubscribeLoaded = ad.addAdEventListener(RewardedAdEventType.LOADED, () => {
+      setRewardedAd(ad);
+      setAdLoading(false);
+    });
+
+    const unsubscribeEarned = ad.addAdEventListener(
+      RewardedAdEventType.EARNED_REWARD,
+      async () => {
+        try {
+          await grantRewardedAccess(user?.id || '');
+          await refreshSubscription();
+          Alert.alert(
+            'Premium Access Granted!',
+            'You have received 1 day of premium access. A small banner ad will be shown at the bottom of the screen.',
+            [{ text: 'Awesome!', onPress: () => isNewUser ? clearNewUserFlag() : handleClose() }]
+          );
+        } catch (error) {
+          Alert.alert('Error', 'Failed to grant reward.');
+        }
+      }
+    );
+
+    // Start loading immediately
+    try {
+      ad.load();
+    } catch (e) {
+      console.warn('Failed to load ad:', e);
+    }
+
+    // Correct approach using standard events
+    return () => {
+      unsubscribeLoaded();
+      unsubscribeEarned();
+    };
+  }, [user]);
+
+  const handleWatchAd = async () => {
+    if (!user) return;
+
+    if (!RewardedAd) {
+      Alert.alert('Not Available', 'Ad service is not available on this device configuration (try a production build).');
+      return;
+    }
+
+    if (rewardedAd) {
+      rewardedAd.show();
+    } else {
+      setAdLoading(true);
+      // Try to load again if not ready
+      let ad: any;
+      try {
+        ad = RewardedAd.createForAdRequest(AdMobConfig.rewardedId, {
+          requestNonPersonalizedAdsOnly: true,
+        });
+      } catch (e) {
+        setAdLoading(false);
+        Alert.alert('Error', 'Could not initialize ad service.');
+        return;
+      }
+
+      ad.addAdEventListener(RewardedAdEventType.LOADED, () => {
+        ad.show();
+        setAdLoading(false);
+      });
+
+      ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, async () => {
+        try {
+          await grantRewardedAccess(user?.id || '');
+          await refreshSubscription();
+          Alert.alert(
+            'Premium Access Granted!',
+            'You have received 1 day of premium access. A small banner ad will be shown at the bottom of the screen.',
+            [{ text: 'Awesome!', onPress: () => isNewUser ? clearNewUserFlag() : handleClose() }]
+          );
+        } catch (error) {
+          Alert.alert('Error', 'Failed to grant reward.');
+        }
+      });
+
+      ad.load();
     }
   };
 
@@ -316,7 +437,7 @@ export default function SubscriptionScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView 
+      <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
@@ -329,15 +450,74 @@ export default function SubscriptionScreen() {
           </View>
         )}
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          {isNewUser 
+          {isNewUser
             ? 'Start with a 2-week free trial, then upgrade anytime'
             : 'Choose the plan that works best for you'}
         </Text>
 
+        {/* Watch Ad Option */}
+        <TouchableOpacity
+          style={[
+            styles.planCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: '#F7B731', // Ad color
+              borderWidth: 2,
+            }
+          ]}
+          onPress={handleWatchAd}
+          disabled={adLoading}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.popularBadge, { backgroundColor: '#F7B731' }]}>
+            <Text style={styles.popularText}>WATCH AD</Text>
+          </View>
+
+          <View style={styles.planHeader}>
+            <Text style={[styles.planTitle, { color: colors.text }]}>1 Day Premium</Text>
+            <View style={styles.priceContainer}>
+              <Text style={[styles.planPrice, { color: colors.text }]}>Free</Text>
+              <Text style={[styles.planPeriod, { color: colors.textSecondary }]}>/ 24h</Text>
+            </View>
+          </View>
+
+          <View style={styles.featuresContainer}>
+            <View style={styles.featureRow}>
+              <Ionicons name="checkmark-circle" size={20} color={colors.success} style={styles.featureIcon} />
+              <Text style={[styles.featureText, { color: colors.textSecondary }]}>Full Premium Features</Text>
+            </View>
+            <View style={styles.featureRow}>
+              <Ionicons name="videocam" size={20} color={colors.primary} style={styles.featureIcon} />
+              <Text style={[styles.featureText, { color: colors.textSecondary }]}>Watch 1 video ad</Text>
+            </View>
+            <View style={styles.featureRow}>
+              <Ionicons name="information-circle-outline" size={20} color={colors.textSecondary} style={styles.featureIcon} />
+              <Text style={[styles.featureText, { color: colors.textSecondary }]}>Small banner ad shown in app</Text>
+            </View>
+          </View>
+
+          <View style={[
+            styles.selectButton,
+            {
+              backgroundColor: '#F7B731',
+              borderColor: '#F7B731',
+              borderWidth: 1,
+            }
+          ]}>
+            {adLoading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Text style={[styles.selectButtonText, { color: '#fff' }]}>
+                Watch Ad to Unlock
+              </Text>
+            )}
+          </View>
+        </TouchableOpacity>
+
         {plans.map((plan) => {
           // Disable free trial if already used
           const isDisabled = plan.id === 'free' && trialUsed && !isNewUser;
-          
+
           return (
             <View key={plan.id} style={{ opacity: isDisabled ? 0.5 : 1 }}>
               {isDisabled && (
@@ -362,7 +542,7 @@ export default function SubscriptionScreen() {
         <View style={styles.footer}>
           <TouchableOpacity
             style={[
-              styles.subscribeButton, 
+              styles.subscribeButton,
               { backgroundColor: colors.primary }
             ]}
             onPress={handleSubscribe}

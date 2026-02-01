@@ -133,13 +133,30 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConv
     if (!input.trim() || loading) return;
 
     // Check prompt limit
-    if (!promptStatus.isPremium && promptStatus.count >= 10) {
-      Alert.alert(
-        'Limit Reached',
-        'You have reached the limit of 10 free AI prompts. Upgrade to Premium for unlimited access!',
-        [{ text: 'OK' }]
-      );
-      return;
+    try {
+      const limitStatus = await AIChatService.checkDailyLimit(userId);
+      if (!limitStatus.allowed) {
+        Alert.alert(
+          'Daily Limit Reached',
+          'You have used your 3 free chats for today. Watch a short video ad to unlock unlimited chats for the rest of the day!',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Watch Ad to Unlock',
+              onPress: async () => {
+                // Import RewardedAdsService dynamically or assume it's available
+                // We need to import it at the top ideally. 
+                // For now, let's assume we can trigger the ad flow.
+                // Ideally we should have a handleUnlock function.
+                handleUnlock();
+              }
+            }
+          ]
+        );
+        return;
+      }
+    } catch (e) {
+      console.warn('Limit check failed', e);
     }
 
     const currentInput = input.trim();
@@ -182,8 +199,9 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConv
       }
 
       // Update prompt count
-      const newCount = await AIChatService.incrementPromptCount(userId);
-      setPromptStatus(prev => ({ ...prev, count: newCount }));
+      await AIChatService.incrementDailyCount(userId);
+      const newStatus = await AIChatService.getPromptStatus(userId);
+      setPromptStatus(newStatus);
     } catch (e: any) {
       console.error('AI Chat Error:', e);
       const rawMessage = String(e?.message || '');
@@ -208,6 +226,50 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConv
       setLoading(false);
     }
   }, [input, loading, messages, contextPromise, userId, currentConversationId, promptStatus, onConversationCreated]);
+
+  const handleUnlock = async () => {
+    // Logic to show ad
+    try {
+      // Dynamic import to avoid circular dependencies if any
+      // Web guard
+      if (Platform.OS === 'web') {
+        Alert.alert('Not Supported', 'Ad rewards are only available on the mobile app.');
+        return;
+      }
+
+      const { AdMobConfig } = require('../services/AdMobService');
+      const { RewardedAd, RewardedAdEventType } = require('react-native-google-mobile-ads');
+
+      setLoading(true);
+      const ad = RewardedAd.createForAdRequest(AdMobConfig.rewardedId, {
+        requestNonPersonalizedAdsOnly: true,
+      });
+
+      ad.addAdEventListener(RewardedAdEventType.LOADED, () => {
+        ad.show();
+        setLoading(false);
+      });
+
+      ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, async () => {
+        try {
+          await AIChatService.unlockDailyLimit(userId);
+          Alert.alert('Success', 'You have unlocked unlimited chats for today!');
+        } catch (e) {
+          console.error(e);
+        }
+      });
+
+      ad.addAdEventListener('onAdFailedToLoad', (error: any) => {
+        setLoading(false);
+        Alert.alert('Ad Failed', 'Could not load ad. Please try again.');
+      });
+
+      ad.load();
+    } catch (e) {
+      console.error(e);
+      setLoading(false);
+    }
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>

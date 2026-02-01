@@ -15,7 +15,7 @@ export type ParsedTransaction = {
 
 // Regex patterns
 export const AMOUNT_REGEX = /\b(?:Ksh|KES|KSh|KES\s|Kes\s|USD|US\$|UGX|GHS)\s?([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)/i;
-export const CREDIT_REGEX = /\b(received|credited|deposit|you have received|credited to your account|payment received|transfer from|bank transfer in|incoming bank transfer|account credited)\b/i;
+export const CREDIT_REGEX = /\b(received|credited|deposit|you have received|credited to your account|payment received|transfer from|bank transfer in|incoming bank transfer|account credited|give\s+.*?cash\s+to)\b/i;
 export const DEBIT_REGEX = /\b(sent to|paid|withdrawn|debited|purchase at|payment of|spent|transfer to|bank transfer|outgoing transfer|account debited)\b/i;
 export const REF_REGEX = /(?:ref\.?|refno|reference(?:\s*number)?|tranid|transaction id|trxid)[:\s\-]*([A-Za-z0-9\-\/]+)/i;
 export const SENDER_REGEX = /(?:from|by|to)\s+([A-Za-z0-9 &\-\.]+)/i;
@@ -136,43 +136,9 @@ export function parseTransactionFromSms(body: string, dateStr?: string): ParsedT
   const results: ParsedTransaction[] = [];
   const dateISO = dateStr ? new Date(dateStr).toISOString() : undefined;
 
-  // 1. Check for Fuliza Access Fee
+  // 1. Check for Fuliza - COMPLETELY IGNORE (Per user request)
   if (/fuliza/i.test(body)) {
-    const patterns = [
-      /access\s*fee(?:\s*charged)?(?:\s*(?:is|of))?\s*(?:Ksh\.?|KES|KSH)\s*([0-9,]+(?:\.[0-9]{1,2})?)/i,
-      /(?:charged|charge)\s*(?:an\s*)?access\s*fee\s*(?:of\s*)?(?:Ksh\.?|KES|KSH)\s*([0-9,]+(?:\.[0-9]{1,2})?)/i,
-      /fuliza\s*(?:m-?pesa)?\s*(?:charge|fee)\s*(?:of\s*)?(?:Ksh\.?|KES|KSH)\s*([0-9,]+(?:\.[0-9]{1,2})?)/i,
-      /(?:Ksh\.?|KES|KSH)\s*([0-9,]+(?:\.[0-9]{1,2})?)\s*(?:access\s*fee|fuliza\s*fee)/i,
-    ];
-
-    for (const pattern of patterns) {
-      const feeMatch = body.match(pattern);
-      if (feeMatch && feeMatch[1]) {
-        const feeStr = feeMatch[1].replace(/,/g, '');
-        const fee = parseFloat(feeStr);
-        if (Number.isFinite(fee) && fee > 0) {
-          console.log(`[SMS Parser] Fuliza access fee detected: ${fee}`);
-          results.push({
-            amount: fee,
-            type: 'debit',
-            sender: 'Fuliza Fee',
-            reference: parseReference(body),
-            message: body,
-            dateISO,
-          });
-          // User Confirmation: Fuliza SMS is separate from Main Transaction SMS.
-          // We ONLY want to log the Access Fee from this message.
-          // We return immediately so we don't accidentally parse the "Fuliza Amount" (principal) as a generic debit.
-          return results;
-        }
-      }
-    }
-
-    // If it's a Fuliza message and we didn't find a valid Access Fee, generic logic might pick it up?
-    // User said "from the fuliza we only log the access fee".
-    // So if we fail to find an Access Fee in a Fuliza message, we should probably ignore it to be safe 
-    // (rather than logging the principal as an expense).
-    console.log('[SMS Parser] Fuliza message detected but no access fee found, skipping to avoid duplicate principal logging');
+    console.log('[SMS Parser] Fuliza message detected and ignored (Access Fee & Principal disabled)');
     return null;
   }
 
@@ -207,7 +173,7 @@ export function parseTransactionFromSms(body: string, dateStr?: string): ParsedT
       /mpesa|m-pesa/i.test(body) ||
       /airtel\s*money/i.test(body) ||
       /\bbank\b/i.test(body) ||
-      (sender != null && (/mpesa|m-pesa/i.test(sender) || /bank/i.test(sender) || /airtel\s*money/i.test(sender)));
+      (sender != null && (/mpesa|m-pesa/i.test(sender) || /bank/i.test(sender) || /airtel\s*money/i.test(sender) || /equity/i.test(sender) || /disbursement/i.test(sender)));
 
     if (reference || isFromKnownService) {
       // Check if this is the SAME amount/event as the Airtime one? (We already returned if airtime matched)
@@ -284,3 +250,15 @@ export const SAMPLE_SMS_CASES: Array<{
       expect: null,
     },
   ];
+
+// New test cases from user feedback
+export const NEW_USER_CASES = [
+  {
+    text: `63I8YSCXS8W. You have received Ksh 2,000 from Equity Disbursement on 29/01/26 06:51 AM. Bal: Ksh 2016.0.`,
+    expect: [{ amount: 2000, type: 'credit', sender: 'Equity Disbursement', reference: '63I8YSCXS8W' }]
+  },
+  {
+    text: `UASOK55S49 Confirmed. On 28/1/26 at 12:17 PM Give Ksh500.00 cash to Equity Bank Donholm New M-PESA balance is Ksh958.05. You can now access M-PESA via *334#`,
+    expect: [{ amount: 500, type: 'credit', sender: 'Equity Bank Donholm', reference: 'UASOK55S49' }]
+  }
+];

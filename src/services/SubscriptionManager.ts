@@ -41,13 +41,13 @@ async function setCachedSubscription(userId: string, plan: string, expiresAt: Da
       `${SUBSCRIPTION_CACHE_KEY}:${userId}`,
       JSON.stringify({ plan, expiresAt: expiresAt ? expiresAt.toISOString() : null })
     );
-  } catch {}
+  } catch { }
 }
 
 async function clearCachedSubscription(userId: string): Promise<void> {
   try {
     await AsyncStorage.removeItem(`${SUBSCRIPTION_CACHE_KEY}:${userId}`);
-  } catch {}
+  } catch { }
 }
 
 async function getHasSubscribed(userId: string): Promise<boolean> {
@@ -62,7 +62,7 @@ async function getHasSubscribed(userId: string): Promise<boolean> {
 export async function markUserHasSubscribed(userId: string): Promise<void> {
   try {
     await AsyncStorage.setItem(`${HAS_SUBSCRIBED_KEY}:${userId}`, '1');
-  } catch {}
+  } catch { }
 }
 
 export async function cacheActiveSubscription(userId: string, plan: string, expiresAt: Date | null): Promise<void> {
@@ -70,12 +70,52 @@ export async function cacheActiveSubscription(userId: string, plan: string, expi
   await markUserHasSubscribed(userId);
 }
 
+// Daily rewarded access via ads
+const REWARDED_AD_KEY = 'rewarded_ad_expiry';
+const REWARDED_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+export interface SubscriptionStatus {
+  isActive: boolean;
+  isTrial: boolean;
+  trialEnded: boolean;
+  daysRemaining: number;
+  plan: string;
+  expiresAt: Date | null;
+  isRewarded?: boolean; // New field for rewarded ads
+}
+
+/**
+ * Grant rewarded access for 24 hours
+ */
+export async function grantRewardedAccess(userId: string): Promise<void> {
+  const expiresAt = new Date(Date.now() + REWARDED_DURATION_MS);
+  await AsyncStorage.setItem(`${REWARDED_AD_KEY}_${userId}`, expiresAt.toISOString());
+}
+
+/**
+ * Check if user has active rewarded access
+ */
+async function getRewardedStatus(userId: string): Promise<{ active: boolean; expiresAt: Date | null }> {
+  try {
+    const expiryStr = await AsyncStorage.getItem(`${REWARDED_AD_KEY}_${userId}`);
+    if (!expiryStr) return { active: false, expiresAt: null };
+
+    const expiresAt = new Date(expiryStr);
+    if (expiresAt > new Date()) {
+      return { active: true, expiresAt };
+    }
+    return { active: false, expiresAt: null }; // Expired
+  } catch {
+    return { active: false, expiresAt: null };
+  }
+}
+
 /**
  * Get user's subscription status
  */
 export async function getSubscriptionStatus(userId: string): Promise<SubscriptionStatus> {
   try {
-    // Check for active paid subscription in database
+    // 1. Check for active paid subscription in database
     const { data: subscription, error } = await supabase
       .from('subscriptions')
       .select('*')
@@ -100,22 +140,21 @@ export async function getSubscriptionStatus(userId: string): Promise<Subscriptio
           daysRemaining: expiresAt ? Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : 999,
           plan: subscription.plan,
           expiresAt,
+          isRewarded: false,
         };
       }
 
       // If the DB still says "active" but the expiry has passed, mark it expired (best-effort).
-      // This keeps the subscriptions table accurate even without a server-side cron.
       try {
         await clearCachedSubscription(userId);
         await supabase
           .from('subscriptions')
           .update({ status: 'expired', updated_at: new Date().toISOString() })
           .eq('id', subscription.id);
-      } catch {}
+      } catch { }
     }
 
-    // Fallback: if DB read fails or returns nothing, honor locally cached subscription until it expires.
-    // This prevents repeatedly prompting a user who has already paid when the device is offline or RLS blocks reads.
+    // 2. Fallback: Local Cache (Paid)
     const cached = await getCachedSubscription(userId);
     if (cached) {
       const expiresAt = cached.expiresAt;
@@ -128,24 +167,53 @@ export async function getSubscriptionStatus(userId: string): Promise<Subscriptio
           daysRemaining: expiresAt ? Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : 999,
           plan: cached.plan,
           expiresAt,
+          isRewarded: false,
         };
       }
     }
 
-    // Check free trial status
+    // 3. Check Free Trial Status
     const trialStatus = await getTrialStatus(userId);
+    if (!trialStatus.ended) {
+      return {
+        isActive: true,
+        isTrial: true,
+        trialEnded: false,
+        daysRemaining: trialStatus.daysRemaining,
+        plan: 'free_trial',
+        expiresAt: null,
+        isRewarded: false,
+      };
+    }
 
+    // 4. Check Rewarded Ad Status (NEW)
+    const rewardedStatus = await getRewardedStatus(userId);
+    if (rewardedStatus.active) {
+      return {
+        isActive: true, // Grants access to features
+        isTrial: false,
+        trialEnded: true, // Trial is technically over
+        daysRemaining: 1,
+        plan: 'rewarded',
+        expiresAt: rewardedStatus.expiresAt,
+        isRewarded: true, // Specific flag for UI to show banner
+      };
+    }
+
+    // 5. Expired / Free
     return {
-      isActive: !trialStatus.ended,
+      isActive: false, // No access to premium features (unless we want 'free' to have some?)
       isTrial: true,
-      trialEnded: trialStatus.ended,
-      daysRemaining: trialStatus.daysRemaining,
-      plan: 'free_trial',
+      trialEnded: true, // Trial ended
+      daysRemaining: 0,
+      plan: 'free',
       expiresAt: null,
+      isRewarded: false,
     };
+
   } catch (error) {
     console.error('Error getting subscription status:', error);
-    // Default to trial active in case of error
+    // Default to trial active in case of error (safety net)
     return {
       isActive: true,
       isTrial: true,
@@ -153,6 +221,7 @@ export async function getSubscriptionStatus(userId: string): Promise<Subscriptio
       daysRemaining: TRIAL_DURATION_DAYS,
       plan: 'free',
       expiresAt: null,
+      isRewarded: false,
     };
   }
 }
@@ -164,9 +233,9 @@ async function getTrialStatus(userId: string): Promise<{ started: Date; ended: b
   try {
     // Get trial start date from AsyncStorage
     const trialStartStr = await AsyncStorage.getItem(`${TRIAL_START_KEY}_${userId}`);
-    
+
     let trialStart: Date;
-    
+
     if (trialStartStr) {
       trialStart = new Date(trialStartStr);
     } else {
@@ -233,7 +302,7 @@ export function getTrialStatusDescription(status: SubscriptionStatus): string {
   if (!status.isTrial) {
     return 'Subscription active';
   }
-  
+
   if (status.trialEnded) {
     return 'Free trial ended';
   } else {
@@ -241,5 +310,3 @@ export function getTrialStatusDescription(status: SubscriptionStatus): string {
     return `${daysRemaining} days left in your free trial`;
   }
 }
-
-// Daily rewarded access via ads has been removed.
