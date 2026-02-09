@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Animated, Platform } from 'react-native';
 import { useThemeColors } from '../theme/ThemeProvider';
-import { useSubscription } from '../contexts/SubscriptionContext';
 import { AdMobConfig } from '../services/AdMobService';
+import { useNavigationState } from '@react-navigation/native';
 
 // Dynamically load AdMob for native only
 let AdMobBanner: any = null;
@@ -23,32 +23,24 @@ export const BannerAd: React.FC = () => {
     if (Platform.OS === 'web' || !AdMobBanner) return null;
 
     const colors = useThemeColors();
-    const { status } = useSubscription();
-    const [visible, setVisible] = useState(false);
-    const slideAnim = React.useRef(new Animated.Value(100)).current;
+    const slideAnim = React.useRef(new Animated.Value(0)).current;
 
-    useEffect(() => {
-        // Only show if user is in 'rewarded' state
-        const shouldShow = status?.isRewarded === true;
-
-        if (shouldShow && !visible) {
-            setVisible(true);
-            Animated.spring(slideAnim, {
-                toValue: 0,
-                useNativeDriver: true,
-                tension: 50,
-                friction: 8,
-            }).start();
-        } else if (!shouldShow && visible) {
-            Animated.timing(slideAnim, {
-                toValue: 100,
-                duration: 300,
-                useNativeDriver: true,
-            }).start(() => setVisible(false));
+    // Get current tab name from navigation state
+    const currentRouteName = useNavigationState((state) => {
+        if (!state || !state.routes || state.routes.length === 0) return '';
+        const route = state.routes[state.index];
+        // Check if we're in a nested navigator (MainTabs)
+        if (route.state && route.state.routes) {
+            const nestedState = route.state as any;
+            return nestedState.routes[nestedState.index]?.name || '';
         }
-    }, [status, visible]);
+        return route.name || '';
+    });
 
-    if (!visible) return null;
+    // Hide banner on AI tab
+    const isAITab = currentRouteName === 'AI';
+
+    if (isAITab) return null;
 
     return (
         <Animated.View
@@ -81,7 +73,6 @@ const styles = StyleSheet.create({
         position: 'absolute',
         left: 0,
         right: 0,
-        // height: 60, // Auto height for banner
         borderTopWidth: 1,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: -2 },
@@ -99,3 +90,4 @@ const styles = StyleSheet.create({
         width: '100%',
     },
 });
+

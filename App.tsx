@@ -266,9 +266,10 @@ function AppContainer() {
   const isNewUser = user?.user_metadata?.is_new_user === true;
 
   // Determine initial route
+  // SUBSCRIPTION REDIRECT COMMENTED OUT - Users can use app freely
   const getInitialRoute = () => {
     if (isNewUser) return 'Welcome';
-    if (trialExpired) return 'Subscription';
+    // if (trialExpired) return 'Subscription'; // Commented out to let users use app freely
     return 'MainTabs';
   };
 

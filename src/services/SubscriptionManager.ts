@@ -7,7 +7,7 @@
 import { supabase } from './SupabaseClient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const TRIAL_DURATION_DAYS = 14; // 2 weeks free trial
+const TRIAL_DURATION_MINUTES = 5; // 5 minutes free trial for testing
 const TRIAL_START_KEY = 'trial_start_date';
 const SUBSCRIPTION_CACHE_KEY = 'subscription_cache_v1';
 const HAS_SUBSCRIBED_KEY = 'has_subscribed_v1';
@@ -72,7 +72,7 @@ export async function cacheActiveSubscription(userId: string, plan: string, expi
 
 // Daily rewarded access via ads
 const REWARDED_AD_KEY = 'rewarded_ad_expiry';
-const REWARDED_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+const REWARDED_DURATION_MS = 5 * 60 * 1000; // 5 minutes for testing
 
 export interface SubscriptionStatus {
   isActive: boolean;
@@ -218,7 +218,7 @@ export async function getSubscriptionStatus(userId: string): Promise<Subscriptio
       isActive: true,
       isTrial: true,
       trialEnded: false,
-      daysRemaining: TRIAL_DURATION_DAYS,
+      daysRemaining: TRIAL_DURATION_MINUTES,
       plan: 'free',
       expiresAt: null,
       isRewarded: false,
@@ -244,23 +244,23 @@ async function getTrialStatus(userId: string): Promise<{ started: Date; ended: b
       await AsyncStorage.setItem(`${TRIAL_START_KEY}_${userId}`, trialStart.toISOString());
     }
 
-    // Calculate days since trial started
+    // Calculate minutes since trial started
     const now = new Date();
-    const daysSinceStart = Math.floor((now.getTime() - trialStart.getTime()) / (1000 * 60 * 60 * 24));
-    const daysRemaining = Math.max(0, TRIAL_DURATION_DAYS - daysSinceStart);
-    const ended = daysSinceStart >= TRIAL_DURATION_DAYS;
+    const minutesSinceStart = Math.floor((now.getTime() - trialStart.getTime()) / (1000 * 60));
+    const minutesRemaining = Math.max(0, TRIAL_DURATION_MINUTES - minutesSinceStart);
+    const ended = minutesSinceStart >= TRIAL_DURATION_MINUTES;
 
     return {
       started: trialStart,
       ended,
-      daysRemaining,
+      daysRemaining: minutesRemaining, // Reusing field name for UI compatibility
     };
   } catch (error) {
     console.error('Error getting trial status:', error);
     return {
       started: new Date(),
       ended: false,
-      daysRemaining: TRIAL_DURATION_DAYS,
+      daysRemaining: TRIAL_DURATION_MINUTES,
     };
   }
 }
@@ -285,13 +285,13 @@ export async function resetTrial(userId: string): Promise<void> {
 /**
  * Get trial days remaining message
  */
-export function getTrialMessage(daysRemaining: number): string {
-  if (daysRemaining === 0) {
+export function getTrialMessage(minutesRemaining: number): string {
+  if (minutesRemaining === 0) {
     return 'Your free trial has ended';
-  } else if (daysRemaining === 1) {
-    return '1 day left in your free trial';
+  } else if (minutesRemaining === 1) {
+    return '1 minute left in your free trial';
   } else {
-    return `${daysRemaining} days left in your free trial`;
+    return `${minutesRemaining} minutes left in your free trial`;
   }
 }
 
@@ -306,7 +306,7 @@ export function getTrialStatusDescription(status: SubscriptionStatus): string {
   if (status.trialEnded) {
     return 'Free trial ended';
   } else {
-    const daysRemaining = status.daysRemaining;
-    return `${daysRemaining} days left in your free trial`;
+    const minutesRemaining = status.daysRemaining;
+    return `${minutesRemaining} minutes left in your free trial`;
   }
 }

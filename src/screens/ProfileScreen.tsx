@@ -107,7 +107,7 @@ export default function ProfileScreen() {
 
   const loadTransactions = async () => {
     if (!user) return;
-    
+
     setLoadingTransactions(true);
     try {
       const { data, error } = await supabase
@@ -115,7 +115,7 @@ export default function ProfileScreen() {
         .select('*')
         .eq('user_id', user.id)
         .order('date', { ascending: false });
-      
+
       if (error) throw error;
       setTransactions(data || []);
     } catch (error) {
@@ -189,8 +189,8 @@ export default function ProfileScreen() {
         'Disable SMS Import?',
         'You can re-enable this in Settings or by toggling this switch again.',
         [
-          { 
-            text: 'Cancel', 
+          {
+            text: 'Cancel',
             style: 'cancel',
             onPress: () => {
               // Keep toggle enabled
@@ -243,7 +243,7 @@ export default function ProfileScreen() {
         {/* Account Information */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Account Information</Text>
-          
+
           <View style={[styles.infoItem, { backgroundColor: colors.surface }]}>
             <View style={styles.infoContent}>
               <Ionicons name="mail-outline" size={20} color={colors.textSecondary} style={styles.infoIcon} />
@@ -266,6 +266,7 @@ export default function ProfileScreen() {
             </View>
           </View>
 
+          {/* SUBSCRIPTION SECTION HIDDEN - Commented out for user acquisition phase
           <View style={[styles.infoItem, { backgroundColor: colors.surface }]}>
             <View style={styles.infoContent}>
               <Ionicons name="card-outline" size={20} color={colors.textSecondary} style={styles.infoIcon} />
@@ -287,20 +288,21 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
           </View>
+          */}
         </View>
 
         {/* Account Actions */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Account Actions</Text>
-          
+
           {/* SMS Permission Toggle */}
           {Platform.OS === 'android' && (
             <View style={[styles.actionItem, { backgroundColor: colors.surface }]}>
-              <Ionicons 
-                name="chatbox-ellipses-outline" 
-                size={20} 
-                color={colors.primary} 
-                style={styles.actionIcon} 
+              <Ionicons
+                name="chatbox-ellipses-outline"
+                size={20}
+                color={colors.primary}
+                style={styles.actionIcon}
               />
               <View style={styles.toggleContent}>
                 <Text style={[styles.actionText, { color: colors.text }]}>Auto-Import SMS</Text>
@@ -317,15 +319,15 @@ export default function ProfileScreen() {
             </View>
           )}
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.actionItem, { backgroundColor: colors.surface }]}
             onPress={toggleTheme}
           >
-            <Ionicons 
-              name={theme === 'dark' ? 'sunny-outline' : 'moon-outline'} 
-              size={20} 
-              color={colors.primary} 
-              style={styles.actionIcon} 
+            <Ionicons
+              name={theme === 'dark' ? 'sunny-outline' : 'moon-outline'}
+              size={20}
+              color={colors.primary}
+              style={styles.actionIcon}
             />
             <Text style={[styles.actionText, { color: colors.text }]}>
               {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
@@ -334,7 +336,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
 
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.actionItem, { backgroundColor: colors.surface }]}
             onPress={() => setShowEditProfile(true)}
           >
@@ -343,7 +345,7 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.actionItem, { backgroundColor: colors.surface }]}
             onPress={() => setShowChangePassword(true)}
           >
@@ -352,7 +354,7 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.actionItem, { backgroundColor: colors.surface }]}
             onPress={() => setShowExportData(true)}
             disabled={loadingTransactions}
@@ -362,7 +364,7 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.actionItem, { backgroundColor: colors.surface }]}
             onPress={handleFeedback}
           >
@@ -417,7 +419,7 @@ export default function ProfileScreen() {
         onRequestClose={() => setFeedbackVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { backgroundColor: colors.surface }] }>
+          <View style={[styles.modalCard, { backgroundColor: colors.surface }]}>
             <Text style={[styles.modalTitle, { color: colors.text }]}>Send Feedback</Text>
             <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>Tell us what you think. Your feedback helps improve the app.</Text>
             <TextInput

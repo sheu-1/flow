@@ -159,45 +159,53 @@ export const AIChatService = {
 
   /**
    * DAILY LIMIT LOGIC (Client-side enforcement)
+   * Base limit: 10 chats per day
+   * After watching ad: +5 extra chats (stored separately)
+   * Resets at midnight
    */
   async checkDailyLimit(userId: string): Promise<{ allowed: boolean; remaining: number }> {
     try {
-      // 1. Check if user is premium (skip limit)
-      const { isPremium } = await this.getPromptStatus(userId);
-      if (isPremium) return { allowed: true, remaining: 999 };
+      // 1. Check if user is premium (skip limit) - COMMENTED OUT FOR NOW
+      // const { isPremium } = await this.getPromptStatus(userId);
+      // if (isPremium) return { allowed: true, remaining: 999 };
 
-      // 2. Check daily unlocked status
       const today = new Date().toISOString().split('T')[0];
-      const unlockedKey = `chat_unlocked_${userId}_${today}`;
-      const isUnlocked = await import('@react-native-async-storage/async-storage').then(m => m.default.getItem(unlockedKey));
-      if (isUnlocked === 'true') return { allowed: true, remaining: 999 };
+      const AsyncStorage = await import('@react-native-async-storage/async-storage').then(m => m.default);
 
-      // 3. Check daily usage
+      // 2. Get current usage count
       const countKey = `chat_count_${userId}_${today}`;
-      const countStr = await import('@react-native-async-storage/async-storage').then(m => m.default.getItem(countKey));
+      const countStr = await AsyncStorage.getItem(countKey);
       const count = countStr ? parseInt(countStr, 10) : 0;
-      const LIMIT = 3; // "e chats" -> 3 chats
 
-      if (count >= LIMIT) {
+      // 3. Get extra chats from watching ads
+      const extraKey = `chat_extra_${userId}_${today}`;
+      const extraStr = await AsyncStorage.getItem(extraKey);
+      const extraChats = extraStr ? parseInt(extraStr, 10) : 0;
+
+      const BASE_LIMIT = 5;
+      const currentLimit = BASE_LIMIT + extraChats;
+
+      if (count >= currentLimit) {
         return { allowed: false, remaining: 0 };
       }
 
-      return { allowed: true, remaining: LIMIT - count };
+      return { allowed: true, remaining: currentLimit - count };
     } catch (error) {
       console.error('Error checking daily limit:', error);
       // Default to allow if error, to avoid blocking user due to cache error
-      return { allowed: true, remaining: 3 };
+      return { allowed: true, remaining: 5 };
     }
   },
 
   async incrementDailyCount(userId: string): Promise<void> {
     try {
       const today = new Date().toISOString().split('T')[0];
+      const AsyncStorage = await import('@react-native-async-storage/async-storage').then(m => m.default);
       const countKey = `chat_count_${userId}_${today}`;
-      const countStr = await import('@react-native-async-storage/async-storage').then(m => m.default.getItem(countKey));
+      const countStr = await AsyncStorage.getItem(countKey);
       const count = countStr ? parseInt(countStr, 10) : 0;
 
-      await import('@react-native-async-storage/async-storage').then(m => m.default.setItem(countKey, (count + 1).toString()));
+      await AsyncStorage.setItem(countKey, (count + 1).toString());
 
       // Also increment global count (existing logic)
       await this.incrementPromptCount(userId);
@@ -206,14 +214,28 @@ export const AIChatService = {
     }
   },
 
-  async unlockDailyLimit(userId: string): Promise<void> {
+  /**
+   * Grant 5 extra chats after watching rewarded ad
+   */
+  async grantExtraChats(userId: string): Promise<void> {
     try {
       const today = new Date().toISOString().split('T')[0];
-      const unlockedKey = `chat_unlocked_${userId}_${today}`;
-      await import('@react-native-async-storage/async-storage').then(m => m.default.setItem(unlockedKey, 'true'));
+      const AsyncStorage = await import('@react-native-async-storage/async-storage').then(m => m.default);
+      const extraKey = `chat_extra_${userId}_${today}`;
+      const extraStr = await AsyncStorage.getItem(extraKey);
+      const currentExtra = extraStr ? parseInt(extraStr, 10) : 0;
+
+      // Add 5 extra chats
+      await AsyncStorage.setItem(extraKey, (currentExtra + 5).toString());
     } catch (error) {
-      console.error('Error unlocking daily limit:', error);
+      console.error('Error granting extra chats:', error);
     }
+  },
+
+  // DEPRECATED: Old unlock method - kept for reference
+  async unlockDailyLimit(userId: string): Promise<void> {
+    // Now redirects to grantExtraChats
+    await this.grantExtraChats(userId);
   }
 };
 

@@ -128,7 +128,8 @@ export default function DashboardScreen() {
     }
   }, [dateRange, selectedPeriod]);
 
-  // Check subscription status
+  // SUBSCRIPTION POPUP - COMMENTED OUT FOR NOW (getting users first before monetizing)
+  /*
   useEffect(() => {
     if (user?.id) {
       shouldShowSubscriptionPrompt(user.id).then(shouldShow => {
@@ -153,6 +154,7 @@ export default function DashboardScreen() {
       });
     }
   }, [user?.id, navigation]);
+  */
 
   // Avoid on-focus refetch to prevent duplicate loads; context keeps data fresh
 

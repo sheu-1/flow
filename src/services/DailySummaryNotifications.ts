@@ -45,16 +45,16 @@ async function getTransactionSummary(userId: string, startDate: Date, endDate: D
  */
 export async function scheduleDailySummaryNotification(userId: string): Promise<void> {
   try {
-    console.log('[DailySummaryNotifications] Scheduling daily summary for user', userId);
+    console.log('[DailySummaryNotifications] Scheduling daily notifications for user', userId);
 
-    // Cancel any existing notification for this user
+    // Cancel any existing notifications for this user
     await cancelDailySummaryNotification();
 
     // Create notification channel for Android
     await createNotificationChannel();
 
-    // Schedule daily notification at 9 AM using daily trigger
-    const notificationId = await Notifications.scheduleNotificationAsync({
+    // 1. Schedule 9 AM notification - Daily Summary
+    const morningNotificationId = await Notifications.scheduleNotificationAsync({
       content: {
         title: 'Cash Flow Summary',
         body: 'Tap to view your daily financial summary',
@@ -66,11 +66,41 @@ export async function scheduleDailySummaryNotification(userId: string): Promise<
         minute: 0,
       },
     });
+    console.log('[DailySummaryNotifications] 9 AM notification ID:', morningNotificationId);
 
-    console.log('[DailySummaryNotifications] Scheduled notification ID:', notificationId);
+    // 2. Schedule 12 PM (Midday) notification - Refresh Reminder
+    const middayNotificationId = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: '🔄 Quick Refresh',
+        body: 'All it takes is a quick refresh. Refresh to load your transactions',
+        data: { type: 'refresh_reminder', userId },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DAILY,
+        hour: 12,
+        minute: 0,
+      },
+    });
+    console.log('[DailySummaryNotifications] 12 PM notification ID:', middayNotificationId);
+
+    // 3. Schedule 9 PM (Evening) notification - Cashflow Summary
+    const eveningNotificationId = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: '📊 Evening Check-in',
+        body: 'Come and see how your cashflow summary looks like today',
+        data: { type: 'evening_summary', userId },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DAILY,
+        hour: 21,
+        minute: 0,
+      },
+    });
+    console.log('[DailySummaryNotifications] 9 PM notification ID:', eveningNotificationId);
+
     scheduledUsers.add(userId);
   } catch (error) {
-    console.error('[DailySummaryNotifications] Error scheduling notification:', error);
+    console.error('[DailySummaryNotifications] Error scheduling notifications:', error);
   }
 }
 

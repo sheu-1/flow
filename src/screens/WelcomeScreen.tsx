@@ -12,15 +12,15 @@ export default function WelcomeScreen() {
   const navigation = useNavigation();
 
   const handleGetStarted = () => {
-    // Navigate to subscription screen
-    navigation.navigate('Subscription' as never);
+    // Navigate directly to main app (skip subscription)
+    navigation.navigate('MainTabs' as never);
   };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       <View style={styles.content}>
         {/* Success Icon */}
-        <Animated.View 
+        <Animated.View
           entering={FadeInDown.delay(200).springify()}
           style={[styles.iconContainer, { backgroundColor: colors.success + '20' }]}
         >
@@ -28,7 +28,7 @@ export default function WelcomeScreen() {
         </Animated.View>
 
         {/* Thank You Message */}
-        <Animated.View 
+        <Animated.View
           entering={FadeInUp.delay(400).springify()}
           style={styles.textContainer}
         >
@@ -41,7 +41,7 @@ export default function WelcomeScreen() {
         </Animated.View>
 
         {/* Features List */}
-        <Animated.View 
+        <Animated.View
           entering={FadeInUp.delay(600).springify()}
           style={styles.featuresContainer}
         >
@@ -71,19 +71,19 @@ export default function WelcomeScreen() {
           </View>
         </Animated.View>
 
-        {/* Trial Badge */}
-        <Animated.View 
+        {/* Welcome message instead of trial badge */}
+        <Animated.View
           entering={FadeInUp.delay(800).springify()}
           style={[styles.trialBadge, { backgroundColor: colors.primary + '15' }]}
         >
-          <Ionicons name="gift-outline" size={20} color={colors.primary} />
+          <Ionicons name="sparkles-outline" size={20} color={colors.primary} />
           <Text style={[styles.trialText, { color: colors.primary }]}>
-            Start with a 14-day free trial!
+            Ready to track your finances!
           </Text>
         </Animated.View>
 
         {/* Get Started Button */}
-        <Animated.View 
+        <Animated.View
           entering={FadeInUp.delay(1000).springify()}
           style={styles.buttonContainer}
         >
