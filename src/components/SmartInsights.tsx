@@ -217,22 +217,34 @@ export const SmartInsights: React.FC<Props> = ({ transactions, userId }) => {
       });
     }
 
-    // Transaction Charges Insight - tracks Fuliza fees, transaction fees, etc.
-    const chargesKeywords = ['fee', 'charge', 'fuliza', 'cost'];
-    const chargesCategories = ['Fees & Charges', 'Other'];
+    // Transaction Charges Insight - tracks fees, transaction costs, etc.
+    const chargesCategories = ['Fees & Charges', 'Loan Repayment'];
+    const feePatterns = [
+      /\bfee\b/i,
+      /\bcharge\bg/i,
+      /\bcost\b/i,
+      /\bexcise\b/i,
+      /\btax\b/i,
+      /transaction\s*cost/i,
+      /access\s*fee/i
+    ];
+
     const totalCharges = thisMonth
       .filter(t => {
         if (t.type !== 'expense') return false;
+
         const category = (t.category || '').toLowerCase();
+        // Check if category is explicitly a fee category
+        if (chargesCategories.some(cat => category.includes(cat.toLowerCase()))) {
+          return true;
+        }
+
         const sender = ((t as any).sender || '').toLowerCase();
         const description = ((t as any).description || '').toLowerCase();
+        const combinedText = `${category} ${sender} ${description}`;
 
-        // Check if it's a fee/charge transaction
-        return chargesKeywords.some(keyword =>
-          category.includes(keyword) ||
-          sender.includes(keyword) ||
-          description.includes(keyword)
-        ) || chargesCategories.some(cat => category.includes(cat.toLowerCase()));
+        // Check for specific fee patterns with word boundaries to avoid partial matches like "Coffee"
+        return feePatterns.some(pattern => pattern.test(combinedText));
       })
       .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 

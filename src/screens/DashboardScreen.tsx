@@ -24,6 +24,7 @@ import { getSubscriptionStatus, shouldShowSubscriptionPrompt } from '../services
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import { Dimensions } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
+import { useTabScroll } from '../contexts/TabScrollContext';
 
 // Enable detailed logging
 console.log('🚀 DashboardScreen loading...');
@@ -87,6 +88,8 @@ export default function DashboardScreen() {
   // ... (inside component)
 
   // Listen for notification updates
+  const { onScroll } = useTabScroll(); // Get scroll handler
+
   useEffect(() => {
     const unsubscribe = notificationService.addListener((notifications) => {
       setUnreadCount(notificationService.getUnreadCount());
@@ -94,6 +97,10 @@ export default function DashboardScreen() {
     setUnreadCount(notificationService.getUnreadCount());
     return unsubscribe;
   }, []);
+
+  // ... (rest of useEffects)
+
+
 
   // Auto-refresh on App Foreground and reset background SMS count silently
   useEffect(() => {
@@ -368,13 +375,14 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-      <ScrollView
+      <Animated.ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
         }
         stickyHeaderIndices={[1]} // Keep the period selector (index 1) sticky
         scrollEventThrottle={16} // Improve scroll performance
+        onScroll={onScroll}
       >
         {/* Scrollable Header */}
         <View style={[styles.header, { backgroundColor: colors.background }]}>
@@ -654,7 +662,7 @@ export default function DashboardScreen() {
             )}
           </View>
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
 
       {/* Notification Panel */}
       <NotificationPanel

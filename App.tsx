@@ -4,7 +4,7 @@ import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 import React, { useEffect } from 'react';
 import { NavigationContainer, DefaultTheme, RouteProp } from '@react-navigation/native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createBottomTabNavigator, BottomTabBar } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar, View, Text } from 'react-native';
@@ -89,13 +89,32 @@ function makeNavTheme(pal: typeof DarkColors) {
   } as const;
 }
 
+import { TabScrollProvider, useTabScroll } from './src/contexts/TabScrollContext';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+
+function AnimatedTabBar(props: any) {
+  const { tabBarTranslateY } = useTabScroll();
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateY: tabBarTranslateY.value }],
+    };
+  });
+
+  return (
+    <Animated.View style={[animatedStyle, { position: 'absolute', left: 0, right: 0, bottom: 0 }]}>
+      <BottomTabBar {...props} />
+    </Animated.View>
+  );
+}
+
 function MainTabNavigator() {
   const { colors } = useTheme();
 
   return (
-    <>
+    <TabScrollProvider>
       <Tab.Navigator
         initialRouteName="Dashboard"
+        tabBar={(props) => <AnimatedTabBar {...props} />}
         screenOptions={({ route }: { route: RouteProp<RootTabParamList, keyof RootTabParamList> }) => ({
           tabBarIcon: (
             { focused, color, size }: { focused: boolean; color: string; size: number }
@@ -121,6 +140,9 @@ function MainTabNavigator() {
           tabBarStyle: {
             backgroundColor: colors.surface,
             borderTopColor: colors.border,
+            // Remove bottom for absolute positioning if needed, or keep to ensure size
+            elevation: 0, // Remove shadow from default tab bar since we might animate
+            borderTopWidth: 0, // Handle border in container if needed
           },
           headerStyle: {
             backgroundColor: colors.surface,
@@ -156,7 +178,7 @@ function MainTabNavigator() {
         />
       </Tab.Navigator>
       <BannerAd />
-    </>
+    </TabScrollProvider>
   );
 }
 

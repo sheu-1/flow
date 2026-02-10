@@ -25,6 +25,7 @@ import { useRealtimeTransactions } from '../hooks/useRealtimeTransactions';
 import ExportDataModal from '../components/ExportDataModal';
 import { useDateFilterContext } from '../contexts/DateFilterContext';
 import { ScanService } from '../services/ScanService';
+import { useTabScroll } from '../contexts/TabScrollContext'; // Add this import
 
 const ITEMS_PER_PAGE = 100;
 
@@ -47,6 +48,7 @@ function TransactionsScreen() {
 
   // Use globally filtered transactions for CSV export (respects custom date filters)
   const { transactions: filteredTransactionsForExport } = useDateFilterContext();
+  const { onScroll } = useTabScroll(); // Get scroll handler
 
   const refresh = useCallback(async (showLoading = true, page = currentPage) => {
     if (!user?.id) return;
@@ -355,7 +357,7 @@ function TransactionsScreen() {
         </View>
       ) : sortedTransactions.length > 0 ? (
         <>
-          <FlatList
+          <Animated.FlatList
             data={filteredBySearch}
             renderItem={renderTransaction}
             keyExtractor={(item) => item.id}
@@ -364,6 +366,8 @@ function TransactionsScreen() {
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
             }
+            onScroll={onScroll}
+            scrollEventThrottle={16}
           />
         </>
       ) : (
