@@ -7,7 +7,7 @@ import { NavigationContainer, DefaultTheme, RouteProp } from '@react-navigation/
 import { createBottomTabNavigator, BottomTabBar } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { StatusBar, View, Text } from 'react-native';
+import { StatusBar, View, Text, Alert } from 'react-native';
 import * as Linking from 'expo-linking';
 import { colors as DarkColors } from './src/theme/colors';
 import * as SplashScreen from 'expo-splash-screen';
@@ -218,6 +218,22 @@ function AppContainer() {
     return () => {
       subscription.remove();
     };
+  }, []);
+
+  // Check Internet Connection
+  useEffect(() => {
+    const checkConnection = async () => {
+      const NetInfo = await import('@react-native-community/netinfo').then(m => m.default);
+      const state = await NetInfo.fetch();
+      if (state.isConnected === false) {
+        Alert.alert(
+          'No Internet Connection',
+          'It looks like you are offline. Some features (like AI Chat and Cloud Sync) may be unavailable.',
+          [{ text: 'OK' }]
+        );
+      }
+    };
+    checkConnection();
   }, []);
 
   // Check trial status when user logs in

@@ -27,6 +27,7 @@ export const BannerAd: React.FC = () => {
     const colors = useThemeColors();
     const [adLoaded, setAdLoaded] = useState(false);
     const [adFailed, setAdFailed] = useState(false);
+    const [retryKey, setRetryKey] = useState(0);
 
     // Get scroll context - safeguard against missing context if used outside provider
     let tabBarTranslateY: any;
@@ -37,6 +38,19 @@ export const BannerAd: React.FC = () => {
         // Fallback if not inside provider
         tabBarTranslateY = useSharedValue(0);
     }
+
+    // Retry mechanism: if ad fails, force a re-mount after a delay to try again
+    useEffect(() => {
+        let timeout: NodeJS.Timeout;
+        if (adFailed) {
+            timeout = setTimeout(() => {
+                // Increment key to force remount
+                setRetryKey(k => k + 1);
+                setAdFailed(false);
+            }, 30000); // Retry after 30 seconds
+        }
+        return () => clearTimeout(timeout);
+    }, [adFailed]);
 
     // Get current tab name from navigation state
     const currentRouteName = useNavigationState((state) => {
@@ -84,6 +98,7 @@ export const BannerAd: React.FC = () => {
         >
             <View style={styles.adContainer}>
                 <AdMobBanner
+                    key={`banner-${retryKey}`}
                     unitId={AdMobConfig.bannerId}
                     size={BannerAdSize.BANNER}
                     requestOptions={{

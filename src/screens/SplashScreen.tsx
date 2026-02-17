@@ -7,7 +7,7 @@ interface SplashScreenProps {
 }
 
 export default function SplashScreen({ onFinish }: SplashScreenProps) {
-  const fullText = 'Cash Flow Tracker';
+  const fullText = 'Cashflow Tracker';
   const [displayedText, setDisplayedText] = useState('');
   const [currentIndex, setCurrentIndex] = useState(0);
 

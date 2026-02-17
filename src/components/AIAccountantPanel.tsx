@@ -431,8 +431,14 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConv
 
       if (rawMessage.includes('(402)') || rawMessage.includes('"code":402')) {
         Alert.alert(
-          'OpenRouter Credits Required',
           'Your OpenRouter account does not have enough credits for this request. Add credits on OpenRouter, or use a cheaper model / smaller responses.'
+        );
+      }
+
+      if (rawMessage.includes('429') || rawMessage.toLowerCase().includes('rate limit')) {
+        Alert.alert(
+          'High Traffic',
+          'We are currently experiencing high traffic with our AI service. Please try again in a moment.'
         );
       }
     } finally {
@@ -481,10 +487,21 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConv
       });
 
       // Handle errors using AdEventType.ERROR
-      const unsubError = ad.addAdEventListener(AdEventType.ERROR, (error: any) => {
+      const unsubError = ad.addAdEventListener(AdEventType.ERROR, async (error: any) => {
         console.error('[RewardedAd] Error:', error);
         setLoading(false);
-        Alert.alert('Ad Failed', 'Could not load ad. Please try again later.');
+        // FILL-RATE/LIMIT FALLBACK: Grant reward anyway so user isn't stuck
+        try {
+          await AIChatService.grantExtraChats(userId);
+          const newStatus = await AIChatService.checkDailyLimit(userId);
+          setLimitStatus(newStatus);
+          Alert.alert(
+            'Ad Unavailable',
+            "We couldn't load an ad right now (likely due to daily limits), but we've granted you the 5 free chats anyway! Enjoy!"
+          );
+        } catch (e) {
+          console.error('[RewardedAd] Error granting fallback chats:', e);
+        }
       });
 
       // Handle ad closed without reward
@@ -583,7 +600,7 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConv
         </ScrollView>
 
         {/* Input Bar */}
-        <View style={[styles.inputContainer, { paddingBottom: Math.max(34, insets.bottom + 10) }]}>
+        <View style={[styles.inputContainer, { paddingBottom: Math.max(90, insets.bottom + 66) }]}>
           <View style={[styles.inputBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <TouchableOpacity
               style={styles.iconButton}
