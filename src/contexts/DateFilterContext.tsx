@@ -11,8 +11,9 @@ import { Transaction, AggregatePeriod } from '../types';
 import { getTransactions, invalidateUserCaches } from '../services/TransactionService';
 import { useAuth } from '../hooks/useAuth';
 import { useRealtimeTransactions } from '../hooks/useRealtimeTransactions';
+import { EventBus, EVENTS } from '../services/EventBus';
 
-export type PresetRange = 
+export type PresetRange =
   | 'today'
   | 'yesterday'
   | 'thisWeek'
@@ -47,7 +48,7 @@ const DateFilterContext = createContext<DateFilterContextValue | undefined>(unde
 export const DateFilterProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const presets = getPresetDateRanges();
   const { user } = useAuth();
-  
+
   const [dateRange, setDateRange] = useState<DateRange>(presets.allTime);
   const [selectedPreset, setSelectedPreset] = useState<PresetRange>('allTime');
   const [selectedPeriod, setSelectedPeriod] = useState<AggregatePeriod>('daily');
@@ -110,6 +111,15 @@ export const DateFilterProvider: React.FC<{ children: ReactNode }> = ({ children
   // Fetch when user or date range changes
   useEffect(() => {
     refetch();
+  }, [refetch]);
+
+  // Listen for local events (e.g. SMS processed)
+  useEffect(() => {
+    const unsubscribe = EventBus.on(EVENTS.TRANSACTIONS_UPDATED, () => {
+      console.log('⚡ [DateFilterContext] Received TRANSACTIONS_UPDATED event, refreshing...');
+      refetch();
+    });
+    return unsubscribe;
   }, [refetch]);
 
   // Realtime subscription: single place to invalidate and refetch

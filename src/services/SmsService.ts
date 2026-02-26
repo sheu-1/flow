@@ -299,6 +299,9 @@ export async function processSmsAndSave(raw: RawSms): Promise<void> {
           continue; // Try next if one fails
         }
         await incrementBackgroundCount();
+        // Emit event to update UI immediately
+        const { EventBus, EVENTS } = require('./EventBus');
+        EventBus.emit(EVENTS.TRANSACTIONS_UPDATED);
       }
 
       recentSmsIds.set(smsId, now);

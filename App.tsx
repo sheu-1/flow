@@ -220,21 +220,7 @@ function AppContainer() {
     };
   }, []);
 
-  // Check Internet Connection
-  useEffect(() => {
-    const checkConnection = async () => {
-      const NetInfo = await import('@react-native-community/netinfo').then(m => m.default);
-      const state = await NetInfo.fetch();
-      if (state.isConnected === false) {
-        Alert.alert(
-          'No Internet Connection',
-          'It looks like you are offline. Some features (like AI Chat and Cloud Sync) may be unavailable.',
-          [{ text: 'OK' }]
-        );
-      }
-    };
-    checkConnection();
-  }, []);
+
 
   // Check trial status when user logs in
   useEffect(() => {
