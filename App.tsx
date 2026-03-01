@@ -17,6 +17,7 @@ import DashboardScreen from './src/screens/DashboardScreen';
 import TransactionsScreen from './src/screens/TransactionsScreen';
 import ReportsScreen from './src/screens/ReportsScreen';
 import AIAccountantScreen from './src/screens/AIAccountantScreen';
+import ExploreScreen from './src/screens/ExploreScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import SubscriptionScreen from './src/screens/SubscriptionScreen';
 import PaymentMethodScreen from './src/screens/PaymentMethodScreen';
@@ -50,6 +51,7 @@ type RootTabParamList = {
   Dashboard: undefined;
   Transactions: undefined;
   Reports: undefined;
+  Explore: undefined;
   AI: undefined;
 };
 
@@ -127,6 +129,8 @@ function MainTabNavigator() {
               iconName = 'list-outline';
             } else if (route.name === 'Reports') {
               iconName = 'bar-chart-outline';
+            } else if (route.name === 'Explore') {
+              iconName = 'compass-outline';
             } else if (route.name === 'AI') {
               iconName = 'chatbubbles-outline';
             } else {
@@ -166,6 +170,11 @@ function MainTabNavigator() {
         <Tab.Screen
           name="Reports"
           component={ReportsScreen}
+          options={{ headerShown: false }}
+        />
+        <Tab.Screen
+          name="Explore"
+          component={ExploreScreen}
           options={{ headerShown: false }}
         />
         <Tab.Screen
