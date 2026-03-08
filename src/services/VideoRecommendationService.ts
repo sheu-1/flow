@@ -1,7 +1,7 @@
 import { getTransactions } from './TransactionService';
 import { cacheService } from './CacheService';
 import { Transaction } from '../types';
-import { exploreVideos, ExploreVideo } from '../data/exploreVideos';
+import { exploreContent, ExploreContent } from '../data/exploreVideos';
 
 // ── Types ────────────────────────────────────────────────
 
@@ -22,8 +22,8 @@ export interface SpendingSignals {
     insightText: string;
 }
 
-export interface RecommendedVideo extends ExploreVideo {
-    /** how many of the video's tags matched the user's signals */
+export interface RecommendedContent extends ExploreContent {
+    /** how many of the item's tags matched the user's signals */
     relevanceScore: number;
 }
 
@@ -193,20 +193,20 @@ export async function analyseSpending(userId: string): Promise<SpendingSignals> 
 
 // ── Recommendation engine ────────────────────────────────
 
-export async function getRecommendedVideos(userId: string): Promise<{
-    videos: RecommendedVideo[];
+export async function getRecommendedContent(userId: string): Promise<{
+    content: RecommendedContent[];
     insight: string;
 }> {
     const signals = await analyseSpending(userId);
 
     if (signals.transactionCount === 0) {
-        return { videos: [], insight: '' };
+        return { content: [], insight: '' };
     }
 
     const relevantTags = signalsToTags(signals);
 
-    // Score each video by how many of its tags match
-    const scored: RecommendedVideo[] = exploreVideos.map((v) => {
+    // Score each item by how many of its tags match
+    const scored: RecommendedContent[] = exploreContent.map((v) => {
         const matchCount = v.tags.filter((t) => relevantTags.includes(t)).length;
         return { ...v, relevanceScore: matchCount };
     });
@@ -221,7 +221,7 @@ export async function getRecommendedVideos(userId: string): Promise<{
     const top = scored.filter((v) => v.relevanceScore > 0).slice(0, 6);
 
     return {
-        videos: top,
+        content: top,
         insight: signals.insightText,
     };
 }

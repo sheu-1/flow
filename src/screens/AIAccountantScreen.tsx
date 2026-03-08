@@ -9,6 +9,7 @@ import { spacing } from '../theme/colors';
 import AIAccountantPanel from '../components/AIAccountantPanel';
 import { useAuth } from '../hooks/useAuth';
 import { AIChatService, AIConversation } from '../services/AIChatService';
+import { useTabScroll } from '../contexts/TabScrollContext';
 
 const { width } = Dimensions.get('window');
 const SIDE_PAGE_WIDTH = width * 0.8;
@@ -20,6 +21,7 @@ export default function AIAccountantScreen() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [conversations, setConversations] = useState<AIConversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const { onScroll } = useTabScroll();
 
   const loadConversations = useCallback(async () => {
     if (!user?.id) return;
@@ -78,6 +80,7 @@ export default function AIAccountantScreen() {
           period={period}
           currentConversationId={activeConversationId}
           onConversationCreated={(id) => setActiveConversationId(id)}
+          onScroll={onScroll}
         />
       ) : (
         <View style={styles.signInPrompt}>

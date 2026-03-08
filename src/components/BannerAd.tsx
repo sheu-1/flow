@@ -92,7 +92,7 @@ export const BannerAd: React.FC = () => {
                     height: adLoaded ? 'auto' : 0,
                     opacity: adLoaded ? 1 : 0,
                     overflow: 'hidden', // Ensure collapsed ad does not overlap
-                    bottom: Platform.OS === 'ios' ? 80 : 70, // Sits above tab bar (approx 50-60px height + spacing)
+                    bottom: Platform.OS === 'ios' ? 50 : 50, // Sits exactly above tab bar
                 }
             ]}
         >

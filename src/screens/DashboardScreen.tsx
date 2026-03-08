@@ -329,7 +329,29 @@ export default function DashboardScreen() {
         counts.push(bucket.length);
       }
     } else if (selectedPeriod === 'monthly') {
-      // Months of the current year containing rangeEnd (Jan-Dec)
+      // Days of the month containing rangeEnd
+      const currentYear = rangeEnd.getFullYear();
+      const currentMonth = rangeEnd.getMonth();
+      const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dayStart = new Date(currentYear, currentMonth, d, 0, 0, 0, 0);
+        const dayEnd = new Date(currentYear, currentMonth, d, 23, 59, 59, 999);
+
+        const clampedStart = dayStart < rangeStart ? rangeStart : dayStart;
+        const clampedEnd = dayEnd > rangeEnd ? rangeEnd : dayEnd;
+
+        // Show day number on x-axis
+        labels.push(String(d));
+
+        const bucket = filteredTransactions.filter((t) => {
+          const dt = new Date(t.date);
+          return dt >= clampedStart && dt <= clampedEnd;
+        });
+        counts.push(bucket.length);
+      }
+    } else if (selectedPeriod === 'yearly') {
+      // Months of the year containing rangeEnd (Jan-Dec)
       const currentYear = rangeEnd.getFullYear();
 
       for (let m = 0; m < 12; m++) {
@@ -341,26 +363,6 @@ export default function DashboardScreen() {
 
         const label = monthStart.toLocaleDateString('en-US', { month: 'short' });
         labels.push(label);
-
-        const bucket = filteredTransactions.filter((t) => {
-          const dt = new Date(t.date);
-          return dt >= clampedStart && dt <= clampedEnd;
-        });
-        counts.push(bucket.length);
-      }
-    } else if (selectedPeriod === 'yearly') {
-      // Years from 2024 to current year
-      const currentYear = new Date().getFullYear();
-      const startYear = 2024;
-
-      for (let y = startYear; y <= currentYear; y++) {
-        const yearStart = new Date(y, 0, 1, 0, 0, 0, 0);
-        const yearEnd = new Date(y, 11, 31, 23, 59, 59, 999);
-
-        const clampedStart = yearStart < rangeStart ? rangeStart : yearStart;
-        const clampedEnd = yearEnd > rangeEnd ? rangeEnd : yearEnd;
-
-        labels.push(String(y));
 
         const bucket = filteredTransactions.filter((t) => {
           const dt = new Date(t.date);

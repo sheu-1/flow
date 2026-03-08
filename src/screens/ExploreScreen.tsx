@@ -19,14 +19,16 @@ import { WebView } from 'react-native-webview';
 import { useThemeColors } from '../theme/ThemeProvider';
 import { spacing, borderRadius, fontSize } from '../theme/colors';
 import {
-    exploreVideos,
-    ExploreVideo,
-    VideoCategory,
+    exploreContent,
+    ExploreContent,
+    ContentCategory,
     CATEGORIES,
+    Platform,
     getThumbnailUrl,
 } from '../data/exploreVideos';
-import { getRecommendedVideos, RecommendedVideo } from '../services/VideoRecommendationService';
+import { getRecommendedContent, RecommendedContent } from '../services/VideoRecommendationService';
 import { useAuth } from '../hooks/useAuth';
+import { useTabScroll } from '../contexts/TabScrollContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_MARGIN = spacing.md;
@@ -37,22 +39,31 @@ const THUMBNAIL_HEIGHT = (CARD_WIDTH * 9) / 16;
 const REC_CARD_WIDTH = SCREEN_WIDTH * 0.7;
 const REC_THUMB_HEIGHT = (REC_CARD_WIDTH * 9) / 16;
 
-const CATEGORY_ICONS: Record<VideoCategory, keyof typeof Ionicons.glyphMap> = {
+const CATEGORY_ICONS: Record<ContentCategory, keyof typeof Ionicons.glyphMap> = {
     All: 'apps-outline',
     Investment: 'trending-up-outline',
     'Financial Literacy': 'book-outline',
     'Personal Development': 'rocket-outline',
     'Cash Flow': 'cash-outline',
+    Podcasts: 'mic-outline',
+};
+
+const PLATFORM_ICONS: Record<Platform, { name: keyof typeof Ionicons.glyphMap; color: string; label: string }> = {
+    youtube: { name: 'logo-youtube', color: '#FF0000', label: 'YouTube' },
+    spotify: { name: 'musical-notes-outline', color: '#1DB954', label: 'Spotify' },
+    books: { name: 'book-outline', color: '#8E44AD', label: 'Books' },
 };
 
 export default function ExploreScreen() {
     const colors = useThemeColors();
     const { user } = useAuth();
-    const [selectedCategory, setSelectedCategory] = useState<VideoCategory>('All');
-    const [activeVideo, setActiveVideo] = useState<ExploreVideo | null>(null);
+    const { onScroll } = useTabScroll();
+    const [selectedCategory, setSelectedCategory] = useState<ContentCategory>('All');
+    const [selectedPlatform, setSelectedPlatform] = useState<Platform>('youtube');
+    const [activeItem, setActiveItem] = useState<ExploreContent | null>(null);
 
     // ── Recommendations state ──────────────────────────
-    const [recommended, setRecommended] = useState<RecommendedVideo[]>([]);
+    const [recommended, setRecommended] = useState<RecommendedContent[]>([]);
     const [insight, setInsight] = useState('');
     const [recLoading, setRecLoading] = useState(true);
 
@@ -64,9 +75,9 @@ export default function ExploreScreen() {
                 return;
             }
             try {
-                const result = await getRecommendedVideos(user.id);
+                const result = await getRecommendedContent(user.id);
                 if (!cancelled) {
-                    setRecommended(result.videos);
+                    setRecommended(result.content);
                     setInsight(result.insight);
                 }
             } catch (e) {
@@ -78,15 +89,18 @@ export default function ExploreScreen() {
         return () => { cancelled = true; };
     }, [user?.id]);
 
-    const filteredVideos = useMemo(() => {
-        if (selectedCategory === 'All') return exploreVideos;
-        return exploreVideos.filter((v) => v.category === selectedCategory);
-    }, [selectedCategory]);
+    const filteredContent = useMemo(() => {
+        let items = exploreContent.filter((v) => v.platform === selectedPlatform);
+        if (selectedCategory !== 'All') {
+            items = items.filter((v) => v.category === selectedCategory);
+        }
+        return items;
+    }, [selectedCategory, selectedPlatform]);
 
     // ── Renders ────────────────────────────────────────
 
     const renderCategoryChip = useCallback(
-        (category: VideoCategory) => {
+        (category: ContentCategory) => {
             const isActive = selectedCategory === category;
             return (
                 <TouchableOpacity
@@ -121,12 +135,12 @@ export default function ExploreScreen() {
         [selectedCategory, colors],
     );
 
-    const renderVideoCard = useCallback(
-        ({ item, index }: { item: ExploreVideo; index: number }) => (
+    const renderContentCard = useCallback(
+        ({ item, index }: { item: ExploreContent; index: number }) => (
             <Animated.View entering={FadeInUp.delay(index * 60).springify()}>
                 <TouchableOpacity
                     activeOpacity={0.85}
-                    onPress={() => setActiveVideo(item)}
+                    onPress={() => setActiveItem(item)}
                     style={[
                         styles.card,
                         {
@@ -137,15 +151,17 @@ export default function ExploreScreen() {
                 >
                     <View style={styles.thumbnailWrapper}>
                         <Image
-                            source={{ uri: getThumbnailUrl(item.videoId) }}
+                            source={{ uri: getThumbnailUrl(item) }}
                             style={styles.thumbnail}
                             resizeMode="cover"
                         />
-                        <View style={styles.playOverlay}>
-                            <View style={styles.playButton}>
-                                <Ionicons name="play" size={28} color="#FFF" />
+                        {item.platform !== 'books' && (
+                            <View style={styles.playOverlay}>
+                                <View style={styles.playButton}>
+                                    <Ionicons name={item.type === 'video' ? 'play' : 'mic'} size={28} color="#FFF" />
+                                </View>
                             </View>
-                        </View>
+                        )}
                         <View
                             style={[styles.categoryBadge, { backgroundColor: colors.primary + 'DD' }]}
                         >
@@ -161,9 +177,9 @@ export default function ExploreScreen() {
                         </Text>
                         <View style={styles.channelRow}>
                             <Ionicons
-                                name="logo-youtube"
+                                name={PLATFORM_ICONS[item.platform].name}
                                 size={14}
-                                color="#FF0000"
+                                color={PLATFORM_ICONS[item.platform].color}
                                 style={{ marginRight: 6 }}
                             />
                             <Text
@@ -183,6 +199,8 @@ export default function ExploreScreen() {
     // ── Recommended For You header rendered inside FlatList ──
 
     const ListHeader = useMemo(() => {
+        // Only show Recommendations on YouTube tab
+        if (selectedPlatform !== 'youtube') return null;
         // Don't show if still loading, no user, or no results
         if (recLoading || recommended.length === 0) return null;
 
@@ -220,7 +238,7 @@ export default function ExploreScreen() {
                         >
                             <TouchableOpacity
                                 activeOpacity={0.85}
-                                onPress={() => setActiveVideo(item)}
+                                onPress={() => setActiveItem(item)}
                                 style={[
                                     styles.recCard,
                                     {
@@ -231,13 +249,13 @@ export default function ExploreScreen() {
                             >
                                 <View style={styles.recThumbWrapper}>
                                     <Image
-                                        source={{ uri: getThumbnailUrl(item.videoId) }}
+                                        source={{ uri: getThumbnailUrl(item) }}
                                         style={styles.recThumb}
                                         resizeMode="cover"
                                     />
                                     <View style={styles.playOverlay}>
                                         <View style={styles.recPlayBtn}>
-                                            <Ionicons name="play" size={22} color="#FFF" />
+                                            <Ionicons name={item.type === 'video' ? 'play' : 'mic'} size={22} color="#FFF" />
                                         </View>
                                     </View>
                                     {/* Relevance sparkle badge */}
@@ -253,12 +271,20 @@ export default function ExploreScreen() {
                                     >
                                         {item.title}
                                     </Text>
-                                    <Text
-                                        style={[styles.recChannel, { color: colors.textMuted }]}
-                                        numberOfLines={1}
-                                    >
-                                        {item.channelName}
-                                    </Text>
+                                    <View style={styles.channelRow}>
+                                        <Ionicons
+                                            name={PLATFORM_ICONS[item.platform].name}
+                                            size={10}
+                                            color={PLATFORM_ICONS[item.platform].color}
+                                            style={{ marginRight: 4 }}
+                                        />
+                                        <Text
+                                            style={[styles.recChannel, { color: colors.textMuted }]}
+                                            numberOfLines={1}
+                                        >
+                                            {item.channelName}
+                                        </Text>
+                                    </View>
                                 </View>
                             </TouchableOpacity>
                         </Animated.View>
@@ -269,7 +295,33 @@ export default function ExploreScreen() {
                 <View style={[styles.recDivider, { backgroundColor: colors.border }]} />
             </Animated.View>
         );
-    }, [recLoading, recommended, insight, colors]);
+    }, [recLoading, recommended, insight, colors, selectedPlatform]);
+
+    const getEmbedUrl = (item: ExploreContent) => {
+        switch (item.platform) {
+            case 'youtube':
+                return `https://www.youtube.com/watch?v=${item.contentId}`;
+            case 'spotify':
+                return `https://open.spotify.com/embed/episode/${item.contentId}`;
+            case 'books':
+                return `https://books.google.com/books?id=${item.contentId}`;
+            default:
+                return '';
+        }
+    };
+
+    const getPlatformUrl = (item: ExploreContent) => {
+        switch (item.platform) {
+            case 'youtube':
+                return `https://www.youtube.com/watch?v=${item.contentId}`;
+            case 'spotify':
+                return `https://open.spotify.com/episode/${item.contentId}`;
+            case 'books':
+                return `https://books.google.com/books?id=${item.contentId}`;
+            default:
+                return '';
+        }
+    };
 
     return (
         <SafeAreaView
@@ -294,8 +346,44 @@ export default function ExploreScreen() {
                 </View>
             </Animated.View>
 
+            {/* ── Platform Tabs ────────────────────────────── */}
+            <View style={[styles.platformTabsContainer, { borderBottomColor: colors.border }]}>
+                {(['youtube', 'spotify', 'books'] as Platform[]).map(platform => {
+                    const isActive = selectedPlatform === platform;
+                    const config = PLATFORM_ICONS[platform];
+                    return (
+                        <TouchableOpacity
+                            key={platform}
+                            activeOpacity={0.7}
+                            onPress={() => {
+                                setSelectedPlatform(platform);
+                                setSelectedCategory('All'); // Reset category when switching platforms
+                            }}
+                            style={[
+                                styles.platformTab,
+                                isActive && { borderBottomColor: config.color }
+                            ]}
+                        >
+                            <Ionicons
+                                name={config.name}
+                                size={20}
+                                color={isActive ? config.color : colors.textMuted}
+                                style={{ marginBottom: 4 }}
+                            />
+                            <Text style={[
+                                styles.platformTabText,
+                                { color: isActive ? colors.text : colors.textMuted },
+                                isActive && { fontWeight: '600' }
+                            ]}>
+                                {config.label}
+                            </Text>
+                        </TouchableOpacity>
+                    );
+                })}
+            </View>
+
             {/* ── Category Chips ────────────────────────────── */}
-            <Animated.View entering={FadeInDown.delay(100).springify()}>
+            <Animated.View entering={FadeInDown.delay(50).springify()}>
                 <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
@@ -305,30 +393,32 @@ export default function ExploreScreen() {
                 </ScrollView>
             </Animated.View>
 
-            {/* ── Video List (with Rec header) ──────────────── */}
-            <FlatList
-                data={filteredVideos}
+            {/* ── Content List (with Rec header) ──────────────── */}
+            <Animated.FlatList
+                data={filteredContent}
                 keyExtractor={(item) => item.id}
-                renderItem={renderVideoCard}
+                renderItem={renderContentCard}
                 ListHeaderComponent={ListHeader}
                 contentContainerStyle={styles.listContent}
                 showsVerticalScrollIndicator={false}
+                onScroll={onScroll}
+                scrollEventThrottle={16}
                 ListEmptyComponent={
                     <View style={styles.emptyContainer}>
                         <Ionicons name="videocam-off-outline" size={48} color={colors.textMuted} />
                         <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-                            No videos in this category
+                            No content in this category
                         </Text>
                     </View>
                 }
             />
 
-            {/* ── Video Player Modal ────────────────────────── */}
+            {/* ── Player Modal ────────────────────────── */}
             <Modal
-                visible={!!activeVideo}
+                visible={!!activeItem}
                 animationType="slide"
                 presentationStyle="pageSheet"
-                onRequestClose={() => setActiveVideo(null)}
+                onRequestClose={() => setActiveItem(null)}
             >
                 <SafeAreaView
                     style={[styles.modalContainer, { backgroundColor: colors.background }]}
@@ -336,7 +426,7 @@ export default function ExploreScreen() {
                 >
                     <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
                         <TouchableOpacity
-                            onPress={() => setActiveVideo(null)}
+                            onPress={() => setActiveItem(null)}
                             style={styles.modalClose}
                             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                         >
@@ -346,33 +436,48 @@ export default function ExploreScreen() {
                             style={[styles.modalTitle, { color: colors.text }]}
                             numberOfLines={1}
                         >
-                            {activeVideo?.title}
+                            {activeItem?.title}
                         </Text>
                         <View style={{ width: 28 }} />
                     </View>
 
-                    {activeVideo && (
+                    {activeItem && (
                         <View style={{ flex: 1 }}>
-                            <WebView
-                                source={{
-                                    uri: `https://www.youtube.com/watch?v=${activeVideo.videoId}`,
-                                }}
-                                style={styles.webview}
-                                allowsFullscreenVideo
-                                javaScriptEnabled
-                                domStorageEnabled
-                                mediaPlaybackRequiresUserAction={false}
-                                userAgent="Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-                            />
-                            {/* Open in YouTube fallback button */}
-                            <TouchableOpacity
-                                style={[styles.openYoutubeBtn, { backgroundColor: '#FF0000' }]}
-                                onPress={() => Linking.openURL(`https://www.youtube.com/watch?v=${activeVideo.videoId}`)}
-                                activeOpacity={0.8}
-                            >
-                                <Ionicons name="logo-youtube" size={20} color="#FFF" style={{ marginRight: 8 }} />
-                                <Text style={styles.openYoutubeBtnText}>Open in YouTube</Text>
-                            </TouchableOpacity>
+                            {activeItem.platform === 'books' ? (
+                                <ScrollView contentContainerStyle={{ padding: spacing.lg }}>
+                                    <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text, marginBottom: spacing.md }}>
+                                        Book Summary
+                                    </Text>
+                                    <Text style={{ fontSize: 16, lineHeight: 26, color: colors.textSecondary }}>
+                                        {activeItem.description || "No summary available for this book."}
+                                    </Text>
+                                </ScrollView>
+                            ) : (
+                                <>
+                                    <WebView
+                                        source={{
+                                            uri: getEmbedUrl(activeItem),
+                                        }}
+                                        style={styles.webview}
+                                        allowsFullscreenVideo
+                                        javaScriptEnabled
+                                        domStorageEnabled
+                                        mediaPlaybackRequiresUserAction={false}
+                                        userAgent="Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+                                    />
+                                    {/* External platform link button */}
+                                    <TouchableOpacity
+                                        style={[styles.openYoutubeBtn, { backgroundColor: PLATFORM_ICONS[activeItem.platform].color }]}
+                                        onPress={() => Linking.openURL(getPlatformUrl(activeItem))}
+                                        activeOpacity={0.8}
+                                    >
+                                        <Ionicons name={PLATFORM_ICONS[activeItem.platform].name} size={20} color="#FFF" style={{ marginRight: 8 }} />
+                                        <Text style={styles.openYoutubeBtnText}>
+                                            Open in {activeItem.platform.charAt(0).toUpperCase() + activeItem.platform.slice(1)}
+                                        </Text>
+                                    </TouchableOpacity>
+                                </>
+                            )}
                         </View>
                     )}
                 </SafeAreaView>
@@ -384,6 +489,23 @@ export default function ExploreScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+    },
+    platformTabsContainer: {
+        flexDirection: 'row',
+        paddingHorizontal: spacing.md,
+        borderBottomWidth: 1,
+        marginBottom: spacing.sm,
+    },
+    platformTab: {
+        flex: 1,
+        alignItems: 'center',
+        paddingVertical: spacing.md,
+        borderBottomWidth: 2,
+        borderBottomColor: 'transparent',
+    },
+    platformTabText: {
+        fontSize: 13,
+        marginTop: 2,
     },
 
     // ── Header ──────────────────────────────────────────

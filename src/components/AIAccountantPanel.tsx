@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform, SafeAreaView, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform, SafeAreaView, Alert, Modal, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInUp, FadeIn, SlideInRight, SlideOutLeft } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -241,6 +241,7 @@ interface Props {
   period: AggregatePeriod;
   currentConversationId: string | null;
   onConversationCreated: (id: string | null) => void;
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
 }
 
 // Remove common Markdown tokens from AI responses for plain text display
@@ -274,7 +275,7 @@ function sanitizeMarkdown(text: string): string {
   return t.trim();
 }
 
-export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConversationId, onConversationCreated }) => {
+export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConversationId, onConversationCreated, onScroll }) => {
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -285,7 +286,7 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConv
   const [limitStatus, setLimitStatus] = useState<{ allowed: boolean; remaining: number }>({ allowed: true, remaining: 3 });
   const [contextCache, setContextCache] = useState<string | null>(null);
   const [lastContextTime, setLastContextTime] = useState<number>(0);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<any>(null);
   const inputRef = useRef<TextInput>(null);
 
   // Load existing conversation or prompt status
@@ -532,13 +533,15 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConv
         style={styles.keyboardView}
       >
         {/* Chat Messages */}
-        <ScrollView
+        <Animated.ScrollView
           ref={scrollRef}
           style={styles.messagesContainer}
           contentContainerStyle={[styles.messagesContent, { paddingBottom: Math.max(20, insets.bottom + 20) }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
         >
           {messages.map((message, index) => (
             <Animated.View
@@ -597,7 +600,7 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConv
               </View>
             </Animated.View>
           )}
-        </ScrollView>
+        </Animated.ScrollView>
 
         {/* Input Bar */}
         <View style={[styles.inputContainer, { paddingBottom: Math.max(90, insets.bottom + 66) }]}>

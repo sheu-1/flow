@@ -28,6 +28,9 @@
       "permissions": [
         "READ_SMS",
         "RECEIVE_SMS",
+        "RECEIVE_BOOT_COMPLETED",
+        "READ_SMS",
+        "RECEIVE_SMS",
         "RECEIVE_BOOT_COMPLETED"
       ],
       "package": "com.alexsheunda.cashflowtrackernew"
@@ -61,6 +64,12 @@
       "eas": {
         "projectId": "425bf3aa-63e7-4894-a7f0-741922035eff"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/425bf3aa-63e7-4894-a7f0-741922035eff"
     }
   }
 }

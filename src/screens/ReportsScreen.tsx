@@ -21,6 +21,7 @@ import { Transaction } from '../types';
 import { Logger } from '../utils/Logger';
 // Using DateFilterContext for filtered transactions
 import supabase from '../lib/supabase';
+import { useTabScroll } from '../contexts/TabScrollContext';
 
 export default function ReportsScreen() {
   const colors = useThemeColors();
@@ -42,9 +43,11 @@ export default function ReportsScreen() {
   const chartScrollRef = useRef<ScrollView>(null);
   const [windowRange, setWindowRange] = useState<{ start: Date; end: Date } | null>(null);
 
-  // Shared values for toggle animation
   const incomeOpacity = useSharedValue(1);
   const expenseOpacity = useSharedValue(0);
+
+  // Scroll handler for auto-hiding tab bar
+  const { onScroll } = useTabScroll();
 
   // Date filtering from shared context
   const {
@@ -419,12 +422,14 @@ export default function ReportsScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-      <ScrollView
+      <Animated.ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
         }
         stickyHeaderIndices={[1]} // Make the period selector (index 1) sticky
+        onScroll={onScroll}
+        scrollEventThrottle={16}
       >
         {/* Scrollable Header */}
         <View style={[styles.header, { backgroundColor: colors.background }]}>
@@ -1047,7 +1052,7 @@ export default function ReportsScreen() {
             </View>
           )}
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
 
       {/* Detailed Period Selector */}
       <DetailedPeriodSelector
