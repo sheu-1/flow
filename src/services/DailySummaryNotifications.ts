@@ -55,6 +55,7 @@ export async function scheduleDailySummaryNotification(userId: string): Promise<
 
     // 1. Schedule 9 AM notification - Daily Summary
     const morningNotificationId = await Notifications.scheduleNotificationAsync({
+      identifier: 'daily_morning',
       content: {
         title: 'Cash Flow Summary',
         body: 'Tap to view your daily financial summary',
@@ -70,6 +71,7 @@ export async function scheduleDailySummaryNotification(userId: string): Promise<
 
     // 2. Schedule 12 PM (Midday) notification - Refresh Reminder
     const middayNotificationId = await Notifications.scheduleNotificationAsync({
+      identifier: 'daily_midday',
       content: {
         title: '🔄 Quick Refresh',
         body: 'All it takes is a quick refresh. Refresh to load your transactions',
@@ -85,6 +87,7 @@ export async function scheduleDailySummaryNotification(userId: string): Promise<
 
     // 3. Schedule 9 PM (Evening) notification - Cashflow Summary
     const eveningNotificationId = await Notifications.scheduleNotificationAsync({
+      identifier: 'daily_evening',
       content: {
         title: '📊 Evening Check-in',
         body: 'Come and see how your cashflow summary looks like today',

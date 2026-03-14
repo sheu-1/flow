@@ -3,7 +3,7 @@
     "name": "Cashflow Tracker",
     "slug": "cashflow-tracker",
     "owner": "alexaaaa",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -28,9 +28,11 @@
       "permissions": [
         "READ_SMS",
         "RECEIVE_SMS",
-        "RECEIVE_BOOT_COMPLETED"
+        "RECEIVE_BOOT_COMPLETED",
+        "com.google.android.gms.permission.AD_ID"
       ],
-      "package": "com.alexsheunda.cashflowtrackernew"
+      "package": "com.alexsheunda.cashflowtrackernew",
+      "versionCode": 3
     },
     "web": {
       "favicon": "./assets/favicon.png"
