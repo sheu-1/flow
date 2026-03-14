@@ -341,8 +341,12 @@ export default function DashboardScreen() {
         const clampedStart = dayStart < rangeStart ? rangeStart : dayStart;
         const clampedEnd = dayEnd > rangeEnd ? rangeEnd : dayEnd;
 
-        // Show day number on x-axis
-        labels.push(String(d));
+        // Show day number on x-axis; space them out to avoid crowding (every 5 days)
+        if (d === 1 || d === 5 || d === 10 || d === 15 || d === 20 || d === 25 || d === 30 || d === daysInMonth) {
+          labels.push(String(d));
+        } else {
+          labels.push('');
+        }
 
         const bucket = filteredTransactions.filter((t) => {
           const dt = new Date(t.date);

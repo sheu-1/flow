@@ -70,6 +70,7 @@
     "@babel/core": "^7.25.0",
     "@expo/cli": "^54.0.10",
     "@types/react": "~19.1.10",
+    "baseline-browser-mapping": "^2.10.7",
     "typescript": "~5.9.2"
   },
   "private": true

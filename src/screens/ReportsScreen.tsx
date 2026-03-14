@@ -204,7 +204,12 @@ export default function ReportsScreen() {
         for (let d = 1; d <= daysInMonth; d++) {
           const dayStart = new Date(currentYear, currentMonth, d, 0, 0, 0, 0);
           const dayEnd = new Date(currentYear, currentMonth, d, 23, 59, 59, 999);
-          labels.push(String(d));
+          // Show day number on x-axis; space them out to avoid crowding (every 5 days)
+          if (d === 1 || d === 5 || d === 10 || d === 15 || d === 20 || d === 25 || d === 30 || d === daysInMonth) {
+            labels.push(String(d));
+          } else {
+            labels.push('');
+          }
           const dayTx = txList.filter(t => { const dt = new Date(t.date); return dt >= dayStart && dt <= dayEnd; });
           income.push(dayTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
           expense.push(dayTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));

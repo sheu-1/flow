@@ -35,11 +35,15 @@ const SYSTEM_PROMPT = `You are an AI Money Buddy embedded in a personal cash flo
 In every interaction, your goal is to make financial awareness simple, personal, and empowering — helping the user stay on top of their money flow and build healthy habits.
 `;
 
+const FALLBACK_MODEL = 'google/gemini-2.0-flash-lite-preview-02-05:free';
+
 function getOrgApiKey(): string | undefined {
   // EXPO_PUBLIC_ vars are accessible at runtime in Expo
   // Do NOT log this value.
   return process.env.EXPO_PUBLIC_OPENROUTER_API_KEY;
 }
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export async function chat(messages: ChatMessage[], context: string): Promise<string> {
   const orgKey = getOrgApiKey();
@@ -49,34 +53,74 @@ export async function chat(messages: ChatMessage[], context: string): Promise<st
     throw new Error('No API key configured. Ask the app owner to set EXPO_PUBLIC_OPENROUTER_API_KEY, or add your own in Settings > AI Settings.');
   }
 
-  const body = {
-    model: MODEL,
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'system', content: `CONTEXT:\n${context}` },
-      ...messages,
-    ],
-    temperature: 0.2,
-    max_tokens: MAX_TOKENS,
-  };
+  const modelsToTry = [MODEL, FALLBACK_MODEL];
+  let lastError: any = null;
 
-  const res = await fetch(OPENROUTER_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-      'HTTP-Referer': 'cashflow-tracker',
-      'X-Title': 'Cashflow Tracker AI Accountant',
-    },
-    body: JSON.stringify(body),
-  });
+  for (const model of modelsToTry) {
+    let retries = 0;
+    const maxRetries = model === MODEL ? 2 : 1; // Retry primary more than fallback
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`LLM request failed (${res.status}): ${text}`);
+    while (retries <= maxRetries) {
+      try {
+        const body = {
+          model: model,
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: `CONTEXT:\n${context}` },
+            ...messages,
+          ],
+          temperature: 0.2,
+          max_tokens: MAX_TOKENS,
+        };
+
+        const res = await fetch(OPENROUTER_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+            'HTTP-Referer': 'cashflow-tracker',
+            'X-Title': 'Cashflow Tracker AI Accountant',
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+          const text = await res.text();
+          const status = res.status;
+
+          // Retry on 5xx errors or 429 (rate limit)
+          if ((status >= 500 || status === 429) && retries < maxRetries) {
+            retries++;
+            const delay = Math.pow(2, retries) * 1000;
+            console.log(`LLM request failed (${status}). Retrying in ${delay}ms (Attempt ${retries}/${maxRetries}) with model ${model}...`);
+            await sleep(delay);
+            continue;
+          }
+          if (status === 402) {
+            throw new Error(`Insufficient Credits (402): Your OpenRouter account balance is too low for this model. Please add credits or use a free model.`);
+          }
+          throw new Error(`LLM request failed (${status}): ${text}`);
+        }
+
+        const json = await res.json();
+        const content: string | undefined = json?.choices?.[0]?.message?.content;
+        if (!content) throw new Error('Empty response from model');
+        return content.trim();
+
+      } catch (e: any) {
+        lastError = e;
+        console.warn(`LLM attempt failed with model ${model}:`, e.message);
+
+        // If it was a 4xx error (other than 429), don't bother retrying or switching models
+        if (e.message.includes('code: 4') && !e.message.includes('429')) {
+          throw e;
+        }
+
+        // Break inner loop and try next model if retries exhausted
+        break;
+      }
+    }
   }
-  const json = await res.json();
-  const content: string | undefined = json?.choices?.[0]?.message?.content;
-  if (!content) throw new Error('Empty response from model');
-  return content.trim();
+
+  throw lastError || new Error('All LLM attempts failed');
 }

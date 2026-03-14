@@ -28,9 +28,6 @@
       "permissions": [
         "READ_SMS",
         "RECEIVE_SMS",
-        "RECEIVE_BOOT_COMPLETED",
-        "READ_SMS",
-        "RECEIVE_SMS",
         "RECEIVE_BOOT_COMPLETED"
       ],
       "package": "com.alexsheunda.cashflowtrackernew"
@@ -59,8 +56,8 @@
       ]
     ],
     "extra": {
-      "SUPABASE_URL": "https://mquwuf1dsbcbkdt4.supabase.co",
-      "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1xdXd1ZjFkc2JjYmtkdDQiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTcyOTY3MzEzMCwiZXhwIjoyMDQ1MjQ5MTMwfQ.ZfB1tD",
+      "SUPABASE_URL": "https://jmquwhxdtfsksbctqkdi.supabase.co",
+      "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImptcXV3aHhkdGZza3NiY3Rxa2RpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2OTcwOTQsImV4cCI6MjA3NTI3MzA5NH0.GbGULB-gs55jakvoD2cJ09P23tHFS-oFAp07umqsZQE",
       "eas": {
         "projectId": "425bf3aa-63e7-4894-a7f0-741922035eff"
       }
