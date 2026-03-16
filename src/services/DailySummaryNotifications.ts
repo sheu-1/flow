@@ -69,22 +69,6 @@ export async function scheduleDailySummaryNotification(userId: string): Promise<
     });
     console.log('[DailySummaryNotifications] 9 AM notification ID:', morningNotificationId);
 
-    // 2. Schedule 12 PM (Midday) notification - Refresh Reminder
-    const middayNotificationId = await Notifications.scheduleNotificationAsync({
-      identifier: 'daily_midday',
-      content: {
-        title: '🔄 Quick Refresh',
-        body: 'All it takes is a quick refresh. Refresh to load your transactions',
-        data: { type: 'refresh_reminder', userId },
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DAILY,
-        hour: 12,
-        minute: 0,
-      },
-    });
-    console.log('[DailySummaryNotifications] 12 PM notification ID:', middayNotificationId);
-
     // 3. Schedule 9 PM (Evening) notification - Cashflow Summary
     const eveningNotificationId = await Notifications.scheduleNotificationAsync({
       identifier: 'daily_evening',

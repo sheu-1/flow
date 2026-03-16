@@ -260,7 +260,8 @@ export async function insertTransactionEnhanced(
         source: 'sms',
         parsed_at: new Date().toISOString(),
         original_sender: parsed.sender,
-        auto_categorized: !!categoryId
+        auto_categorized: !!categoryId,
+        ...(parsed.charge_type ? { charge_type: parsed.charge_type } : {}),
       },
       date: parsed.dateISO || new Date().toISOString(),
     };

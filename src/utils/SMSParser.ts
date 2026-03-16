@@ -11,6 +11,8 @@ export type ParsedTransaction = {
   reference?: string | null;
   message: string;
   dateISO?: string;
+  /** If set, this transaction represents a charge/fee rather than a user transaction */
+  charge_type?: 'transaction_cost' | 'access_fee';
 };
 
 // Regex patterns
@@ -136,10 +138,34 @@ export function parseTransactionFromSms(body: string, dateStr?: string): ParsedT
   const results: ParsedTransaction[] = [];
   const dateISO = dateStr ? new Date(dateStr).toISOString() : undefined;
 
-  // 1. Check for Fuliza - COMPLETELY IGNORE (Per user request)
+  // 1. Check for Fuliza — extract ONLY the access fee as a charge
   if (/fuliza/i.test(body)) {
-    console.log('[SMS Parser] Fuliza message detected and ignored (Access Fee & Principal disabled)');
-    return null;
+    const accessFeePatterns = [
+      /access\s*fee(?:\s*charged)?(?:\s*(?:is|of))?\s*(?:Ksh\.?|KES|KSH)\s*([\d,]+(?:\.\d{1,2})?)/i,
+      /(?:charged|charge)\s*(?:an\s*)?access\s*fee\s*(?:of\s*)?\s*(?:Ksh\.?|KES|KSH)\s*([\d,]+(?:\.\d{1,2})?)/i,
+    ];
+    for (const pattern of accessFeePatterns) {
+      const m = body.match(pattern);
+      if (m && m[1]) {
+        const fee = parseFloat(m[1].replace(/,/g, ''));
+        if (Number.isFinite(fee) && fee > 0) {
+          const ref = parseReference(body);
+          results.push({
+            amount: fee,
+            type: 'debit',
+            sender: 'Fuliza Access Fee',
+            reference: ref,
+            message: body,
+            dateISO,
+            charge_type: 'access_fee',
+          });
+          console.log(`[SMS Parser] Fuliza access fee extracted: ${fee}`);
+          break;
+        }
+      }
+    }
+    // Only return the access fee for Fuliza messages; do NOT parse the principal amount
+    return results.length > 0 ? results : null;
   }
 
   // 2. Main Transaction Parsing
@@ -157,6 +183,8 @@ export function parseTransactionFromSms(body: string, dateStr?: string): ParsedT
         dateISO,
       });
       console.log('[SMS Parser] Parsed airtime recharge:', results);
+      // Also extract transaction cost if present
+      extractTransactionCost(body, parseReference(body), dateISO, results);
       return results.length > 0 ? results : null;
     }
   }
@@ -176,8 +204,6 @@ export function parseTransactionFromSms(body: string, dateStr?: string): ParsedT
       (sender != null && (/mpesa|m-pesa/i.test(sender) || /bank/i.test(sender) || /airtel\s*money/i.test(sender) || /equity/i.test(sender) || /disbursement/i.test(sender)));
 
     if (reference || isFromKnownService) {
-      // Check if this is the SAME amount/event as the Airtime one? (We already returned if airtime matched)
-
       results.push({
         amount,
         type,
@@ -194,7 +220,43 @@ export function parseTransactionFromSms(body: string, dateStr?: string): ParsedT
     console.log('[SMS Parser] Generic parsing skipped - field extracting failed:', { amount, type });
   }
 
+  // 3. Extract transaction cost from standard M-PESA messages (separate from main amount)
+  extractTransactionCost(body, reference, dateISO, results);
+
   return results.length > 0 ? results : null;
+}
+
+/**
+ * Extract "Transaction cost, KshXX.XX" from M-PESA messages and push as a charge entry.
+ * Only adds if cost > 0. Safe to call multiple times; it won't duplicate within the same results array.
+ */
+function extractTransactionCost(
+  body: string,
+  reference: string | null | undefined,
+  dateISO: string | undefined,
+  results: ParsedTransaction[]
+): void {
+  // Already has a transaction_cost entry? Skip.
+  if (results.some(r => r.charge_type === 'transaction_cost')) return;
+
+  const costMatch = body.match(
+    /transaction\s+cost[,:]?\s*(?:Ksh\.?|KES|KSH)\s*([\d,]+(?:\.\d{1,2})?)/i
+  );
+  if (costMatch && costMatch[1]) {
+    const cost = parseFloat(costMatch[1].replace(/,/g, ''));
+    if (Number.isFinite(cost) && cost > 0) {
+      results.push({
+        amount: cost,
+        type: 'debit',
+        sender: 'M-PESA Transaction Cost',
+        reference: reference ?? null,
+        message: body,
+        dateISO,
+        charge_type: 'transaction_cost',
+      });
+      console.log(`[SMS Parser] Transaction cost extracted: ${cost}`);
+    }
+  }
 }
 
 // Sample messages and expected outputs (unit-test style examples)

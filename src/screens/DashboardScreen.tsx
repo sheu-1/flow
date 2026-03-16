@@ -15,9 +15,10 @@ import { DetailedPeriodSelector } from '../components/DetailedPeriodSelector';
 import { ProfileMenu } from '../components/ProfileMenu';
 import NotificationPanel from '../components/NotificationPanel';
 import { TransactionCard } from '../components/TransactionCard';
-import { FinancialHealthScore } from '../components/FinancialHealthScore';
+import TransactionChargesCard from '../components/TransactionChargesCard';
 import { SmartInsights } from '../components/SmartInsights';
 import { SavingsGoals } from '../components/SavingsGoals';
+import { BannerAd } from '../components/BannerAd';
 import { spacing, fontSize, borderRadius } from '../theme/colors';
 import { useDateFilterContext } from '../contexts/DateFilterContext';
 import { getSubscriptionStatus, shouldShowSubscriptionPrompt } from '../services/SubscriptionManager';
@@ -583,14 +584,8 @@ export default function DashboardScreen() {
 
           <AnimatedPieChart moneyIn={moneyIn} moneyOut={moneyOut} />
 
-          {/* Financial Health Score */}
-          <FinancialHealthScore
-            totalIncome={moneyIn}
-            totalExpense={moneyOut}
-            savingsRate={moneyIn > 0 ? ((moneyIn - moneyOut) / moneyIn) * 100 : 0}
-            transactionCount={filteredTransactions.length}
-            onPress={() => console.log('Health score pressed')}
-          />
+          {/* Transaction Charges */}
+          <TransactionChargesCard />
 
           {/* Smart Insights */}
           <SmartInsights
@@ -667,6 +662,12 @@ export default function DashboardScreen() {
               </View>
             )}
           </View>
+
+          {/* Banner Ad - visible when scrolling down */}
+          <BannerAd />
+
+          {/* Bottom spacing for tab bar */}
+          <View style={{ height: 100 }} />
         </View>
       </Animated.ScrollView>
 

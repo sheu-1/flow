@@ -281,6 +281,7 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConv
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const [promptStatus, setPromptStatus] = useState<{ count: number; isPremium: boolean }>({ count: 0, isPremium: false });
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [limitStatus, setLimitStatus] = useState<{ allowed: boolean; remaining: number }>({ allowed: true, remaining: 3 });
@@ -359,7 +360,7 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConv
   };
 
   const send = useCallback(async () => {
-    if (!input.trim() || loading) return;
+    if (!input.trim() || isSending) return;
 
     // Check prompt limit
     try {
@@ -378,7 +379,7 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConv
 
     setMessages((m) => [...m, userMsg]);
     setInput('');
-    setLoading(true);
+    setIsSending(true);
 
     try {
       let activeId = currentConversationId;
@@ -394,7 +395,13 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConv
       }
 
       // Save user message
-      await AIChatService.saveMessage(activeId, userMsg);
+      if (!currentConversationId && activeId) {
+        // If it's a completely new conversation, save all messages currently in state (like the greeting) plus the user message
+        await saveChatHistory(activeId, [...messages, userMsg]);
+      } else if (activeId) {
+        // Otherwise just append the new user message
+        await AIChatService.saveMessage(activeId, userMsg);
+      }
 
       const context = await contextPromise;
       // Limit conversation history to last 10 messages for better performance
@@ -403,10 +410,10 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConv
       const assistantMsg: ChatMessage = { role: 'assistant', content: reply };
       setMessages((m) => [...m, assistantMsg]);
 
-      // Save to conversation
+      // Append assistant response to database
       if (activeId) {
-        await saveChatHistory(activeId, [...messages, userMsg, assistantMsg]);
-        // Ensure state is synced if it wasn't already (though we called onConversationCreated earlier)
+        await AIChatService.saveMessage(activeId, assistantMsg);
+        // Ensure state is synced if it wasn't already
         if (activeId !== currentConversationId) {
           onConversationCreated(activeId);
         }
@@ -443,9 +450,9 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConv
         );
       }
     } finally {
-      setLoading(false);
+      setIsSending(false);
     }
-  }, [input, loading, messages, contextPromise, userId, currentConversationId, promptStatus, onConversationCreated]);
+  }, [input, isSending, messages, contextPromise, userId, currentConversationId, promptStatus, onConversationCreated]);
 
   const handleUnlock = async () => {
     // Logic to show rewarded ad
@@ -592,7 +599,7 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConv
             </Animated.View>
           )}
 
-          {loading && (
+          {isSending && (
             <Animated.View entering={FadeIn} style={styles.loadingWrapper}>
               <View style={[styles.loadingBubble, { backgroundColor: colors.surface }]}>
                 <ActivityIndicator color={colors.primary} size="small" />
@@ -644,7 +651,7 @@ export const AIAccountantPanel: React.FC<Props> = ({ userId, period, currentConv
                 styles.sendButton,
                 { backgroundColor: colors.primary, opacity: input.trim() ? 1 : 0.5 }
               ]}
-              disabled={loading || !input.trim()}
+              disabled={isSending || loading || !input.trim()}
             >
               <Ionicons name="send" size={18} color={colors.background} />
             </TouchableOpacity>

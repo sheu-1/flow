@@ -26,6 +26,7 @@ import ExportDataModal from '../components/ExportDataModal';
 import { useDateFilterContext } from '../contexts/DateFilterContext';
 import { ScanService } from '../services/ScanService';
 import { useTabScroll } from '../contexts/TabScrollContext'; // Add this import
+import { BannerAd } from '../components/BannerAd';
 
 const ITEMS_PER_PAGE = 100;
 
@@ -368,6 +369,7 @@ function TransactionsScreen() {
             }
             onScroll={onScroll}
             scrollEventThrottle={16}
+            ListFooterComponent={<BannerAd />}
           />
         </>
       ) : (

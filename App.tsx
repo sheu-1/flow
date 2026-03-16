@@ -40,7 +40,7 @@ import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
 // import { SplashScreen as CustomSplashScreen } from './src/components/SplashScreen'; // Commented out
 // Debug panel removed from production UI
 import { SubscriptionProvider } from './src/contexts/SubscriptionContext';
-import { BannerAd } from './src/components/BannerAd';
+
 
 // Keep the native splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync().catch(() => {
@@ -186,7 +186,6 @@ function MainTabNavigator() {
           }}
         />
       </Tab.Navigator>
-      <BannerAd />
     </TabScrollProvider>
   );
 }

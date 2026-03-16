@@ -29,6 +29,7 @@ import {
 import { getRecommendedContent, RecommendedContent } from '../services/VideoRecommendationService';
 import { useAuth } from '../hooks/useAuth';
 import { useTabScroll } from '../contexts/TabScrollContext';
+import { BannerAd } from '../components/BannerAd';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_MARGIN = spacing.md;
@@ -399,6 +400,7 @@ export default function ExploreScreen() {
                 keyExtractor={(item) => item.id}
                 renderItem={renderContentCard}
                 ListHeaderComponent={ListHeader}
+                ListFooterComponent={<BannerAd />}
                 contentContainerStyle={styles.listContent}
                 showsVerticalScrollIndicator={false}
                 onScroll={onScroll}

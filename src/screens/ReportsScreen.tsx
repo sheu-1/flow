@@ -19,9 +19,11 @@ import { useCurrency } from '../services/CurrencyProvider';
 import { useDateFilterContext } from '../contexts/DateFilterContext';
 import { Transaction } from '../types';
 import { Logger } from '../utils/Logger';
+import { BannerAd } from '../components/BannerAd';
 // Using DateFilterContext for filtered transactions
 import supabase from '../lib/supabase';
 import { useTabScroll } from '../contexts/TabScrollContext';
+// Used to be TransactionChargesCard import here
 
 export default function ReportsScreen() {
   const colors = useThemeColors();
@@ -1056,6 +1058,14 @@ export default function ReportsScreen() {
               </View>
             </View>
           )}
+
+          {/* Used to be TransactionChargesCard here */}
+
+          {/* Banner Ad - visible when scrolling down */}
+          <BannerAd />
+
+          {/* Bottom spacing for tab bar */}
+          <View style={{ height: 100 }} />
         </View>
       </Animated.ScrollView>
 

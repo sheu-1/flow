@@ -236,11 +236,11 @@ async function clearUserCaches(userId: string): Promise<void> {
   try {
     // Clear transaction caches
     const patterns = [
-      `transactions_${userId}_*`,
-      `aggregates_${userId}_*`,
-      `category_breakdown_${userId}_*`,
-      `income_breakdown_${userId}_*`,
-      `categories_breakdown_${userId}_*`
+      `transactions_${userId}_`,
+      `aggregates_${userId}_`,
+      `category_breakdown_${userId}_`,
+      `income_breakdown_${userId}_`,
+      `categories_breakdown_${userId}_`
     ];
     
     for (const pattern of patterns) {
