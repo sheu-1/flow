@@ -230,6 +230,12 @@ export default function DashboardScreen() {
       }
     }
 
+    if (selectedPreset === 'custom') {
+      startDate = new Date(rangeStart);
+      endDate = new Date(rangeEnd);
+      periodLabel = `${fmt(startDate, false)} - ${fmt(endDate)}`;
+    }
+
     const periodTransactions = filteredTransactions.filter(t => {
       const txDate = new Date(t.date);
       return txDate >= startDate && txDate <= endDate;

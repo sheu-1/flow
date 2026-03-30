@@ -57,6 +57,7 @@ export async function getTransactions(userId: string, params: GetTransactionsPar
     .from('transactions')
     .select('*')
     .eq('user_id', userId)
+    .is('metadata->charge_type', null)
     .order('date', { ascending: false })
     .limit(limit)
     .range(offset, offset + limit - 1);

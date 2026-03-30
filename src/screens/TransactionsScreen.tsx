@@ -269,6 +269,27 @@ function TransactionsScreen() {
     }
   };
 
+  const handleInlineCategorySelect = async (txId: string, category: string) => {
+    if (!user?.id) return;
+    
+    // Optimistically update local state immediately
+    setTransactions(prev => 
+      prev.map(tx => tx.id === txId ? { ...tx, category } : tx)
+    );
+
+    try {
+      const result = await updateTransaction(user.id, txId, { category });
+      if (!result.success) throw new Error(result.error?.message || 'Update failed');
+      await invalidateUserCaches(user.id);
+      // Wait for background refresh so the UI doesn't stutter right away just for an inline tap
+      refresh(false);
+    } catch (e: any) {
+      // Revert on failure
+      refresh(false);
+      Alert.alert('Category Update Failed', e?.message || 'Could not update category');
+    }
+  };
+
   const handleDeleteTransaction = (tx: Transaction) => {
     Alert.alert(
       'Delete Transaction',
@@ -301,6 +322,8 @@ function TransactionsScreen() {
     <Animated.View entering={FadeInUp.delay(Math.min(index, 20) * 20).springify()}>
       <TransactionCard
         transaction={item}
+        showInlineCategories={true}
+        onSelectCategory={(cat) => handleInlineCategorySelect(item.id, cat)}
         onEditCategory={() => onEditCategory(item)}
         onDelete={() => handleDeleteTransaction(item)}
       />

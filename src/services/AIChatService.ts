@@ -118,6 +118,18 @@ export const AIChatService = {
         .single();
 
       if (createError) {
+        if (createError.code === '23505') {
+          // Duplicate key violation - another request initialized it concurrently
+          const { data: existingData, error: fetchError } = await supabase
+            .from('ai_usage')
+            .select('prompt_count, is_premium')
+            .eq('user_id', userId)
+            .single();
+            
+          if (!fetchError && existingData) {
+            return { count: existingData.prompt_count, isPremium: existingData.is_premium };
+          }
+        }
         console.error('Error creating usage record:', createError);
         return { count: 0, isPremium: false };
       }

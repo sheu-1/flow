@@ -10,6 +10,7 @@ import {
   Platform,
   ScrollView,
   Alert,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../hooks/useAuth';
@@ -32,6 +33,7 @@ const AuthScreen: React.FC = () => {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [resetSending, setResetSending] = useState(false);
   const [showResetView, setShowResetView] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
 
   const validateEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -411,10 +413,69 @@ const AuthScreen: React.FC = () => {
         </View>
 
         {/* Footer */}
-        <Text style={[styles.footer, { color: colors.textMuted }]}>
-          By continuing, you agree to our Terms of Service and Privacy Policy
-        </Text>
+        <View style={styles.footerContainer}>
+          <Text style={[styles.footerText, { color: colors.textMuted }]}>
+            By signing up you agree to our{' '}
+            <Text 
+              style={[styles.footerLink, { color: colors.primary }]}
+              onPress={() => setShowTerms(true)}
+            >
+              terms and conditions
+            </Text>
+            . We do not share data, it's only used for the core functionality of the app.
+          </Text>
+        </View>
       </ScrollView>
+
+      {/* Terms and Privacy Policy Modal */}
+      <Modal
+        visible={showTerms}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowTerms(false)}
+      >
+        <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Terms & Privacy Policy</Text>
+            <TouchableOpacity onPress={() => setShowTerms(false)} style={styles.closeButton}>
+              <Ionicons name="close" size={28} color={colors.text} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={styles.modalScrollContent} showsVerticalScrollIndicator={false}>
+            <Text style={[styles.modalText, { color: colors.text }]}>
+              <Text style={styles.boldText}>Privacy Policy & Terms of Service</Text>
+              {'\n\n'}
+              Last Updated: March 2026
+              {'\n\n'}
+              Welcome to Cashflow Tracker. By using our application, you agree to the following terms and conditions. We are committed to protecting your privacy and ensuring your personal data is handled securely and in compliance with the <Text style={styles.boldText}>Kenya Data Protection Act, 2019</Text>.
+              {'\n\n'}
+              <Text style={styles.boldText}>1. Data Collection and Usage</Text>
+              {'\n'}
+              Cashflow Tracker collects and processes your personal data strictly to provide the core functionality of the app, which is logging and organizing your financial transactions. The app may request sensitive permissions (such as reading SMS messages) exclusively to automatically extract transaction receipts (e.g., M-PESA, bank notifications) to help you track your expenses and budget seamlessly.
+              {'\n\n'}
+              <Text style={styles.boldText}>2. We Do Not Share Your Data</Text>
+              {'\n'}
+              Your privacy is our priority. We <Text style={styles.boldText}>do not</Text> sell, rent, broker, or otherwise transfer your personal data, transaction history, or SMS logs to any third-party marketing agencies, advertisers, or data brokers. The data processed by our application is used exclusively for providing you with an automated financial tracking experience.
+              {'\n\n'}
+              <Text style={styles.boldText}>3. Compliance with Kenya Data Protection Act, 2019</Text>
+              {'\n'}
+              In accordance with the Data Protection Act (DPA), we assure you that your data is processed lawfully, fairly, and transparently. You have the right to:
+              {'\n'}• Access your personal data.
+              {'\n'}• Request correction of inaccurate data.
+              {'\n'}• Request deletion of your personal data (Right to be Forgotten).
+              {'\n'}• Object to the processing of your data.
+              {'\n\n'}
+              <Text style={styles.boldText}>4. Data Security</Text>
+              {'\n'}
+              We implement robust technical and organizational measures to safeguard your data against unauthorized access, loss, or destruction. Your data is synced securely to your personal account using industry-standard encryption.
+              {'\n\n'}
+              <Text style={styles.boldText}>5. User Consent</Text>
+              {'\n'}
+              By creating an account and utilizing our SMS-parsing features, you explicitly consent to the parsing and localized storage of your automated financial receipts. You may revoke these permissions at any time through the app's Profile settings or your device's System permissions.
+            </Text>
+          </ScrollView>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };
@@ -556,10 +617,47 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
   },
-  footer: {
+  footerContainer: {
+    marginTop: 24,
+    paddingHorizontal: 12,
+  },
+  footerText: {
     fontSize: 12,
     textAlign: 'center',
-    marginTop: 24,
+    lineHeight: 18,
+  },
+  footerLink: {
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
+  modalContainer: {
+    flex: 1,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  closeButton: {
+    padding: 4,
+  },
+  modalScrollContent: {
+    padding: 24,
+    paddingBottom: 40,
+  },
+  modalText: {
+    fontSize: 15,
+    lineHeight: 24,
+  },
+  boldText: {
+    fontWeight: 'bold',
   },
 });
 

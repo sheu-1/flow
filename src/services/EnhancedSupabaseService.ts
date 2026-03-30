@@ -227,6 +227,40 @@ async function detectDuplicate(userId: string, parsed: ParsedTransaction) {
   return null;
 }
 
+export async function insertCharge(
+  parsed: ParsedTransaction,
+  userId: string
+): Promise<{ success: boolean; error?: any; skipped?: boolean; categoryCreated?: boolean }> {
+  try {
+    const duplicate = await detectDuplicate(userId, parsed);
+    if (duplicate) {
+      return { success: true, skipped: true };
+    }
+
+    const payload = {
+      user_id: userId,
+      amount: parsed.amount,
+      charge_type: parsed.charge_type,
+      reference_number: parsed.reference || null,
+      description: `Charge for ${parsed.sender || 'transaction'}`,
+      date: parsed.dateISO || new Date().toISOString(),
+      metadata: {
+        reference: parsed.reference,
+        message: parsed.message,
+        source: 'sms',
+        parsed_at: new Date().toISOString(),
+      }
+    };
+
+    const { error } = await supabase.from('charges').insert([payload]);
+    if (error) throw error;
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error };
+  }
+}
+
 /**
  * Enhanced transaction insertion with smart categorization
  */
@@ -235,6 +269,11 @@ export async function insertTransactionEnhanced(
   userId: string
 ): Promise<{ success: boolean; error?: any; skipped?: boolean; categoryCreated?: boolean }> {
   try {
+    // Route charges to the new charges table
+    if (parsed.charge_type) {
+      return await insertCharge(parsed, userId);
+    }
+
     const duplicate = await detectDuplicate(userId, parsed);
     if (duplicate) {
       return { success: true, skipped: true };

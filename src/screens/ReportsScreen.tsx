@@ -106,7 +106,10 @@ export default function ReportsScreen() {
       let wStart = new Date(start);
       let wEnd = new Date(end);
 
-      if (period === 'daily') {
+      if (selectedPreset === 'custom') {
+        wStart = new Date(start);
+        wEnd = new Date(end);
+      } else if (period === 'daily') {
         // Daily: 24 hourly buckets for the last day in range (matching Dashboard logic)
         const dayStart = new Date(end);
         dayStart.setHours(0, 0, 0, 0);
@@ -175,8 +178,31 @@ export default function ReportsScreen() {
 
       const txList = fetchedTransactions || [];
 
-      // Re-run the bucketing logic using the FETCHED data
-      if (period === 'daily') {
+      if (selectedPreset === 'custom') {
+        const daysDiff = Math.ceil((wEnd.getTime() - wStart.getTime()) / (1000 * 60 * 60 * 24));
+        const limitDays = Math.min(daysDiff, 90); // Hard limit to avoid blowing up memory with massive ranges
+        for (let i = 0; i <= limitDays; i++) {
+          const dayStart = new Date(wStart); dayStart.setDate(wStart.getDate() + i); dayStart.setHours(0, 0, 0, 0);
+          const dayEnd = new Date(dayStart); dayEnd.setHours(23, 59, 59, 999);
+          
+          if (dayStart > wEnd) break;
+          
+          if (limitDays > 14) {
+            // Decimate labels for wide queries so x-axis isn't crowded
+            if (i === 0 || i === limitDays || i % Math.floor(limitDays / 5) === 0) {
+              labels.push(dayStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+            } else {
+              labels.push('');
+            }
+          } else {
+            labels.push(dayStart.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' }));
+          }
+
+          const dayTx = txList.filter(t => { const dt = new Date(t.date); return dt >= dayStart && dt <= dayEnd; });
+          income.push(dayTx.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0));
+          expense.push(dayTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0));
+        }
+      } else if (period === 'daily') {
         const dayStart = wStart;
         for (let h = 0; h < 24; h++) {
           const hStart = new Date(dayStart); hStart.setHours(h, 0, 0, 0);

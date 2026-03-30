@@ -198,7 +198,7 @@ export const DetailedPeriodSelector: React.FC<DetailedPeriodSelectorProps> = ({
         <Pressable style={[styles.dropdownContainer, { backgroundColor: colors.surface }]} onPress={(e) => e.stopPropagation()}>
           <View style={[styles.dropdownHeader, { borderBottomColor: colors.border }]}>
             <Text style={[styles.dropdownTitle, { color: colors.text }]}>Select Period</Text>
-            {selectedPreset !== 'all' && (
+            {selectedPreset !== 'allTime' && (
               <TouchableOpacity
                 style={[styles.clearButton, { backgroundColor: colors.danger + '15' }]}
                 onPress={() => {

@@ -32,6 +32,7 @@ export default function ProfileScreen() {
   const [feedbackVisible, setFeedbackVisible] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
+  const [smsDisclosureVisible, setSmsDisclosureVisible] = useState(false);
 
   // Check SMS permission status and load transactions on mount
   useEffect(() => {
@@ -174,15 +175,8 @@ export default function ProfileScreen() {
     }
 
     if (value) {
-      // Request permission
-      const granted = await requestSmsPermission();
-      if (granted) {
-        setSmsEnabled(true);
-        Alert.alert('Success', 'SMS permissions granted. The app will now automatically import transactions.');
-      } else {
-        setSmsEnabled(false);
-        Alert.alert('Permission Denied', 'SMS permission is required to automatically import transactions.');
-      }
+      // Show Google Play Prominent Disclosure Modal FIRST
+      setSmsDisclosureVisible(true);
     } else {
       // Don't change state immediately - wait for user confirmation
       Alert.alert(
@@ -203,6 +197,19 @@ export default function ProfileScreen() {
           },
         ]
       );
+    }
+  };
+
+  const proceedWithSmsPermission = async () => {
+    setSmsDisclosureVisible(false);
+    // Request actual OS permission
+    const granted = await requestSmsPermission();
+    if (granted) {
+      setSmsEnabled(true);
+      Alert.alert('Success', 'SMS permissions granted. The app will now automatically import transactions.');
+    } else {
+      setSmsEnabled(false);
+      Alert.alert('Permission Denied', 'SMS permission is required to automatically import transactions.');
     }
   };
 
@@ -440,6 +447,38 @@ export default function ProfileScreen() {
                 ) : (
                   <Text style={[styles.modalButtonText, { color: '#fff' }]}>Send</Text>
                 )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Prominent SMS Disclosure Modal for Google Play Policy */}
+      <Modal
+        visible={smsDisclosureVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSmsDisclosureVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { backgroundColor: colors.surface }]}>
+            <View style={{ alignItems: 'center', marginBottom: spacing.md }}>
+              <Ionicons name="chatbox-ellipses" size={48} color={colors.primary} />
+            </View>
+            <Text style={[styles.modalTitle, { color: colors.text, textAlign: 'center' }]}>SMS Permission Required</Text>
+            
+            <Text style={[styles.modalSubtitle, { color: colors.textSecondary, marginBottom: spacing.lg, fontSize: 15, lineHeight: 22 }]}>
+              Cashflow Tracker <Text style={{ fontWeight: 'bold', color: colors.text }}>collects</Text> and <Text style={{ fontWeight: 'bold', color: colors.text }}>uses</Text> your SMS messages strictly to accurately log financial transactions (like M-PESA receipts) helping you automatically track expenses. 
+              {'\n\n'}
+              This data is never sold or shared, and is only processed to provide you with an automated financial tracking experience.
+            </Text>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={[styles.modalButton, { backgroundColor: colors.border }]} onPress={() => setSmsDisclosureVisible(false)}>
+                <Text style={[styles.modalButtonText, { color: colors.text }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalButton, { backgroundColor: colors.primary }]} onPress={proceedWithSmsPermission}>
+                <Text style={[styles.modalButtonText, { color: '#fff' }]}>Continue</Text>
               </TouchableOpacity>
             </View>
           </View>

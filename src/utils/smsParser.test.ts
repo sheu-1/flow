@@ -18,10 +18,18 @@ export function runSmsParserTests() {
     } else if (!result) {
       ok = false;
     } else {
-      if (expected.amount !== undefined && !approxEqual(result.amount, expected.amount as number)) ok = false;
-      if (expected.type !== undefined && result.type !== expected.type) ok = false;
-      if (expected.sender !== undefined && result.sender !== expected.sender) ok = false;
-      if (expected.reference !== undefined && result.reference !== expected.reference) ok = false;
+      if (expected.length !== result.length) {
+        ok = false;
+      } else {
+        for (let i = 0; i < expected.length; i++) {
+          const exp = expected[i];
+          const res = result[i];
+          if (exp.amount !== undefined && !approxEqual(res.amount, exp.amount as number)) ok = false;
+          if (exp.type !== undefined && res.type !== exp.type) ok = false;
+          if (exp.sender !== undefined && res.sender !== exp.sender) ok = false;
+          if (exp.reference !== undefined && res.reference !== exp.reference) ok = false;
+        }
+      }
     }
     if (ok) {
       passed++;

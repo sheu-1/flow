@@ -47,47 +47,34 @@ export function getTimeframeDates(timeframe: 'today' | 'week' | 'month' | 'year'
 
 /**
  * Fetch all charge entries (transaction_cost + access_fee) for a user within a date range.
- * Uses Supabase's JSON containment operator to filter by metadata.charge_type.
+ * Fetches directly from the new `charges` table.
  */
 export async function getCharges(
     userId: string,
     from: string,
     to: string
 ): Promise<ChargeEntry[]> {
-    // Fetch transaction_cost entries
-    const { data: costData, error: costError } = await supabase
-        .from('transactions')
-        .select('id, amount, date, reference_number, description, metadata')
+    const { data: chargesData, error } = await supabase
+        .from('charges')
+        .select('id, amount, charge_type, date, reference_number, description')
         .eq('user_id', userId)
         .gte('date', from)
-        .lte('date', to)
-        .contains('metadata', { charge_type: 'transaction_cost' });
+        .lte('date', to);
 
-    // Fetch access_fee entries
-    const { data: feeData, error: feeError } = await supabase
-        .from('transactions')
-        .select('id, amount, date, reference_number, description, metadata')
-        .eq('user_id', userId)
-        .gte('date', from)
-        .lte('date', to)
-        .contains('metadata', { charge_type: 'access_fee' });
+    if (error) console.warn('[ChargesService] Error fetching charges:', error);
 
-    if (costError) console.warn('[ChargesService] Error fetching costs:', costError);
-    if (feeError) console.warn('[ChargesService] Error fetching fees:', feeError);
-
-    const mapRow = (row: any, chargeType: 'transaction_cost' | 'access_fee'): ChargeEntry => ({
+    const mapRow = (row: any): ChargeEntry => ({
         id: row.id,
         amount: row.amount,
-        charge_type: chargeType,
+        charge_type: row.charge_type,
         date: row.date,
         reference_number: row.reference_number,
         description: row.description,
     });
 
-    const costs = (costData || []).map((r: any) => mapRow(r, 'transaction_cost'));
-    const fees = (feeData || []).map((r: any) => mapRow(r, 'access_fee'));
-
-    return [...costs, ...fees].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return (chargesData || [])
+        .map(mapRow)
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 }
 
 /**
